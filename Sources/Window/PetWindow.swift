@@ -1,24 +1,29 @@
 import AppKit
 
-/// 桌面宠物的透明无边框悬浮窗口。
+// 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
 final class PetWindow: NSWindow {
-    /// 宠物窗口尺寸档位，正方形边长（pt）
     enum SizePreset {
-        case small   // 200
-        case medium  // 280
-        case large   // 360
+        case small
+        case medium
+        case large
 
         var dimension: CGFloat {
             switch self {
-            case .small:  return 200
-            case .medium: return 280
-            case .large:  return 360
+            case .small:
+                return 200
+            case .medium:
+                return 280
+            case .large:
+                return 360
             }
         }
     }
 
+    private let petWebView: PetWebView
+
     init(sizePreset: SizePreset = .small) {
         let size = NSSize(width: sizePreset.dimension, height: sizePreset.dimension)
+        petWebView = PetWebView(frame: NSRect(origin: .zero, size: size))
 
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -27,22 +32,20 @@ final class PetWindow: NSWindow {
             defer: false
         )
 
-        // 透明无边框，悬浮于所有窗口之上
         isOpaque = false
         backgroundColor = .clear
         level = .floating
         hasShadow = false
-
-        // 接收鼠标事件；拖拽后续通过自定义鼠标事件处理实现
         ignoresMouseEvents = false
         isMovableByWindowBackground = false
-
-        // 切换桌面时窗口保持可见
+        // 所有桌面可见，并且切换 Space 时不参与系统重排。
         collectionBehavior = [.canJoinAllSpaces, .stationary]
+        contentView = petWebView
         setFrame(originRect(for: size), display: false)
+        // 先接默认 idle SVG，后续状态机会改这里。
+        petWebView.loadSVG("clawd-idle-follow.svg")
     }
 
-    /// 计算初始位置：屏幕右下角，留出边距
     private func originRect(for size: NSSize) -> NSRect {
         guard let screen = NSScreen.main else {
             return NSRect(origin: .zero, size: size)
