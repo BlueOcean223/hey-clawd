@@ -16,7 +16,23 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "HeyClawdApp",
-            path: "Sources"
+            path: ".",
+            exclude: [
+                ".ace-tool",
+                ".build",
+                ".claude",
+                ".git",
+                ".gitignore",
+                "hey-clawd.xcodeproj",
+                "Info.plist",
+                "references",
+            ],
+            sources: [
+                "Sources",
+            ],
+            resources: [
+                .copy("Resources"),
+            ]
         ),
     ]
 )

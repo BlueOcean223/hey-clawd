@@ -8,7 +8,7 @@ final class PetWebView: NSView {
     private lazy var webView: WKWebView = makeWebView()
     private var pendingSVGFilename: String?
     private var isBridgeReady = false
-    // 透明区域命中依赖 JS 侧的 alpha 采样，这里缓存最近一次结果给窗口层复用。
+    // 透明区域命中依赖 JS 侧的 live SVG DOM 命中检测，这里缓存最近一次结果给窗口层复用。
     private var hitTestTimer: Timer?
     private var isSamplingHitTest = false
     private var lastHitTestPoint: NSPoint?
@@ -159,11 +159,16 @@ final class PetWebView: NSView {
 
     private func bundledResourcesURL() -> URL? {
         let fileManager = FileManager.default
-        let candidates = [
+        var candidates = [
             // folder reference 打包后通常会落在 bundle 里的 Resources/ 子目录。
             Bundle.main.resourceURL?.appendingPathComponent("Resources", isDirectory: true),
             Bundle.main.resourceURL,
         ]
+
+#if SWIFT_PACKAGE
+        candidates.insert(Bundle.module.resourceURL?.appendingPathComponent("Resources", isDirectory: true), at: 0)
+        candidates.insert(Bundle.module.resourceURL, at: 1)
+#endif
 
         for candidate in candidates.compactMap({ $0 }) {
             var isDirectory: ObjCBool = false
