@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		A1B2C3D4E5F6000000000001 /* HeyClawdApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000010 /* HeyClawdApp.swift */; };
 		A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000011 /* AppDelegate.swift */; };
+		A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000014 /* PetWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -16,6 +17,7 @@
 		A1B2C3D4E5F6000000000011 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000013 /* hey-clawd.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "hey-clawd.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B2C3D4E5F6000000000014 /* PetWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWindow.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -33,6 +35,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F6000000000031 /* App */,
+				A1B2C3D4E5F6000000000033 /* Window */,
 				A1B2C3D4E5F6000000000012 /* Info.plist */,
 				A1B2C3D4E5F6000000000032 /* Products */,
 			);
@@ -45,6 +48,14 @@
 				A1B2C3D4E5F6000000000011 /* AppDelegate.swift */,
 			);
 			path = Sources/App;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6000000000033 /* Window */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6000000000014 /* PetWindow.swift */,
+			);
+			path = Sources/Window;
 			sourceTree = "<group>";
 		};
 		A1B2C3D4E5F6000000000032 /* Products */ = {
@@ -126,6 +137,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */,
 				A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F6000000000001 /* HeyClawdApp.swift in Sources */,
 			);
