@@ -36,6 +36,8 @@ final class PetWindow: NSWindow {
         backgroundColor = .clear
         level = .floating
         hasShadow = false
+        // 命中采样跟着鼠标走，需要持续收到 mouse moved。
+        acceptsMouseMovedEvents = true
         ignoresMouseEvents = false
         isMovableByWindowBackground = false
         // 所有桌面可见，并且切换 Space 时不参与系统重排。
@@ -58,5 +60,14 @@ final class PetWindow: NSWindow {
         )
 
         return NSRect(origin: origin, size: size)
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        // Phase 1 先只验证实体像素区能吃到点击，拖拽逻辑后面再接。
+        if event.type == .leftMouseDown, petWebView.shouldHandleMouse(at: event.locationInWindow) {
+            print("hit pet")
+        }
+
+        super.sendEvent(event)
     }
 }

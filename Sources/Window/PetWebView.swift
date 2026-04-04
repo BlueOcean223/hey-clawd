@@ -8,6 +8,11 @@ final class PetWebView: NSView {
     private lazy var webView: WKWebView = makeWebView()
     private var pendingSVGFilename: String?
     private var isBridgeReady = false
+    // 透明区域命中依赖 JS 侧的 alpha 采样，这里缓存最近一次结果给窗口层复用。
+    private var hitTestTimer: Timer?
+    private var isSamplingHitTest = false
+    private var lastHitTestPoint: NSPoint?
+    private var lastHitTestResult = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -20,6 +25,7 @@ final class PetWebView: NSView {
         addSubview(webView)
 
         loadBridgeDocument()
+        startHitTestSampling()
     }
 
     @available(*, unavailable)
@@ -40,6 +46,30 @@ final class PetWebView: NSView {
 
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
+    }
+
+    func shouldHandleMouse(at windowPoint: NSPoint) -> Bool {
+        // 只接受和最近一次采样点足够接近的命中结果，避免吃到过期状态。
+        guard window != nil else {
+            return false
+        }
+
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            return false
+        }
+
+        guard let lastHitTestPoint else {
+            return false
+        }
+
+        let dx = abs(lastHitTestPoint.x - localPoint.x)
+        let dy = abs(lastHitTestPoint.y - localPoint.y)
+        guard dx <= 2, dy <= 2 else {
+            return false
+        }
+
+        return lastHitTestResult
     }
 
     private func makeWebView() -> WKWebView {
@@ -73,6 +103,58 @@ final class PetWebView: NSView {
         }
 
         webView.loadFileURL(bridgeURL, allowingReadAccessTo: resourcesURL)
+    }
+
+    private func startHitTestSampling() {
+        // 不等点击发生时再查 JS，持续采样才能及时切换窗口的鼠标穿透状态。
+        hitTestTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.samplePointerOpacity()
+            }
+        }
+        RunLoop.main.add(hitTestTimer!, forMode: .common)
+    }
+
+    private func samplePointerOpacity() {
+        guard
+            isBridgeReady,
+            !isSamplingHitTest,
+            let window
+        else {
+            return
+        }
+
+        let screenPoint = NSEvent.mouseLocation
+        guard window.frame.contains(screenPoint) else {
+            lastHitTestPoint = nil
+            lastHitTestResult = false
+            return
+        }
+
+        let windowPoint = window.convertPoint(fromScreen: screenPoint)
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            lastHitTestPoint = nil
+            lastHitTestResult = false
+            return
+        }
+
+        isSamplingHitTest = true
+        let script = "window.HeyClawdBridge.hitTestAt(\(localPoint.x), \(localPoint.y))"
+
+        webView.evaluateJavaScript(script) { [weak self] value, _ in
+            guard let self else {
+                return
+            }
+
+            Task { @MainActor in
+                self.isSamplingHitTest = false
+                self.lastHitTestPoint = localPoint
+                self.lastHitTestResult = (value as? NSNumber)?.boolValue ?? false
+                // 指到透明区时直接让整个窗口放弃鼠标事件，事件会自然落到下层窗口。
+                self.window?.ignoresMouseEvents = !self.lastHitTestResult
+            }
+        }
     }
 
     private func bundledResourcesURL() -> URL? {
@@ -126,6 +208,7 @@ final class PetWebView: NSView {
 
 extension PetWebView: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        // 页面重载后把滚动条和背景再压一遍，避免 WebKit 恢复默认值。
         if let scrollView = webView.enclosingScrollView {
             scrollView.drawsBackground = false
             scrollView.hasVerticalScroller = false
