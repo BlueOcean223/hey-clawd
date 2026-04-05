@@ -26,6 +26,7 @@ let package = Package(
                 "hey-clawd.xcodeproj",
                 "Info.plist",
                 "references",
+                "test-bubble.sh",
             ],
             sources: [
                 "Sources",
