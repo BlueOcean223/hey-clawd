@@ -37,7 +37,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func assembleCoreLoop() {
         let stateMachine = StateMachine()
         stateMachine.onStateChange = { [weak petWindow = self.petWindow] state, svg in
-            petWindow?.display(state: state, svgFilename: svg)
+            petWindow?.display(
+                state: state,
+                svgFilename: svg,
+                sourcePid: stateMachine.currentDisplaySourcePid
+            )
         }
         self.stateMachine = stateMachine
 

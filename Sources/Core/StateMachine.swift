@@ -178,6 +178,11 @@ final class StateMachine {
 
     private(set) var currentState: PetState = .idle
     private(set) var currentSvg: String = StateMachine.stateSVGs[.idle] ?? "clawd-idle-follow.svg"
+    /// 点击桌宠时拿它来做“聚焦当前会话终端”的目标。
+    /// 这里返回的是当前聚合结果对应的胜出会话，而不是所有会话里最新的一条。
+    var currentDisplaySourcePid: pid_t? {
+        winningVisibleSession()?.sourcePid
+    }
 
     var onStateChange: ((PetState, String) -> Void)?
 
@@ -576,9 +581,13 @@ final class StateMachine {
     }
 
     private func resolveDisplayState() -> PetState {
+        winningVisibleSession()?.state ?? .idle
+    }
+
+    private func winningVisibleSession() -> Session? {
         let visibleSessions = sessions.values.filter { !$0.headless }
         guard !visibleSessions.isEmpty else {
-            return .idle
+            return nil
         }
 
         return visibleSessions.max { lhs, rhs in
@@ -586,7 +595,7 @@ final class StateMachine {
                 return lhs.updatedAt < rhs.updatedAt
             }
             return lhs.state.priority < rhs.state.priority
-        }?.state ?? .idle
+        }
     }
 
     private func requestDisplayTransition(to state: PetState, svgOverride: String?) {

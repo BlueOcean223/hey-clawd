@@ -86,8 +86,13 @@ final class PetWebView: NSView {
     /// 拖拽反应直接走独立 SVG，不经过状态机。
     /// 状态机这段时间仍会继续更新“目标状态”，拖拽结束后再由外层决定恢复到哪张图。
     func playDragReaction() {
+        playReaction(svgFilename: Self.dragReactionSVG)
+    }
+
+    /// 点击/拖拽反应都走同一条路径：先锁住 bridge 的交互态，再切到反应 SVG。
+    func playReaction(svgFilename: String) {
         setBridgeReacting(true)
-        loadSVG(Self.dragReactionSVG)
+        loadSVG(svgFilename)
     }
 
     /// 结束交互反应后恢复到当前应该展示的状态图。
