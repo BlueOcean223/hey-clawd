@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
+    private let hotKeyManager = HotKeyManager()
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private var appLanguage: AppLanguage = .zh
     private var isMiniModeEnabled = false
@@ -28,9 +29,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow = PetWindow(sizePreset: .small)
         petWindow?.orderFront(nil)
 
+        hotKeyManager.onAllow = { [weak self] in
+            self?.bubbleStack.allowLatestBubble()
+        }
+        hotKeyManager.onDeny = { [weak self] in
+            self?.bubbleStack.denyLatestBubble()
+        }
+        bubbleStack.onBubblesChanged = { [weak self] in
+            self?.updateHotKeyRegistration()
+        }
+
         assembleCoreLoop()
         setupStatusBarController()
         installTerminationSignalHandlers()
+        updateHotKeyRegistration()
     }
 
     /// 2.4 的核心装配点：
@@ -98,6 +110,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.onToggleHideBubbles = { [weak self] enabled in
             self?.isHideBubblesEnabled = enabled
+            self?.updateHotKeyRegistration()
         }
         controller.onToggleSoundEffects = { [weak self] enabled in
             self?.isSoundEffectsEnabled = enabled
@@ -130,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        hotKeyManager.unregister()
         bubbleStack.dismissAll(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
@@ -188,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         bubbleStack.repositionBubbles()
+        updateHotKeyRegistration()
     }
 
     private func presentPermissionBubble(for request: PendingPermissionRequest) {
@@ -211,6 +226,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         bubbleStack.enqueue(content: content, request: request)
+    }
+
+    private func updateHotKeyRegistration() {
+        let shouldRegister = bubbleStack.hasVisibleBubbles &&
+            !isHideBubblesEnabled &&
+            (petWindow?.isVisible ?? false)
+
+        if shouldRegister {
+            hotKeyManager.register()
+        } else {
+            hotKeyManager.unregister()
+        }
     }
 
     /// /state 只接受轻量 JSON，先在这里做字段清洗，再交给 StateMachine 聚合。

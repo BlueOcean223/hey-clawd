@@ -18,6 +18,7 @@ final class BubbleStack {
     private let bubbleFollowProvider: @MainActor () -> Bool
 
     private var pendingPermissions: [PendingBubble] = []
+    var onBubblesChanged: (() -> Void)?
 
     init(
         petWindowProvider: @escaping @MainActor () -> PetWindow?,
@@ -59,6 +60,7 @@ final class BubbleStack {
             )
         )
 
+        onBubblesChanged?()
         repositionBubbles()
         window.present()
     }
@@ -99,6 +101,22 @@ final class BubbleStack {
         }
     }
 
+    func allowLatestBubble() {
+        guard let latestBubble = pendingPermissions.last else {
+            return
+        }
+
+        resolveBubble(id: latestBubble.id, behavior: .allow)
+    }
+
+    func denyLatestBubble() {
+        guard let latestBubble = pendingPermissions.last else {
+            return
+        }
+
+        resolveBubble(id: latestBubble.id, behavior: .deny)
+    }
+
     private func resolveBubble(id: UUID, behavior: PermissionBehavior) {
         removeBubble(id: id, respondingWith: behavior)
     }
@@ -116,6 +134,7 @@ final class BubbleStack {
             bubble.request.respond(with: behavior)
         }
 
+        onBubblesChanged?()
         repositionBubbles()
     }
 
