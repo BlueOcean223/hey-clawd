@@ -183,6 +183,22 @@ final class StateMachine {
     var currentDisplaySourcePid: pid_t? {
         winningVisibleSession()?.sourcePid
     }
+    var activeSessionSnapshots: [SessionMenuSnapshot] {
+        sessions.values
+            .filter { !$0.headless }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .map {
+                SessionMenuSnapshot(
+                    id: $0.id,
+                    state: $0.state,
+                    updatedAt: $0.updatedAt,
+                    sourcePid: $0.sourcePid,
+                    cwd: $0.cwd,
+                    agentId: $0.agentId
+                )
+            }
+    }
+    private(set) var doNotDisturbEnabled = false
 
     var onStateChange: ((PetState, String) -> Void)?
 
@@ -219,6 +235,26 @@ final class StateMachine {
         pendingTransition = nil
     }
 
+    /// DND 是一个显示层覆盖态。
+    /// 会话数据照常积累，醒来后直接回到当前真实状态，不丢上下文。
+    func setDoNotDisturbEnabled(_ enabled: Bool) {
+        guard doNotDisturbEnabled != enabled else {
+            return
+        }
+
+        doNotDisturbEnabled = enabled
+        cancelSleepStageTimer()
+
+        if enabled {
+            requestDisplayTransition(to: .sleeping, svgOverride: svgOverride(for: .sleeping))
+            return
+        }
+
+        lastPointerMovedAt = Date()
+        let displayState = resolveDisplayState()
+        requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
+    }
+
     func setState(
         _ state: PetState,
         sessionId: String = "default",
@@ -231,7 +267,9 @@ final class StateMachine {
         headless: Bool = false
     ) {
         // 任何 hook 事件都视为“用户/会话仍在活动”，先打断本地睡眠链路，再按正常状态机处理。
-        interruptSleepSequenceForExternalEvent()
+        if !doNotDisturbEnabled {
+            interruptSleepSequenceForExternalEvent()
+        }
 
         let normalizedSessionId = sessionId.isEmpty ? "default" : sessionId
         let existing = sessions[normalizedSessionId]
@@ -245,13 +283,19 @@ final class StateMachine {
         }
 
         if event == "PermissionRequest" {
-            requestDisplayTransition(to: .notification, svgOverride: svgOverride(for: .notification))
+            if !doNotDisturbEnabled {
+                requestDisplayTransition(to: .notification, svgOverride: svgOverride(for: .notification))
+            }
             return
         }
 
         if event == "SessionEnd" {
             sessions.removeValue(forKey: normalizedSessionId)
             pruneStaleSessions(shouldTransition: false)
+
+            if doNotDisturbEnabled {
+                return
+            }
 
             if state == .sweeping {
                 requestDisplayTransition(to: .sweeping, svgOverride: svgOverride(for: .sweeping))
@@ -311,6 +355,10 @@ final class StateMachine {
         }
 
         pruneStaleSessions(shouldTransition: false)
+
+        if doNotDisturbEnabled {
+            return
+        }
 
         if state.isOneShot {
             requestDisplayTransition(to: state, svgOverride: svgOverride(for: state))
@@ -381,6 +429,10 @@ final class StateMachine {
     }
 
     private func pollSleepSequence() {
+        guard !doNotDisturbEnabled else {
+            return
+        }
+
         let pointer = NSEvent.mouseLocation
         let now = Date()
 

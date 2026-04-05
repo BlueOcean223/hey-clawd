@@ -37,8 +37,11 @@ final class PetWindow: NSWindow {
     private var clickWindowTimer: Timer?
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
+    private(set) var sizePreset: SizePreset
+    var contextMenuProvider: (() -> NSMenu?)?
 
     init(sizePreset: SizePreset = .small) {
+        self.sizePreset = sizePreset
         let size = NSSize(width: sizePreset.dimension, height: sizePreset.dimension)
         petWebView = PetWebView(frame: NSRect(origin: .zero, size: size))
 
@@ -63,6 +66,17 @@ final class PetWindow: NSWindow {
         setFrame(originRect(for: size), display: false)
         // 先接默认 idle SVG，后续状态机会改这里。
         petWebView.loadSVG("clawd-idle-follow.svg")
+    }
+
+    func applySizePreset(_ preset: SizePreset) {
+        guard preset != sizePreset else {
+            return
+        }
+
+        sizePreset = preset
+        let newSize = NSSize(width: preset.dimension, height: preset.dimension)
+        let nextFrame = NSRect(origin: frame.origin, size: newSize)
+        setFrame(nextFrame, display: true, animate: false)
     }
 
     private func originRect(for size: NSSize) -> NSRect {
@@ -130,6 +144,18 @@ final class PetWindow: NSWindow {
         dragStartPoint = nil
         dragStartOrigin = nil
         isDraggingPet = false
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        guard
+            petWebView.shouldHandleMouse(at: event.locationInWindow),
+            let menu = contextMenuProvider?()
+        else {
+            super.rightMouseDown(with: event)
+            return
+        }
+
+        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petWebView)
     }
 
     /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。

@@ -10,3 +10,12 @@ struct Session: Sendable {
     var agentId: String?
     var headless: Bool
 }
+
+struct SessionMenuSnapshot: Sendable {
+    let id: String
+    let state: PetState
+    let updatedAt: Date
+    let sourcePid: pid_t?
+    let cwd: String?
+    let agentId: String?
+}

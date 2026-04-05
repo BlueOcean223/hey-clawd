@@ -5,28 +5,27 @@ import Foundation
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
+    private var statusBarController: StatusBarController?
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
     private var terminationSignalSources: [DispatchSourceSignal] = []
+    private var appLanguage: AppLanguage = .zh
+    private var isMiniModeEnabled = false
+    private var isBubbleFollowEnabled = true
+    private var isHideBubblesEnabled = false
+    private var isSoundEffectsEnabled = true
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 配合 Info.plist LSUIElement=true，隐藏 Dock 图标
         NSApp.setActivationPolicy(.accessory)
-
-        // 菜单栏图标占位，后续替换为宠物头像/状态指示
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-        if let button = statusItem.button {
-            button.title = " "
-            button.toolTip = "hey-clawd"
-        }
 
         // 创建桌面宠物窗口并显示
         petWindow = PetWindow(sizePreset: .small)
         petWindow?.orderFront(nil)
 
         assembleCoreLoop()
+        setupStatusBarController()
         installTerminationSignalHandlers()
     }
 
@@ -59,6 +58,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func setupStatusBarController() {
+        let controller = StatusBarController { [weak self] in
+            self?.currentMenuState ?? AppMenuState(
+                language: .zh,
+                sizePreset: .small,
+                isMiniModeEnabled: false,
+                isDoNotDisturbEnabled: false,
+                isBubbleFollowEnabled: true,
+                isHideBubblesEnabled: false,
+                isSoundEffectsEnabled: true,
+                isPetVisible: true,
+                sessions: []
+            )
+        }
+
+        controller.onTogglePetVisibility = { [weak self] in
+            self?.togglePetVisibility()
+        }
+        controller.onSelectSizePreset = { [weak self] preset in
+            self?.petWindow?.applySizePreset(preset)
+        }
+        controller.onToggleMiniMode = { [weak self] enabled in
+            self?.isMiniModeEnabled = enabled
+        }
+        controller.onToggleDoNotDisturb = { [weak self] enabled in
+            self?.stateMachine?.setDoNotDisturbEnabled(enabled)
+        }
+        controller.onToggleBubbleFollow = { [weak self] enabled in
+            self?.isBubbleFollowEnabled = enabled
+        }
+        controller.onToggleHideBubbles = { [weak self] enabled in
+            self?.isHideBubblesEnabled = enabled
+        }
+        controller.onToggleSoundEffects = { [weak self] enabled in
+            self?.isSoundEffectsEnabled = enabled
+        }
+        controller.onSelectLanguage = { [weak self] language in
+            self?.appLanguage = language
+        }
+        controller.onCheckForUpdates = {
+            print("check for updates is not implemented yet")
+        }
+        controller.onQuit = {
+            NSApp.terminate(nil)
+        }
+        controller.onFocusSession = { pid in
+            guard let pid, let app = NSRunningApplication(processIdentifier: pid) else {
+                return
+            }
+            app.activate(options: [.activateIgnoringOtherApps])
+        }
+
+        statusBarController = controller
+        statusItem = controller.item
+        petWindow?.contextMenuProvider = { [weak controller] in
+            controller?.makeMenu()
+        }
+    }
+
     func applicationWillTerminate(_ notification: Notification) {
         httpServerTask?.cancel()
         httpServer?.stop()
@@ -81,6 +139,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             source.resume()
             return source
+        }
+    }
+
+    private var currentMenuState: AppMenuState {
+        AppMenuState(
+            language: appLanguage,
+            sizePreset: petWindow?.sizePreset ?? .small,
+            isMiniModeEnabled: isMiniModeEnabled,
+            isDoNotDisturbEnabled: stateMachine?.doNotDisturbEnabled ?? false,
+            isBubbleFollowEnabled: isBubbleFollowEnabled,
+            isHideBubblesEnabled: isHideBubblesEnabled,
+            isSoundEffectsEnabled: isSoundEffectsEnabled,
+            isPetVisible: petWindow?.isVisible ?? false,
+            sessions: stateMachine?.activeSessionSnapshots ?? []
+        )
+    }
+
+    private func togglePetVisibility() {
+        guard let petWindow else {
+            return
+        }
+
+        if petWindow.isVisible {
+            petWindow.orderOut(nil)
+        } else {
+            petWindow.orderFrontRegardless()
         }
     }
 
