@@ -78,20 +78,20 @@ final class HTTPServer: @unchecked Sendable {
 
     private var listener: NWListener?
     private var port: Int?
-    private var stateRequestHandler: (@Sendable (Data) async -> Void)?
-    private var permissionRequestHandler: (@Sendable (PendingPermissionRequest) -> Void)?
+    private var stateRequestHandler: ((Data) async -> HTTPResponse)?
+    private var permissionRequestHandler: ((PendingPermissionRequest) -> Void)?
 
     var currentPort: Int? {
         lock.withLock { port }
     }
 
-    func setStateRequestHandler(_ handler: (@Sendable (Data) async -> Void)?) {
+    func setStateRequestHandler(_ handler: ((Data) async -> HTTPResponse)?) {
         lock.withLock {
             stateRequestHandler = handler
         }
     }
 
-    func setPermissionRequestHandler(_ handler: (@Sendable (PendingPermissionRequest) -> Void)?) {
+    func setPermissionRequestHandler(_ handler: ((PendingPermissionRequest) -> Void)?) {
         lock.withLock {
             permissionRequestHandler = handler
         }
@@ -259,8 +259,11 @@ final class HTTPServer: @unchecked Sendable {
                 return errorResponse(statusCode: 400, message: "invalid json")
             }
 
-            await dispatchState(body: request.body)
-            return jsonResponse(["ok": true])
+            guard let handler = lock.withLock({ stateRequestHandler }) else {
+                return errorResponse(statusCode: 503, message: "state handler unavailable")
+            }
+
+            return await handler(request.body)
 
         case ("POST", "/permission"):
             guard request.body.count <= Self.permissionPayloadLimit else {
@@ -314,11 +317,6 @@ final class HTTPServer: @unchecked Sendable {
             "Content-Type": contentType,
             "x-clawd-server": Self.appName,
         ]
-    }
-
-    private func dispatchState(body: Data) async {
-        let handler = lock.withLock { stateRequestHandler }
-        await handler?(body)
     }
 
     private func resolvePermission(body: Data) async -> PermissionBehavior {

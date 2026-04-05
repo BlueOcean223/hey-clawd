@@ -70,4 +70,9 @@ final class PetWindow: NSWindow {
 
         super.sendEvent(event)
     }
+
+    /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
+    func display(state _: PetState, svgFilename: String) {
+        petWebView.loadSVG(svgFilename)
+    }
 }

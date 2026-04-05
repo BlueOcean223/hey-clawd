@@ -1,10 +1,12 @@
 import AppKit
+import Foundation
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
+    private var stateMachine: StateMachine?
     private var terminationSignalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -23,9 +25,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow = PetWindow(sizePreset: .small)
         petWindow?.orderFront(nil)
 
+        let stateMachine = StateMachine()
+        stateMachine.onStateChange = { [weak self] state, svg in
+            self?.petWindow?.display(state: state, svgFilename: svg)
+        }
+        self.stateMachine = stateMachine
+
         let server = HTTPServer()
-        server.setStateRequestHandler { _ in
-            // Phase 2.2 再把 JSON payload 接进状态机。
+        server.setStateRequestHandler { [weak self] body in
+            await MainActor.run {
+                self?.handleStateRequest(body) ?? self?.errorResponse(statusCode: 500, message: "state machine unavailable") ?? HTTPResponse(
+                    statusCode: 500,
+                    headers: [
+                        "Content-Type": "application/json",
+                        "x-clawd-server": "hey-clawd",
+                    ],
+                    body: Data("{\"error\":\"state machine unavailable\"}".utf8)
+                )
+            }
         }
         server.setPermissionRequestHandler { request in
             // Phase 2.4 之前先默认拒绝，避免连接一直挂住。
@@ -41,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         httpServerTask?.cancel()
         httpServer?.stop()
+        stateMachine?.cleanup()
     }
 
     private func installTerminationSignalHandlers() {
@@ -60,5 +78,132 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             source.resume()
             return source
         }
+    }
+
+    /// /state 只接受轻量 JSON，先在这里做字段清洗，再交给 StateMachine 聚合。
+    private func handleStateRequest(_ body: Data) -> HTTPResponse {
+        guard
+            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let rawState = payload["state"] as? String,
+            let state = PetState(rawValue: rawState)
+        else {
+            return errorResponse(statusCode: 400, message: "unknown state")
+        }
+
+        let sessionId = (payload["session_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let event = payload["event"] as? String
+        let svgUpdate = extractSVGUpdate(from: payload)
+
+        if case .invalid = svgUpdate {
+            return errorResponse(statusCode: 400, message: "invalid svg payload")
+        }
+
+        let sourcePid = normalizedPID(payload["source_pid"])
+        let cwd = normalizedString(payload["cwd"] as? String)
+        let agentId = normalizedString(payload["agent_id"] as? String)
+        let headless = payload["headless"] as? Bool ?? false
+
+        switch svgUpdate {
+        case .unspecified:
+            stateMachine?.setState(
+                state,
+                sessionId: sessionId ?? "default",
+                event: event,
+                svg: nil,
+                svgWasProvided: false,
+                sourcePid: sourcePid,
+                cwd: cwd,
+                agentId: agentId,
+                headless: headless
+            )
+        case .explicit(let svg):
+            stateMachine?.setState(
+                state,
+                sessionId: sessionId ?? "default",
+                event: event,
+                svg: svg,
+                svgWasProvided: true,
+                sourcePid: sourcePid,
+                cwd: cwd,
+                agentId: agentId,
+                headless: headless
+            )
+        case .invalid:
+            return errorResponse(statusCode: 400, message: "invalid svg payload")
+        }
+
+        return okResponse(["ok": true])
+    }
+
+    private func normalizedPID(_ value: Any?) -> pid_t? {
+        guard let number = value as? NSNumber, number.intValue > 0 else {
+            return nil
+        }
+
+        return pid_t(number.intValue)
+    }
+
+    private func normalizedString(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func okResponse(_ object: [String: Any]) -> HTTPResponse {
+        HTTPResponse(
+            statusCode: 200,
+            headers: [
+                "Content-Type": "application/json",
+                "x-clawd-server": "hey-clawd",
+            ],
+            body: (try? JSONSerialization.data(withJSONObject: object, options: [])) ?? Data("{}".utf8)
+        )
+    }
+
+    private func errorResponse(statusCode: Int, message: String) -> HTTPResponse {
+        HTTPResponse(
+            statusCode: statusCode,
+            headers: [
+                "Content-Type": "application/json",
+                "x-clawd-server": "hey-clawd",
+            ],
+            body: (try? JSONSerialization.data(withJSONObject: ["error": message], options: [])) ?? Data("{}".utf8)
+        )
+    }
+}
+
+private enum SVGUpdate {
+    case unspecified
+    case explicit(String?)
+    case invalid
+}
+
+private extension AppDelegate {
+    func extractSVGUpdate(from payload: [String: Any]) -> SVGUpdate {
+        if payload.keys.contains("display_svg") {
+            return decodeSVGField(payload["display_svg"])
+        }
+
+        if payload.keys.contains("svg") {
+            return decodeSVGField(payload["svg"])
+        }
+
+        return .unspecified
+    }
+
+    func decodeSVGField(_ value: Any?) -> SVGUpdate {
+        if value is NSNull {
+            return .explicit(nil)
+        }
+
+        guard let string = value as? String else {
+            return .invalid
+        }
+
+        let basename = URL(fileURLWithPath: string).lastPathComponent
+        return .explicit(basename.isEmpty ? nil : basename)
     }
 }
