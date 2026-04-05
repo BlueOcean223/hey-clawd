@@ -48,7 +48,12 @@ enum PetState: String, CaseIterable, Sendable {
     }
 
     var isOneShot: Bool {
-        StateMachine.oneShotStates.contains(self)
+        switch self {
+        case .attention, .error, .sweeping, .notification, .carrying:
+            return true
+        default:
+            return false
+        }
     }
 
     var isSleepSequence: Bool {
@@ -68,6 +73,7 @@ private struct PendingTransition {
 
 /// 复刻原版状态机的会话聚合逻辑。
 /// 这里不直接关心网络和 UI，只负责根据会话集决定当前该显示哪个状态和 SVG。
+@MainActor
 final class StateMachine {
     static let stateSVGs: [PetState: String] = [
         .idle: "clawd-idle-follow.svg",
@@ -263,7 +269,9 @@ final class StateMachine {
     private func startStaleCleanup() {
         staleCleanupTimer?.invalidate()
         staleCleanupTimer = Timer.scheduledTimer(withTimeInterval: Self.staleCleanupInterval, repeats: true) { [weak self] _ in
-            self?.pruneStaleSessions(shouldTransition: true)
+            Task { @MainActor [weak self] in
+                self?.pruneStaleSessions(shouldTransition: true)
+            }
         }
 
         if let staleCleanupTimer {
@@ -383,19 +391,21 @@ final class StateMachine {
             autoReturnTimer = nil
 
             let timer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
-                guard let self else {
-                    return
-                }
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        return
+                    }
 
-                self.pendingTimer = nil
-                let queued = self.pendingTransition
-                self.pendingTransition = nil
+                    self.pendingTimer = nil
+                    let queued = self.pendingTransition
+                    self.pendingTransition = nil
 
-                if let queued, queued.state.isOneShot {
-                    self.applyTransition(to: queued.state, svg: queued.svg)
-                } else {
-                    let resolvedState = self.resolveDisplayState()
-                    self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
+                    if let queued, queued.state.isOneShot {
+                        self.applyTransition(to: queued.state, svg: queued.svg)
+                    } else {
+                        let resolvedState = self.resolveDisplayState()
+                        self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
+                    }
                 }
             }
 
@@ -425,13 +435,15 @@ final class StateMachine {
 
         // 一次性状态展示结束后，不记住它本身，而是回到当前会话集合算出来的结果。
         let timer = Timer.scheduledTimer(withTimeInterval: Double(autoReturnMs) / 1000.0, repeats: false) { [weak self] _ in
-            guard let self else {
-                return
-            }
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
 
-            self.autoReturnTimer = nil
-            let resolvedState = self.resolveDisplayState()
-            self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
+                self.autoReturnTimer = nil
+                let resolvedState = self.resolveDisplayState()
+                self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
+            }
         }
 
         autoReturnTimer = timer

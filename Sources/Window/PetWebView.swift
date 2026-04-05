@@ -61,6 +61,12 @@ final class PetWebView: NSView {
         )
     }
 
+    /// 状态机回调入口：将 SVG 文件名转为 bundle 读取 + JS mountSVG 调用。
+    /// 同文件名重复调用会被 bridge.js 侧去重，Swift 侧无需额外判断。
+    func switchSVG(_ filename: String) {
+        loadSVG(filename)
+    }
+
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
     }

@@ -263,6 +263,8 @@ final class HTTPServer: @unchecked Sendable {
                 return errorResponse(statusCode: 503, message: "state handler unavailable")
             }
 
+            // 2.4 起由 AppDelegate 负责解释 /state JSON 并调用 StateMachine。
+            // HTTPServer 只保留网络收包、大小限制和响应发送这些传输层职责。
             return await handler(request.body)
 
         case ("POST", "/permission"):

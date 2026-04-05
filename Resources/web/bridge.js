@@ -11,6 +11,8 @@
   const container = document.getElementById("pet-container");
   let currentSVG = null;
   let pendingSVG = null;
+  // Phase 3 交互反馈期间会把它置为 true，状态机切换据此避让。
+  let isReacting = false;
   // 单调递增的加载 ID，用于丢弃过期的异步回调。
   let currentLoadID = 0;
   // hitTestGeometry 的缓存，SVG 切换时清空。
@@ -203,6 +205,20 @@
 
   window.HeyClawdBridge = {
     mountSVG,
+
+    // 返回当前已经提交显示的 SVG 文件名。
+    // 仍在 preload 或尚未加载完成时返回 null，避免 Swift 读到半切换状态。
+    getCurrentSVG: function () {
+      return currentSVG ? currentSVG.dataset.filename || null : null;
+    },
+
+    get isReacting() {
+      return isReacting;
+    },
+
+    set isReacting(value) {
+      isReacting = Boolean(value);
+    },
 
     // 返回 true（命中实体）/ false（透明区域）/ null（SVG 未加载）。
     // Swift 据此切换 window.ignoresMouseEvents。

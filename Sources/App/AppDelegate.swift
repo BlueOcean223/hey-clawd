@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
@@ -25,34 +26,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow = PetWindow(sizePreset: .small)
         petWindow?.orderFront(nil)
 
+        assembleCoreLoop()
+        installTerminationSignalHandlers()
+    }
+
+    /// 2.4 的核心装配点：
+    /// HTTPServer 接收 hook 请求，StateMachine 决定最终状态和 SVG，
+    /// 再由 PetWindow/PetWebView 把结果推到 bridge.js。
+    @MainActor
+    private func assembleCoreLoop() {
         let stateMachine = StateMachine()
-        stateMachine.onStateChange = { [weak self] state, svg in
-            self?.petWindow?.display(state: state, svgFilename: svg)
+        stateMachine.onStateChange = { [weak petWindow = self.petWindow] state, svg in
+            petWindow?.display(state: state, svgFilename: svg)
         }
         self.stateMachine = stateMachine
 
         let server = HTTPServer()
-        server.setStateRequestHandler { [weak self] body in
-            await MainActor.run {
-                self?.handleStateRequest(body) ?? self?.errorResponse(statusCode: 500, message: "state machine unavailable") ?? HTTPResponse(
-                    statusCode: 500,
-                    headers: [
-                        "Content-Type": "application/json",
-                        "x-clawd-server": "hey-clawd",
-                    ],
-                    body: Data("{\"error\":\"state machine unavailable\"}".utf8)
-                )
-            }
+        server.setStateRequestHandler { body in
+            Self.handleStateRequest(body, using: stateMachine)
         }
         server.setPermissionRequestHandler { request in
-            // Phase 2.4 之前先默认拒绝，避免连接一直挂住。
+            // Phase 2.4 只打通 state 链路；权限气泡留到后续任务再接。
             request.respond(with: PermissionBehavior.deny)
         }
         httpServer = server
         httpServerTask = Task { [server] in
             _ = await server.start()
         }
-        installTerminationSignalHandlers()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -81,7 +81,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// /state 只接受轻量 JSON，先在这里做字段清洗，再交给 StateMachine 聚合。
-    private func handleStateRequest(_ body: Data) -> HTTPResponse {
+    @MainActor
+    private static func handleStateRequest(_ body: Data, using stateMachine: StateMachine) -> HTTPResponse {
         guard
             let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
             let rawState = payload["state"] as? String,
@@ -93,11 +94,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let sessionId = (payload["session_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let event = payload["event"] as? String
         let svgUpdate = extractSVGUpdate(from: payload)
-
-        if case .invalid = svgUpdate {
-            return errorResponse(statusCode: 400, message: "invalid svg payload")
-        }
-
         let sourcePid = normalizedPID(payload["source_pid"])
         let cwd = normalizedString(payload["cwd"] as? String)
         let agentId = normalizedString(payload["agent_id"] as? String)
@@ -105,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         switch svgUpdate {
         case .unspecified:
-            stateMachine?.setState(
+            stateMachine.setState(
                 state,
                 sessionId: sessionId ?? "default",
                 event: event,
@@ -117,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 headless: headless
             )
         case .explicit(let svg):
-            stateMachine?.setState(
+            stateMachine.setState(
                 state,
                 sessionId: sessionId ?? "default",
                 event: event,
@@ -135,7 +131,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return okResponse(["ok": true])
     }
 
-    private func normalizedPID(_ value: Any?) -> pid_t? {
+    private static func normalizedPID(_ value: Any?) -> pid_t? {
         guard let number = value as? NSNumber, number.intValue > 0 else {
             return nil
         }
@@ -143,7 +139,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return pid_t(number.intValue)
     }
 
-    private func normalizedString(_ value: String?) -> String? {
+    private static func normalizedString(_ value: String?) -> String? {
         guard let value else {
             return nil
         }
@@ -152,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private func okResponse(_ object: [String: Any]) -> HTTPResponse {
+    private static func okResponse(_ object: [String: Any]) -> HTTPResponse {
         HTTPResponse(
             statusCode: 200,
             headers: [
@@ -163,7 +159,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private func errorResponse(statusCode: Int, message: String) -> HTTPResponse {
+    private static func errorResponse(statusCode: Int, message: String) -> HTTPResponse {
         HTTPResponse(
             statusCode: statusCode,
             headers: [
@@ -173,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             body: (try? JSONSerialization.data(withJSONObject: ["error": message], options: [])) ?? Data("{}".utf8)
         )
     }
+
 }
 
 private enum SVGUpdate {
@@ -182,7 +179,7 @@ private enum SVGUpdate {
 }
 
 private extension AppDelegate {
-    func extractSVGUpdate(from payload: [String: Any]) -> SVGUpdate {
+    static func extractSVGUpdate(from payload: [String: Any]) -> SVGUpdate {
         if payload.keys.contains("display_svg") {
             return decodeSVGField(payload["display_svg"])
         }
@@ -194,7 +191,7 @@ private extension AppDelegate {
         return .unspecified
     }
 
-    func decodeSVGField(_ value: Any?) -> SVGUpdate {
+    static func decodeSVGField(_ value: Any?) -> SVGUpdate {
         if value is NSNull {
             return .explicit(nil)
         }
