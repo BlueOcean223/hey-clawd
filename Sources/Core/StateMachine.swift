@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 enum PetState: String, CaseIterable, Sendable {
@@ -71,6 +72,25 @@ private struct PendingTransition {
     let svg: String
 }
 
+private enum SleepMode: Equatable {
+    case awake
+    case idleAnimation(String)
+    case yawning
+    case dozing
+    case collapsing
+    case sleeping
+    case waking
+
+    var isSleepSequenceActive: Bool {
+        switch self {
+        case .yawning, .dozing, .collapsing, .sleeping, .waking:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 /// 复刻原版状态机的会话聚合逻辑。
 /// 这里不直接关心网络和 UI，只负责根据会话集决定当前该显示哪个状态和 SVG。
 @MainActor
@@ -132,14 +152,29 @@ final class StateMachine {
         "clawd-working-juggling.svg",
         "clawd-working-conducting.svg",
         "clawd-idle-reading.svg",
+        "clawd-idle-look.svg",
         "clawd-working-debugger.svg",
         "clawd-working-thinking.svg",
+    ]
+
+    static let idleAnims: [(svg: String, durationMs: Int)] = [
+        ("clawd-idle-look.svg", 6_500),
+        ("clawd-working-debugger.svg", 14_000),
+        ("clawd-idle-reading.svg", 14_000),
     ]
 
     private static let maxSessions = 20
     private static let staleCleanupInterval: TimeInterval = 10
     private static let sessionStaleInterval: TimeInterval = 600
     private static let workingStaleInterval: TimeInterval = 300
+    private static let pointerPollInterval: TimeInterval = 0.2
+    private static let idleAnimationDelay: TimeInterval = 20
+    private static let yawnDelay: TimeInterval = 60
+    private static let dozingDelay: TimeInterval = 3
+    private static let deepSleepDelay: TimeInterval = 600
+    private static let collapseDelay: TimeInterval = 0.8
+    private static let wakingDelay: TimeInterval = 1.5
+    private static let pointerMovementThreshold: CGFloat = 0.5
 
     private(set) var currentState: PetState = .idle
     private(set) var currentSvg: String = StateMachine.stateSVGs[.idle] ?? "clawd-idle-follow.svg"
@@ -152,18 +187,30 @@ final class StateMachine {
     private var pendingTimer: Timer?
     private var autoReturnTimer: Timer?
     private var staleCleanupTimer: Timer?
+    /// 鼠标静止检测和唤醒都走这一套轮询，避免现在就把 Phase 3 的 EyeTracker 提前接进来。
+    private var sleepMonitorTimer: Timer?
+    /// 睡眠序列是单线程状态机，任意时刻只保留一个下一跳定时器。
+    private var sleepStageTimer: Timer?
+    private var sleepMode: SleepMode = .awake
+    private var lastPointerLocation: NSPoint?
+    private var lastPointerMovedAt = Date()
 
     init() {
         startStaleCleanup()
+        startSleepMonitor()
     }
 
     func cleanup() {
         pendingTimer?.invalidate()
         autoReturnTimer?.invalidate()
         staleCleanupTimer?.invalidate()
+        sleepMonitorTimer?.invalidate()
+        sleepStageTimer?.invalidate()
         pendingTimer = nil
         autoReturnTimer = nil
         staleCleanupTimer = nil
+        sleepMonitorTimer = nil
+        sleepStageTimer = nil
         pendingTransition = nil
     }
 
@@ -178,6 +225,9 @@ final class StateMachine {
         agentId: String? = nil,
         headless: Bool = false
     ) {
+        // 任何 hook 事件都视为“用户/会话仍在活动”，先打断本地睡眠链路，再按正常状态机处理。
+        interruptSleepSequenceForExternalEvent()
+
         let normalizedSessionId = sessionId.isEmpty ? "default" : sessionId
         let existing = sessions[normalizedSessionId]
         let nextSourcePid = sourcePid ?? existing?.sourcePid
@@ -266,6 +316,21 @@ final class StateMachine {
         requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
     }
 
+    private func startSleepMonitor() {
+        sleepMonitorTimer?.invalidate()
+        lastPointerLocation = NSEvent.mouseLocation
+        lastPointerMovedAt = Date()
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.pointerPollInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pollSleepSequence()
+            }
+        }
+
+        sleepMonitorTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
     private func startStaleCleanup() {
         staleCleanupTimer?.invalidate()
         staleCleanupTimer = Timer.scheduledTimer(withTimeInterval: Self.staleCleanupInterval, repeats: true) { [weak self] _ in
@@ -295,8 +360,167 @@ final class StateMachine {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    /// 睡眠序列只在“当前没有高优先级会话占住屏幕”时运行。
+    /// dozing/sleeping 本身是 display-only 状态，所以要额外放行当前处于睡眠链路的情况。
+    private func canAdvanceSleepSequence() -> Bool {
+        if sleepMode.isSleepSequenceActive {
+            return true
+        }
+
+        let resolvedState = resolveDisplayState()
+        return resolvedState == .idle && currentState == .idle
+    }
+
     private func isSubagentStop(_ event: String?) -> Bool {
         event == "SubagentStop" || event == "subagentStop"
+    }
+
+    private func pollSleepSequence() {
+        let pointer = NSEvent.mouseLocation
+        let now = Date()
+
+        defer {
+            lastPointerLocation = pointer
+        }
+
+        guard let lastPointerLocation else {
+            self.lastPointerLocation = pointer
+            lastPointerMovedAt = now
+            return
+        }
+
+        if pointerMoved(from: lastPointerLocation, to: pointer) {
+            lastPointerMovedAt = now
+            handlePointerMovement()
+            return
+        }
+
+        guard canAdvanceSleepSequence() else {
+            if currentState == .idle, currentSvg != defaultSvg(for: .idle) {
+                requestDisplayTransition(to: .idle, svgOverride: svgOverride(for: .idle))
+            }
+            sleepMode = .awake
+            cancelSleepStageTimer()
+            return
+        }
+
+        let inactiveFor = now.timeIntervalSince(lastPointerMovedAt)
+
+        if inactiveFor >= Self.yawnDelay {
+            if !sleepMode.isSleepSequenceActive {
+                beginYawning()
+            }
+            return
+        }
+
+        if inactiveFor >= Self.idleAnimationDelay, sleepMode == .awake {
+            beginIdleAnimation()
+        }
+    }
+
+    private func pointerMoved(from oldPoint: NSPoint, to newPoint: NSPoint) -> Bool {
+        abs(oldPoint.x - newPoint.x) > Self.pointerMovementThreshold ||
+            abs(oldPoint.y - newPoint.y) > Self.pointerMovementThreshold
+    }
+
+    private func handlePointerMovement() {
+        switch sleepMode {
+        case .idleAnimation:
+            sleepMode = .awake
+            cancelSleepStageTimer()
+            requestDisplayTransition(to: .idle, svgOverride: svgOverride(for: .idle))
+        case .yawning, .dozing, .collapsing, .sleeping:
+            wakeFromSleepSequence()
+        case .waking, .awake:
+            break
+        }
+    }
+
+    private func interruptSleepSequenceForExternalEvent() {
+        lastPointerMovedAt = Date()
+        sleepMode = .awake
+        cancelSleepStageTimer()
+    }
+
+    private func beginIdleAnimation() {
+        guard let nextIdleAnim = Self.idleAnims.randomElement() else {
+            return
+        }
+
+        sleepMode = .idleAnimation(nextIdleAnim.svg)
+        requestDisplayTransition(to: .idle, svgOverride: nextIdleAnim.svg)
+        scheduleSleepStageTimer(after: Double(nextIdleAnim.durationMs) / 1000.0) { [weak self] in
+            guard
+                let self,
+                case .idleAnimation = self.sleepMode
+            else {
+                return
+            }
+
+            self.sleepMode = .awake
+            self.requestDisplayTransition(to: .idle, svgOverride: self.svgOverride(for: .idle))
+        }
+    }
+
+    private func beginYawning() {
+        sleepMode = .yawning
+        requestDisplayTransition(to: .yawning, svgOverride: svgOverride(for: .yawning))
+        scheduleSleepStageTimer(after: Self.dozingDelay) { [weak self] in
+            self?.beginDozing()
+        }
+    }
+
+    private func beginDozing() {
+        sleepMode = .dozing
+        requestDisplayTransition(to: .dozing, svgOverride: svgOverride(for: .dozing))
+        scheduleSleepStageTimer(after: Self.deepSleepDelay) { [weak self] in
+            self?.beginCollapsing()
+        }
+    }
+
+    private func beginCollapsing() {
+        sleepMode = .collapsing
+        requestDisplayTransition(to: .collapsing, svgOverride: svgOverride(for: .collapsing))
+        scheduleSleepStageTimer(after: Self.collapseDelay) { [weak self] in
+            self?.beginSleeping()
+        }
+    }
+
+    private func beginSleeping() {
+        sleepMode = .sleeping
+        cancelSleepStageTimer()
+        requestDisplayTransition(to: .sleeping, svgOverride: svgOverride(for: .sleeping))
+    }
+
+    private func wakeFromSleepSequence() {
+        sleepMode = .waking
+        requestDisplayTransition(to: .waking, svgOverride: svgOverride(for: .waking))
+        scheduleSleepStageTimer(after: Self.wakingDelay) { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.sleepMode = .awake
+            self.requestDisplayTransition(to: .idle, svgOverride: self.svgOverride(for: .idle))
+        }
+    }
+
+    private func scheduleSleepStageTimer(after delay: TimeInterval, perform action: @escaping @MainActor () -> Void) {
+        cancelSleepStageTimer()
+
+        let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
+            Task { @MainActor in
+                action()
+            }
+        }
+
+        sleepStageTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func cancelSleepStageTimer() {
+        sleepStageTimer?.invalidate()
+        sleepStageTimer = nil
     }
 
     private func pickDisplaySvg(
