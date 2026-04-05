@@ -50,23 +50,50 @@
     svgEl.setAttribute("preserveAspectRatio", svgEl.getAttribute("preserveAspectRatio") || "xMidYMid meet");
   }
 
+  function triggerWakeAnimation(outgoingSvg) {
+    var eyes = outgoingSvg.querySelector("#eyes-doze");
+    if (!eyes) return;
+    eyes.style.transition = "transform 300ms ease-out";
+    eyes.style.transform = "scaleY(1)";
+  }
+
   // 提交新 SVG：移除旧节点，清空几何缓存，通知 Swift。
   function swapSVG(nextSVG, filename, loadID) {
     if (pendingSVG !== nextSVG || currentLoadID !== loadID) {
       return;
     }
 
-    nextSVG.style.transition = "none";
     nextSVG.style.opacity = "1";
+    var oldSVG = currentSVG;
+    var shouldAnimateWake = filename.includes("wake") && oldSVG && oldSVG.querySelector("#eyes-doze");
 
-    if (currentSVG && currentSVG !== nextSVG) {
-      releaseSVG(currentSVG);
+    if (shouldAnimateWake) {
+      triggerWakeAnimation(oldSVG);
+      pendingSVG = null;
+      nextSVG.style.opacity = "0";
+      setTimeout(function () {
+        if (currentLoadID !== loadID) {
+          releaseSVG(nextSVG);
+          return;
+        }
+        nextSVG.style.opacity = "1";
+        releaseSVG(oldSVG);
+        currentSVG = nextSVG;
+        cachedGeometryElements = null;
+        postMessage("svg-loaded", { filename: filename });
+      }, 300);
+      return;
     }
 
     pendingSVG = null;
     currentSVG = nextSVG;
     cachedGeometryElements = null;
-    postMessage("svg-loaded", { filename });
+
+    if (oldSVG && oldSVG !== nextSVG) {
+      setTimeout(function () { releaseSVG(oldSVG); }, 130);
+    }
+
+    postMessage("svg-loaded", { filename: filename });
   }
 
   // Swift 调用入口：传入文件名 + SVG 原文，DOMParser 解析后内联挂载。

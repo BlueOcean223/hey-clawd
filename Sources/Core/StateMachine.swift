@@ -561,7 +561,6 @@ final class StateMachine {
                session.state == .working || session.state == .thinking || session.state == .juggling {
                 var updated = session
                 updated.state = .idle
-                updated.updatedAt = now
                 updated.displaySvg = nil
                 sessions[id] = updated
                 didChange = true
@@ -603,7 +602,7 @@ final class StateMachine {
             return
         }
 
-        let minDisplay = Self.minDisplayMs[currentState] ?? 0
+        let minDisplay = state.isSleepSequence ? 0 : (Self.minDisplayMs[currentState] ?? 0)
         let elapsed = Date().timeIntervalSince(stateChangedAt)
         let remaining = (Double(minDisplay) / 1000.0) - elapsed
 
@@ -699,7 +698,7 @@ final class StateMachine {
                 return
             }
 
-            if session.state == .working || session.state == .thinking || session.state == .juggling {
+            if session.state == .working {
                 count += 1
             }
         }
