@@ -200,7 +200,7 @@ final class StateMachine {
     }
     private(set) var doNotDisturbEnabled = false
 
-    var onStateChange: ((PetState, String) -> Void)?
+    var onStateChange: ((PetState, String, pid_t?) -> Void)?
 
     private var sessions: [String: Session] = [:]
     private var stateChangedAt = Date()
@@ -708,7 +708,7 @@ final class StateMachine {
         currentState = state
         currentSvg = svg
         stateChangedAt = Date()
-        onStateChange?(state, svg)
+        onStateChange?(state, svg, currentDisplaySourcePid)
 
         autoReturnTimer?.invalidate()
         autoReturnTimer = nil

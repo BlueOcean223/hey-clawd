@@ -37,6 +37,8 @@ final class PetWebView: NSView {
     /// 去重日志：只在消息内容变化时打印，避免 30Hz 刷屏。
     private var lastHitTestErrorMessage: String?
     private var lastNonBooleanHitTestDescription: String?
+    /// 窗口隐藏时暂停所有轮询，避免空转浪费 CPU。
+    private(set) var isTrackingPaused = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -102,6 +104,26 @@ final class PetWebView: NSView {
         switchSVG(svgFilename)
     }
 
+    func pauseTracking() {
+        isTrackingPaused = true
+        hitTestTimer?.invalidate()
+        hitTestTimer = nil
+        eyeTracker.pause()
+    }
+
+    func resumeTracking() {
+        isTrackingPaused = false
+        eyeTracker.resume()
+        startHitTestSampling()
+    }
+
+    func teardown() {
+        hitTestTimer?.invalidate()
+        hitTestTimer = nil
+        eyeTracker.stop()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: bridgeName)
+    }
+
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
     }
@@ -109,7 +131,7 @@ final class PetWebView: NSView {
     /// 3.1 只在 idle-follow / mini-idle 上启用眼球追踪。
     /// 其他动画即使也带 eyes-js，也先保持原始美术动作，不叠加实时偏移。
     private var shouldTrackEyes: Bool {
-        guard isBridgeReady else {
+        guard !isTrackingPaused, isBridgeReady else {
             return false
         }
 
@@ -134,7 +156,8 @@ final class PetWebView: NSView {
             return
         }
 
-        evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(dx), \(dy))")
+        // AppKit Y 轴向上，CSS Y 轴向下，必须取反。
+        evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(dx), \(-dy))")
     }
 
     private func setBridgeReacting(_ isReacting: Bool) {
@@ -217,6 +240,7 @@ final class PetWebView: NSView {
     /// 单次采样：读取鼠标位置 → 翻转 Y 轴 → 调 JS hitTestAt → 更新 ignoresMouseEvents。
     private func samplePointerOpacity() {
         guard
+            !isTrackingPaused,
             isBridgeReady,
             !isSamplingHitTest,
             let window

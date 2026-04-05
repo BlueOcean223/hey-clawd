@@ -18,6 +18,7 @@ struct AppMenuState {
     var sessions: [SessionMenuSnapshot]
 }
 
+@MainActor
 enum MenuBuilder {
     private static let strings: [AppLanguage: [String: String]] = [
         .en: [
@@ -64,6 +65,20 @@ enum MenuBuilder {
         ],
     ]
 
+    private static let enRelativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "en")
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
+    private static let zhRelativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "zh-Hans")
+        formatter.unitsStyle = .short
+        return formatter
+    }()
+
     static func build(state: AppMenuState, target: StatusBarController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -74,7 +89,8 @@ enum MenuBuilder {
             title: text("miniMode", lang: state.language),
             selector: #selector(StatusBarController.toggleMiniMode(_:)),
             isOn: state.isMiniModeEnabled,
-            target: target
+            target: target,
+            isEnabled: false
         ))
         menu.addItem(sessionsMenuItem(state: state, target: target))
         menu.addItem(actionItem(
@@ -87,19 +103,22 @@ enum MenuBuilder {
             title: text("bubbleFollow", lang: state.language),
             selector: #selector(StatusBarController.toggleBubbleFollow(_:)),
             isOn: state.isBubbleFollowEnabled,
-            target: target
+            target: target,
+            isEnabled: false
         ))
         menu.addItem(toggleItem(
             title: text("hideBubbles", lang: state.language),
             selector: #selector(StatusBarController.toggleHideBubbles(_:)),
             isOn: state.isHideBubblesEnabled,
-            target: target
+            target: target,
+            isEnabled: false
         ))
         menu.addItem(toggleItem(
             title: text("soundEffects", lang: state.language),
             selector: #selector(StatusBarController.toggleSoundEffects(_:)),
             isOn: state.isSoundEffectsEnabled,
-            target: target
+            target: target,
+            isEnabled: false
         ))
         menu.addItem(.separator())
         menu.addItem(languageMenuItem(state: state, target: target))
@@ -223,10 +242,12 @@ enum MenuBuilder {
         title: String,
         selector: Selector,
         isOn: Bool,
-        target: StatusBarController
+        target: StatusBarController,
+        isEnabled: Bool = true
     ) -> NSMenuItem {
         let item = actionItem(title: title, selector: selector, target: target)
         item.state = isOn ? .on : .off
+        item.isEnabled = isEnabled
         return item
     }
 
@@ -244,9 +265,7 @@ enum MenuBuilder {
         let name = session.cwd.flatMap { URL(fileURLWithPath: $0).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
             ?? session.agentId
             ?? session.id
-        let formatter = RelativeDateTimeFormatter()
-        formatter.locale = Locale(identifier: lang == .zh ? "zh-Hans" : "en")
-        formatter.unitsStyle = .short
+        let formatter = lang == .zh ? zhRelativeFormatter : enRelativeFormatter
         let age = formatter.localizedString(for: session.updatedAt, relativeTo: Date())
         return "\(emoji(for: session.state)) \(name) \(stateLabel(for: session.state, lang: lang)) \(age)"
     }

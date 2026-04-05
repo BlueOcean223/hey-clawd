@@ -46,11 +46,35 @@ final class StatusBarController: NSObject {
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
+    /// 把 clawd-static-base.svg（15×16 像素网格）缩放绘制到 18pt template icon。
+    /// 躯干在眼窝处分块绘制，留出透明眼孔让角色更有辨识度。
     private func trayImage() -> NSImage? {
-        let image = NSImage(named: "tray-icon")
-            ?? NSImage(systemSymbolName: "pawprint.fill", accessibilityDescription: "hey-clawd")
-            ?? NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "hey-clawd")
-        image?.isTemplate = true
+        let imgH: CGFloat = 22
+        let s: CGFloat = imgH / 16.0
+        let imgW: CGFloat = 15.0 * s
+        let image = NSImage(size: NSSize(width: imgW, height: imgH), flipped: true) { _ in
+            let ox: CGFloat = 0
+            NSColor.black.setFill()
+
+            func fill(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
+                NSRect(x: ox + x * s, y: y * s, width: w * s, height: h * s).fill()
+            }
+
+            fill(2, 6, 11, 2)   // 头顶到眼睛上方
+            fill(2, 8, 2, 2)    // 左眼左侧
+            fill(5, 8, 5, 2)    // 两眼之间
+            fill(11, 8, 2, 2)   // 右眼右侧
+            fill(2, 10, 11, 3)  // 眼下到腰部
+            fill(0, 9, 2, 2)    // 左臂
+            fill(13, 9, 2, 2)   // 右臂
+            fill(3, 13, 1, 2)   // 四足
+            fill(5, 13, 1, 2)
+            fill(9, 13, 1, 2)
+            fill(11, 13, 1, 2)
+
+            return true
+        }
+        image.isTemplate = true
         return image
     }
 

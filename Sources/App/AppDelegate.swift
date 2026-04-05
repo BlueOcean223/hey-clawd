@@ -35,12 +35,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func assembleCoreLoop() {
         let stateMachine = StateMachine()
-        stateMachine.onStateChange = { [weak petWindow = self.petWindow] state, svg in
-            petWindow?.display(
-                state: state,
-                svgFilename: svg,
-                sourcePid: stateMachine.currentDisplaySourcePid
-            )
+        stateMachine.onStateChange = { [weak petWindow = self.petWindow] state, svg, sourcePid in
+            petWindow?.display(state: state, svgFilename: svg, sourcePid: sourcePid)
         }
         self.stateMachine = stateMachine
 
@@ -104,7 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
         }
         controller.onFocusSession = { pid in
-            guard let pid, let app = NSRunningApplication(processIdentifier: pid) else {
+            guard
+                let pid,
+                let app = NSRunningApplication(processIdentifier: pid),
+                !app.isTerminated
+            else {
                 return
             }
             app.activate(options: [.activateIgnoringOtherApps])
@@ -121,6 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         httpServerTask?.cancel()
         httpServer?.stop()
         stateMachine?.cleanup()
+        petWebView?.teardown()
     }
 
     private func installTerminationSignalHandlers() {
@@ -156,15 +157,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+    private var petWebView: PetWebView? {
+        petWindow?.contentView as? PetWebView
+    }
+
     private func togglePetVisibility() {
         guard let petWindow else {
             return
         }
 
         if petWindow.isVisible {
+            petWebView?.pauseTracking()
             petWindow.orderOut(nil)
         } else {
             petWindow.orderFrontRegardless()
+            petWebView?.resumeTracking()
         }
     }
 

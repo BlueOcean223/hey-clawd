@@ -1,7 +1,7 @@
 import AppKit
 
 // 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
-final class PetWindow: NSWindow {
+@MainActor final class PetWindow: NSWindow {
     private static let dragThreshold: CGFloat = 3
     private static let clickWindow: TimeInterval = 0.4
     private static let pokeReactionDuration: TimeInterval = 2.5
@@ -27,7 +27,8 @@ final class PetWindow: NSWindow {
 
     private let petWebView: PetWebView
     private var dragStartPoint: NSPoint?
-    private var dragStartOrigin: NSPoint?
+    private var dragStartScreenPoint: NSPoint?
+    private var lastDragScreenPoint: NSPoint?
     private var isDraggingPet = false
     /// 反应动画播放期间，状态机更新只缓存，不直接覆盖当前 SVG。
     private var isShowingReaction = false
@@ -93,69 +94,33 @@ final class PetWindow: NSWindow {
         return NSRect(origin: origin, size: size)
     }
 
-    override func mouseDown(with event: NSEvent) {
-        guard petWebView.shouldHandleMouse(at: event.locationInWindow) else {
-            super.mouseDown(with: event)
-            return
+    override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown:
+            if petWebView.shouldHandleMouse(at: event.locationInWindow) {
+                handleLeftMouseDown(event)
+                return
+            }
+        case .leftMouseDragged:
+            if dragStartPoint != nil {
+                handleLeftMouseDragged(event)
+                return
+            }
+        case .leftMouseUp:
+            if dragStartPoint != nil || isDraggingPet {
+                handleLeftMouseUp(event)
+                return
+            }
+        case .rightMouseDown:
+            if petWebView.shouldHandleMouse(at: event.locationInWindow) {
+                handleRightMouseDown(event)
+                return
+            }
+        default:
+            break
         }
 
-        dragStartPoint = event.locationInWindow
-        dragStartOrigin = frame.origin
-        isDraggingPet = false
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard
-            let dragStartPoint,
-            let dragStartOrigin
-        else {
-            super.mouseDragged(with: event)
-            return
-        }
-
-        let deltaX = event.locationInWindow.x - dragStartPoint.x
-        let deltaY = event.locationInWindow.y - dragStartPoint.y
-
-        // 小抖动不算拖拽，留给后面的点击反应继续用。
-        if !isDraggingPet, hypot(deltaX, deltaY) > Self.dragThreshold {
-            isDraggingPet = true
-            beginDragReactionIfNeeded()
-        }
-
-        guard isDraggingPet else {
-            return
-        }
-
-        setFrameOrigin(NSPoint(
-            x: dragStartOrigin.x + deltaX,
-            y: dragStartOrigin.y + deltaY
-        ))
-    }
-
-    override func mouseUp(with event: NSEvent) {
-        if isDraggingPet {
-            endDragReactionIfNeeded()
-        } else if dragStartPoint != nil {
-            handlePetClick(event)
-        } else {
-            super.mouseUp(with: event)
-        }
-
-        dragStartPoint = nil
-        dragStartOrigin = nil
-        isDraggingPet = false
-    }
-
-    override func rightMouseDown(with event: NSEvent) {
-        guard
-            petWebView.shouldHandleMouse(at: event.locationInWindow),
-            let menu = contextMenuProvider?()
-        else {
-            super.rightMouseDown(with: event)
-            return
-        }
-
-        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petWebView)
+        super.sendEvent(event)
     }
 
     /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
@@ -175,6 +140,7 @@ final class PetWindow: NSWindow {
         reactionTimer?.invalidate()
         reactionTimer = nil
         isShowingReaction = true
+        petWebView.pauseTracking()
         petWebView.playDragReaction()
     }
 
@@ -184,8 +150,78 @@ final class PetWindow: NSWindow {
         }
 
         isShowingReaction = false
+        petWebView.resumeTracking()
         // 拖拽期间状态机可能已经推进到新状态，恢复时以最新缓存结果为准。
         petWebView.resumeFromReaction(svgFilename: currentDisplaySVGFilename)
+    }
+
+    private func handleLeftMouseDown(_ event: NSEvent) {
+        dragStartPoint = event.locationInWindow
+        let screenPoint = NSEvent.mouseLocation
+        dragStartScreenPoint = screenPoint
+        lastDragScreenPoint = screenPoint
+        isDraggingPet = false
+    }
+
+    private func handleLeftMouseDragged(_ event: NSEvent) {
+        guard
+            let dragStartPoint,
+            let dragStartScreenPoint
+        else {
+            return
+        }
+
+        let screenPoint = NSEvent.mouseLocation
+
+        // 用屏幕坐标判断拖拽阈值。窗口自己在移动时，locationInWindow 不再可靠。
+        if !isDraggingPet {
+            let distance = hypot(
+                screenPoint.x - dragStartScreenPoint.x,
+                screenPoint.y - dragStartScreenPoint.y
+            )
+            if distance > Self.dragThreshold {
+                isDraggingPet = true
+                beginDragReactionIfNeeded()
+            }
+        }
+
+        guard
+            isDraggingPet,
+            let lastDragScreenPoint
+        else {
+            return
+        }
+
+        let deltaX = screenPoint.x - lastDragScreenPoint.x
+        let deltaY = screenPoint.y - lastDragScreenPoint.y
+        setFrameOrigin(NSPoint(
+            x: frame.origin.x + deltaX,
+            y: frame.origin.y + deltaY
+        ))
+        self.lastDragScreenPoint = screenPoint
+        self.dragStartPoint = dragStartPoint
+    }
+
+    private func handleLeftMouseUp(_ event: NSEvent) {
+        if isDraggingPet {
+            endDragReactionIfNeeded()
+        } else if dragStartPoint != nil {
+            handlePetClick(event)
+        }
+
+        dragStartPoint = nil
+        dragStartScreenPoint = nil
+        lastDragScreenPoint = nil
+        isDraggingPet = false
+    }
+
+    private func handleRightMouseDown(_ event: NSEvent) {
+        cancelClickWindow()
+        guard let menu = contextMenuProvider?() else {
+            return
+        }
+
+        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petWebView)
     }
 
     private func handlePetClick(_ event: NSEvent) {
@@ -279,7 +315,11 @@ final class PetWindow: NSWindow {
     }
 
     private func focusCurrentTerminal() {
-        guard let currentSourcePid, let app = NSRunningApplication(processIdentifier: currentSourcePid) else {
+        guard
+            let currentSourcePid,
+            let app = NSRunningApplication(processIdentifier: currentSourcePid),
+            !app.isTerminated
+        else {
             return
         }
 
