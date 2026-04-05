@@ -7,9 +7,22 @@ import WebKit
 final class PetWebView: NSView {
     private let bridgeName = "bridge"
     private lazy var webView: WKWebView = makeWebView()
+    private lazy var eyeTracker = EyeTracker(
+        isEnabled: { [weak self] in
+            self?.shouldTrackEyes ?? false
+        },
+        eyeCenterProvider: { [weak self] in
+            self?.eyeScreenCenter
+        },
+        onOffsetChange: { [weak self] dx, dy in
+            self?.applyEyeMove(dx: dx, dy: dy)
+        }
+    )
     /// bridge 页面加载前积压的 SVG 文件名，bridge-ready 后补发。
     private var pendingSVGFilename: String?
     private var isBridgeReady = false
+    /// 只在 bridge.js 确认 svg-loaded 后更新，表示当前屏幕上真正显示的文件。
+    private var mountedSVGFilename: String?
 
     // ── 命中检测状态 ──
     // 30Hz Timer 持续采样鼠标位置，通过 JS hitTestAt 判断是否落在 SVG 实体像素上，
@@ -35,6 +48,7 @@ final class PetWebView: NSView {
 
         loadBridgeDocument()
         startHitTestSampling()
+        _ = eyeTracker
     }
 
     @available(*, unavailable)
@@ -69,6 +83,37 @@ final class PetWebView: NSView {
 
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
+    }
+
+    /// 3.1 只在 idle-follow / mini-idle 上启用眼球追踪。
+    /// 其他动画即使也带 eyes-js，也先保持原始美术动作，不叠加实时偏移。
+    private var shouldTrackEyes: Bool {
+        guard isBridgeReady else {
+            return false
+        }
+
+        return mountedSVGFilename == "clawd-idle-follow.svg" || mountedSVGFilename == "clawd-mini-idle.svg"
+    }
+
+    /// 原版眼球中心不是窗口正中，而是按美术构图落在角色脸部。
+    /// 这里直接沿用 22/45、34/45 这组比例，避免窗口缩放后追踪点漂掉。
+    private var eyeScreenCenter: NSPoint? {
+        guard let window else {
+            return nil
+        }
+
+        return NSPoint(
+            x: window.frame.minX + (window.frame.width * 22.0 / 45.0),
+            y: window.frame.minY + (window.frame.height * 34.0 / 45.0)
+        )
+    }
+
+    private func applyEyeMove(dx: CGFloat, dy: CGFloat) {
+        guard isBridgeReady else {
+            return
+        }
+
+        evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(dx), \(dy))")
     }
 
     /// PetWindow.sendEvent 调用：当前点击位置是否命中桌宠实体？
@@ -275,11 +320,16 @@ final class PetWebView: NSView {
 
         if type == "bridge-ready" {
             isBridgeReady = true
+            mountedSVGFilename = nil
 
             if let filename = pendingSVGFilename {
                 // JS bridge 就绪后补发初始化阶段积压的 SVG 请求。
                 loadSVG(filename)
             }
+        } else if type == "svg-loaded" {
+            mountedSVGFilename = payload["filename"] as? String
+            // 新 SVG 刚挂上去时 transform 还是初始值，下一帧强制补一次眼球位置。
+            eyeTracker.forceResend()
         } else if type == "svg-error" {
             let filename = payload["filename"] as? String ?? "unknown"
             let message = payload["message"] as? String ?? "unknown"
@@ -311,6 +361,7 @@ extension PetWebView: WKNavigationDelegate {
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         print("pet webview content process terminated")
         isBridgeReady = false
+        mountedSVGFilename = nil
         lastHitTestPoint = nil
         lastHitTestResult = false
         window?.ignoresMouseEvents = true

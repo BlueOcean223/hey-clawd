@@ -11,6 +11,10 @@
   const container = document.getElementById("pet-container");
   let currentSVG = null;
   let pendingSVG = null;
+  let eyeTarget = null;
+  let bodyTarget = null;
+  let shadowTarget = null;
+  let dozeEyeTarget = null;
   // Phase 3 交互反馈期间会把它置为 true，状态机切换据此避让。
   let isReacting = false;
   // 单调递增的加载 ID，用于丢弃过期的异步回调。
@@ -57,6 +61,46 @@
     eyes.style.transform = "scaleY(1)";
   }
 
+  function detachEyeTracking() {
+    eyeTarget = null;
+    bodyTarget = null;
+    shadowTarget = null;
+    dozeEyeTarget = null;
+  }
+
+  // 内联 SVG 一提交就能直接拿到内部节点。
+  // 这里先把目标元素缓存起来，避免后续每 50ms 都重新查 DOM。
+  function attachEyeTracking() {
+    detachEyeTracking();
+    if (!currentSVG) {
+      return;
+    }
+
+    eyeTarget = currentSVG.getElementById("eyes-js");
+    bodyTarget = currentSVG.getElementById("body-js");
+    shadowTarget = currentSVG.getElementById("shadow-js");
+    dozeEyeTarget = currentSVG.getElementById("eyes-doze");
+  }
+
+  function applyEyeMove(dx, dy) {
+    if (eyeTarget) {
+      eyeTarget.style.transform = "translate(" + dx + "px, " + dy + "px)";
+    }
+
+    if (bodyTarget) {
+      const bdx = Math.round(dx * 0.33 * 2) / 2;
+      const bdy = Math.round(dy * 0.33 * 2) / 2;
+      bodyTarget.style.transform = "translate(" + bdx + "px, " + bdy + "px)";
+    }
+
+    if (shadowTarget) {
+      const absDx = Math.abs(Math.round(dx * 0.33 * 2) / 2);
+      const scaleX = 1 + absDx * 0.15;
+      const shiftX = Math.round(dx * 0.33 * 0.3 * 2) / 2;
+      shadowTarget.style.transform = "translate(" + shiftX + "px, 0) scaleX(" + scaleX + ")";
+    }
+  }
+
   // 提交新 SVG：移除旧节点，清空几何缓存，通知 Swift。
   function swapSVG(nextSVG, filename, loadID) {
     if (pendingSVG !== nextSVG || currentLoadID !== loadID) {
@@ -80,6 +124,7 @@
         releaseSVG(oldSVG);
         currentSVG = nextSVG;
         cachedGeometryElements = null;
+        attachEyeTracking();
         postMessage("svg-loaded", { filename: filename });
       }, 300);
       return;
@@ -88,6 +133,7 @@
     pendingSVG = null;
     currentSVG = nextSVG;
     cachedGeometryElements = null;
+    attachEyeTracking();
 
     if (oldSVG && oldSVG !== nextSVG) {
       setTimeout(function () { releaseSVG(oldSVG); }, 130);
@@ -232,6 +278,7 @@
 
   window.HeyClawdBridge = {
     mountSVG,
+    applyEyeMove,
 
     // 返回当前已经提交显示的 SVG 文件名。
     // 仍在 preload 或尚未加载完成时返回 null，避免 Swift 读到半切换状态。
