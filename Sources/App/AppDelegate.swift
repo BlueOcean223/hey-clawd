@@ -9,6 +9,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
+    private var bubbleWindow: BubbleWindow?
+    private var pendingPermissionRequest: PendingPermissionRequest?
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private var appLanguage: AppLanguage = .zh
     private var isMiniModeEnabled = false
@@ -44,9 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         server.setStateRequestHandler { body in
             Self.handleStateRequest(body, using: stateMachine)
         }
-        server.setPermissionRequestHandler { request in
-            // Phase 2.4 只打通 state 链路；权限气泡留到后续任务再接。
-            request.respond(with: PermissionBehavior.deny)
+        server.setPermissionRequestHandler { [weak self] request in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    request.respond(with: .deny)
+                    return
+                }
+
+                self.presentPermissionBubble(for: request)
+            }
         }
         httpServer = server
         httpServerTask = Task { [server] in
@@ -118,6 +126,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        dismissPermissionBubble(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
         stateMachine?.cleanup()
@@ -172,6 +181,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             petWindow.orderFrontRegardless()
             petWebView?.resumeTracking()
+        }
+    }
+
+    private func presentPermissionBubble(for request: PendingPermissionRequest) {
+        guard let content = PermissionBubbleContent.decode(from: request.body) else {
+            request.respond(with: .deny)
+            return
+        }
+
+        // 4.1 只支持单气泡；新请求到来时先结束旧请求，避免旧连接一直挂起。
+        dismissPermissionBubble(respondingWith: .deny)
+        pendingPermissionRequest = request
+
+        let bubbleWindow = BubbleWindow(content: content) { [weak self] decision in
+            self?.dismissPermissionBubble(respondingWith: decision.behavior)
+        }
+        self.bubbleWindow = bubbleWindow
+        bubbleWindow.present()
+    }
+
+    private func dismissPermissionBubble(respondingWith behavior: PermissionBehavior?) {
+        bubbleWindow?.close()
+        bubbleWindow = nil
+
+        guard let pendingPermissionRequest else {
+            return
+        }
+
+        self.pendingPermissionRequest = nil
+        if let behavior {
+            pendingPermissionRequest.respond(with: behavior)
         }
     }
 
