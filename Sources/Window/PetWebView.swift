@@ -1,18 +1,27 @@
 import AppKit
 import WebKit
 
+/// WKWebView 封装层：加载 bridge.html，将 SVG 内联挂载到 DOM，
+/// 并以 30Hz 轮询鼠标位置做命中检测，驱动窗口的 ignoresMouseEvents 切换。
 @MainActor
-// 负责把本地 bridge.html + SVG 资源接进 WKWebView。
 final class PetWebView: NSView {
     private let bridgeName = "bridge"
     private lazy var webView: WKWebView = makeWebView()
+    /// bridge 页面加载前积压的 SVG 文件名，bridge-ready 后补发。
     private var pendingSVGFilename: String?
     private var isBridgeReady = false
-    // 透明区域命中依赖 JS 侧的 live SVG DOM 命中检测，这里缓存最近一次结果给窗口层复用。
+
+    // ── 命中检测状态 ──
+    // 30Hz Timer 持续采样鼠标位置，通过 JS hitTestAt 判断是否落在 SVG 实体像素上，
+    // 结果缓存在这里供 PetWindow.sendEvent 复用。
     private var hitTestTimer: Timer?
+    /// 防止上一次 evaluateJavaScript 尚未回调时重复发起。
     private var isSamplingHitTest = false
     private var lastHitTestPoint: NSPoint?
     private var lastHitTestResult = false
+    /// 去重日志：只在消息内容变化时打印，避免 30Hz 刷屏。
+    private var lastHitTestErrorMessage: String?
+    private var lastNonBooleanHitTestDescription: String?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -33,23 +42,32 @@ final class PetWebView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    /// 从 bundle 读取 SVG 文件内容，通过 JS bridge 内联挂载到 DOM。
+    /// bridge 未就绪时暂存文件名，bridge-ready 回调后自动补发。
     func loadSVG(_ filename: String) {
-        // bridge 页面未 ready 前先记住目标 SVG，等 JS 主动回报后再发。
         pendingSVGFilename = filename
 
         guard isBridgeReady else {
             return
         }
 
-        evaluateBridgeCall("window.HeyClawdBridge.loadSVG(\(quotedJavaScriptString(filename)))")
+        guard let markup = svgMarkup(for: filename) else {
+            print("pet svg-read-error: \(filename)")
+            return
+        }
+
+        evaluateBridgeCall(
+            "window.HeyClawdBridge.mountSVG(\(quotedJavaScriptString(filename)), \(quotedJavaScriptString(markup)))"
+        )
     }
 
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
     }
 
+    /// PetWindow.sendEvent 调用：当前点击位置是否命中桌宠实体？
+    /// 比对最近一次 30Hz 采样结果，容差 2px 内视为有效。
     func shouldHandleMouse(at windowPoint: NSPoint) -> Bool {
-        // 只接受和最近一次采样点足够接近的命中结果，避免吃到过期状态。
         guard window != nil else {
             return false
         }
@@ -105,8 +123,9 @@ final class PetWebView: NSView {
         webView.loadFileURL(bridgeURL, allowingReadAccessTo: resourcesURL)
     }
 
+    /// 启动 30Hz 命中检测轮询。
+    /// 不能等点击时才查——必须提前切换 ignoresMouseEvents，否则事件根本到不了窗口。
     private func startHitTestSampling() {
-        // 不等点击发生时再查 JS，持续采样才能及时切换窗口的鼠标穿透状态。
         hitTestTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.samplePointerOpacity()
@@ -115,6 +134,7 @@ final class PetWebView: NSView {
         RunLoop.main.add(hitTestTimer!, forMode: .common)
     }
 
+    /// 单次采样：读取鼠标位置 → 翻转 Y 轴 → 调 JS hitTestAt → 更新 ignoresMouseEvents。
     private func samplePointerOpacity() {
         guard
             isBridgeReady,
@@ -140,27 +160,60 @@ final class PetWebView: NSView {
         }
 
         isSamplingHitTest = true
-        let script = "window.HeyClawdBridge.hitTestAt(\(localPoint.x), \(localPoint.y))"
+        // AppKit Y 轴向上（底部=0），CSS Y 轴向下（顶部=0），必须翻转。
+        let flippedY = bounds.height - localPoint.y
+        let script = "window.HeyClawdBridge.hitTestAt(\(localPoint.x), \(flippedY))"
 
-        webView.evaluateJavaScript(script) { [weak self] value, _ in
+        webView.evaluateJavaScript(script) { [weak self] value, error in
             guard let self else {
                 return
             }
 
             Task { @MainActor in
                 self.isSamplingHitTest = false
+
+                if let error {
+                    let message = error.localizedDescription
+                    if self.lastHitTestErrorMessage != message {
+                        print("pet hit-test error: \(message)")
+                        self.lastHitTestErrorMessage = message
+                    }
+                    // JS 执行失败，安全回退到穿透。
+                    self.lastHitTestPoint = localPoint
+                    self.lastHitTestResult = false
+                    self.window?.ignoresMouseEvents = true
+                    return
+                }
+
+                self.lastHitTestErrorMessage = nil
+                guard let hitResult = value as? NSNumber else {
+                    let description = String(describing: value)
+                    if self.lastNonBooleanHitTestDescription != description {
+                        print("pet hit-test returned non-bool: \(description)")
+                        self.lastNonBooleanHitTestDescription = description
+                    }
+                    // null（SVG 未加载）或其他非布尔值，默认穿透。
+                    self.lastHitTestPoint = localPoint
+                    self.lastHitTestResult = false
+                    self.window?.ignoresMouseEvents = true
+                    return
+                }
+
+                self.lastNonBooleanHitTestDescription = nil
+                let nextHitResult = hitResult.boolValue
                 self.lastHitTestPoint = localPoint
-                self.lastHitTestResult = (value as? NSNumber)?.boolValue ?? false
+                self.lastHitTestResult = nextHitResult
                 // 指到透明区时直接让整个窗口放弃鼠标事件，事件会自然落到下层窗口。
-                self.window?.ignoresMouseEvents = !self.lastHitTestResult
+                self.window?.ignoresMouseEvents = !nextHitResult
             }
         }
     }
 
+    /// 定位 app bundle 内的 Resources/ 目录。
+    /// Xcode folder reference 打包和 SPM swift build 的路径不同，逐一尝试。
     private func bundledResourcesURL() -> URL? {
         let fileManager = FileManager.default
         var candidates = [
-            // folder reference 打包后通常会落在 bundle 里的 Resources/ 子目录。
             Bundle.main.resourceURL?.appendingPathComponent("Resources", isDirectory: true),
             Bundle.main.resourceURL,
         ]
@@ -188,6 +241,19 @@ final class PetWebView: NSView {
         return FileManager.default.fileExists(atPath: bridgeURL.path) ? bridgeURL : nil
     }
 
+    /// 从 bundle 读取 SVG 文件原文，供 mountSVG 通过 JS 内联到 DOM。
+    private func svgMarkup(for filename: String) -> String? {
+        guard let resourcesURL = bundledResourcesURL() else {
+            return nil
+        }
+
+        let svgURL = resourcesURL
+            .appendingPathComponent("svg", isDirectory: true)
+            .appendingPathComponent(filename, isDirectory: false)
+
+        return try? String(contentsOf: svgURL, encoding: .utf8)
+    }
+
     private func quotedJavaScriptString(_ value: String) -> String {
         // 复用 JSON 转义，避免文件名里有引号时拼 JS 字符串出错。
         let data = try? JSONSerialization.data(withJSONObject: [value], options: [])
@@ -195,6 +261,7 @@ final class PetWebView: NSView {
         return String(json.dropFirst().dropLast())
     }
 
+    /// 处理 JS → Swift 消息：bridge-ready / svg-loaded / svg-error。
     fileprivate func handleBridgeMessage(_ payload: [String: Any]) {
         guard let type = payload["type"] as? String else {
             return
@@ -207,6 +274,10 @@ final class PetWebView: NSView {
                 // JS bridge 就绪后补发初始化阶段积压的 SVG 请求。
                 loadSVG(filename)
             }
+        } else if type == "svg-error" {
+            let filename = payload["filename"] as? String ?? "unknown"
+            let message = payload["message"] as? String ?? "unknown"
+            print("pet svg-error: \(filename) (\(message))")
         }
     }
 }
@@ -219,6 +290,25 @@ extension PetWebView: WKNavigationDelegate {
             scrollView.hasVerticalScroller = false
             scrollView.hasHorizontalScroller = false
         }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        print("pet webview didFail: \(error.localizedDescription)")
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        print("pet webview didFailProvisionalNavigation: \(error.localizedDescription)")
+    }
+
+    /// WebContent 进程崩溃后重置全部状态并重新加载 bridge。
+    /// pendingSVGFilename 不清——bridge-ready 回调会自动补发最后一次 SVG。
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        print("pet webview content process terminated")
+        isBridgeReady = false
+        lastHitTestPoint = nil
+        lastHitTestResult = false
+        window?.ignoresMouseEvents = true
+        loadBridgeDocument()
     }
 }
 
