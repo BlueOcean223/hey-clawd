@@ -83,6 +83,11 @@
   }
 
   function applyEyeMove(dx, dy) {
+    // 反应动画期间保留 SVG 自己的关键帧姿态，不叠加眼球/身体实时偏移。
+    if (isReacting) {
+      return;
+    }
+
     if (eyeTarget) {
       eyeTarget.style.transform = "translate(" + dx + "px, " + dy + "px)";
     }
@@ -99,6 +104,10 @@
       const shiftX = Math.round(dx * 0.33 * 0.3 * 2) / 2;
       shadowTarget.style.transform = "translate(" + shiftX + "px, 0) scaleX(" + scaleX + ")";
     }
+  }
+
+  function setReacting(value) {
+    isReacting = Boolean(value);
   }
 
   // 提交新 SVG：移除旧节点，清空几何缓存，通知 Swift。
@@ -279,6 +288,7 @@
   window.HeyClawdBridge = {
     mountSVG,
     applyEyeMove,
+    setReacting,
 
     // 返回当前已经提交显示的 SVG 文件名。
     // 仍在 preload 或尚未加载完成时返回 null，避免 Swift 读到半切换状态。
@@ -291,7 +301,7 @@
     },
 
     set isReacting(value) {
-      isReacting = Boolean(value);
+      setReacting(value);
     },
 
     // 返回 true（命中实体）/ false（透明区域）/ null（SVG 未加载）。

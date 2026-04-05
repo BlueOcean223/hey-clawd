@@ -2,6 +2,8 @@ import AppKit
 
 // 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
 final class PetWindow: NSWindow {
+    private static let dragThreshold: CGFloat = 3
+
     enum SizePreset {
         case small
         case medium
@@ -20,6 +22,12 @@ final class PetWindow: NSWindow {
     }
 
     private let petWebView: PetWebView
+    private var dragStartPoint: NSPoint?
+    private var dragStartOrigin: NSPoint?
+    private var isDraggingPet = false
+    /// 反应动画播放期间，状态机更新只缓存，不直接覆盖当前 SVG。
+    private var isShowingDragReaction = false
+    private var currentDisplaySVGFilename = "clawd-idle-follow.svg"
 
     init(sizePreset: SizePreset = .small) {
         let size = NSSize(width: sizePreset.dimension, height: sizePreset.dimension)
@@ -62,17 +70,84 @@ final class PetWindow: NSWindow {
         return NSRect(origin: origin, size: size)
     }
 
-    override func sendEvent(_ event: NSEvent) {
-        // Phase 1 先只验证实体像素区能吃到点击，拖拽逻辑后面再接。
-        if event.type == .leftMouseDown, petWebView.shouldHandleMouse(at: event.locationInWindow) {
-            print("hit pet")
+    override func mouseDown(with event: NSEvent) {
+        guard petWebView.shouldHandleMouse(at: event.locationInWindow) else {
+            super.mouseDown(with: event)
+            return
         }
 
-        super.sendEvent(event)
+        dragStartPoint = event.locationInWindow
+        dragStartOrigin = frame.origin
+        isDraggingPet = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard
+            let dragStartPoint,
+            let dragStartOrigin
+        else {
+            super.mouseDragged(with: event)
+            return
+        }
+
+        let deltaX = event.locationInWindow.x - dragStartPoint.x
+        let deltaY = event.locationInWindow.y - dragStartPoint.y
+
+        // 小抖动不算拖拽，留给后面的点击反应继续用。
+        if !isDraggingPet, hypot(deltaX, deltaY) > Self.dragThreshold {
+            isDraggingPet = true
+            beginDragReactionIfNeeded()
+        }
+
+        guard isDraggingPet else {
+            return
+        }
+
+        setFrameOrigin(NSPoint(
+            x: dragStartOrigin.x + deltaX,
+            y: dragStartOrigin.y + deltaY
+        ))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if isDraggingPet {
+            endDragReactionIfNeeded()
+        } else {
+            super.mouseUp(with: event)
+        }
+
+        dragStartPoint = nil
+        dragStartOrigin = nil
+        isDraggingPet = false
     }
 
     /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
     func display(state _: PetState, svgFilename: String) {
+        currentDisplaySVGFilename = svgFilename
+
+        guard !isShowingDragReaction else {
+            return
+        }
+
         petWebView.switchSVG(svgFilename)
+    }
+
+    private func beginDragReactionIfNeeded() {
+        guard !isShowingDragReaction else {
+            return
+        }
+
+        isShowingDragReaction = true
+        petWebView.playDragReaction()
+    }
+
+    private func endDragReactionIfNeeded() {
+        guard isShowingDragReaction else {
+            return
+        }
+
+        isShowingDragReaction = false
+        // 拖拽期间状态机可能已经推进到新状态，恢复时以最新缓存结果为准。
+        petWebView.resumeFromReaction(svgFilename: currentDisplaySVGFilename)
     }
 }

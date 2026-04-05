@@ -5,6 +5,8 @@ import WebKit
 /// 并以 30Hz 轮询鼠标位置做命中检测，驱动窗口的 ignoresMouseEvents 切换。
 @MainActor
 final class PetWebView: NSView {
+    private static let dragReactionSVG = "clawd-react-drag.svg"
+
     private let bridgeName = "bridge"
     private lazy var webView: WKWebView = makeWebView()
     private lazy var eyeTracker = EyeTracker(
@@ -81,6 +83,20 @@ final class PetWebView: NSView {
         loadSVG(filename)
     }
 
+    /// 拖拽反应直接走独立 SVG，不经过状态机。
+    /// 状态机这段时间仍会继续更新“目标状态”，拖拽结束后再由外层决定恢复到哪张图。
+    func playDragReaction() {
+        setBridgeReacting(true)
+        loadSVG(Self.dragReactionSVG)
+    }
+
+    /// 结束交互反应后恢复到当前应该展示的状态图。
+    /// 这里不自己记“上一张图”，统一由窗口层传入最新状态机结果，避免恢复到过期画面。
+    func resumeFromReaction(svgFilename: String) {
+        setBridgeReacting(false)
+        switchSVG(svgFilename)
+    }
+
     func evaluateBridgeCall(_ script: String) {
         webView.evaluateJavaScript(script)
     }
@@ -114,6 +130,14 @@ final class PetWebView: NSView {
         }
 
         evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(dx), \(dy))")
+    }
+
+    private func setBridgeReacting(_ isReacting: Bool) {
+        guard isBridgeReady else {
+            return
+        }
+
+        evaluateBridgeCall("window.HeyClawdBridge.setReacting(\(isReacting ? "true" : "false"))")
     }
 
     /// PetWindow.sendEvent 调用：当前点击位置是否命中桌宠实体？
