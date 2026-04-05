@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class BubbleWindow: NSPanel {
     private let hostingView: NSHostingView<BubbleView>
+    var onHeightDidChange: (() -> Void)?
 
     override var canBecomeKey: Bool {
         true
@@ -78,5 +79,6 @@ final class BubbleWindow: NSPanel {
         var nextFrame = frame
         nextFrame.size.height = nextHeight
         setFrame(nextFrame, display: true)
+        onHeightDidChange?()
     }
 }

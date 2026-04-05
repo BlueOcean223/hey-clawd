@@ -9,14 +9,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
-    private var bubbleWindow: BubbleWindow?
-    private var pendingPermissionRequest: PendingPermissionRequest?
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private var appLanguage: AppLanguage = .zh
     private var isMiniModeEnabled = false
     private var isBubbleFollowEnabled = true
     private var isHideBubblesEnabled = false
     private var isSoundEffectsEnabled = true
+    private lazy var bubbleStack = BubbleStack(
+        petWindowProvider: { [weak self] in self?.petWindow },
+        bubbleFollowProvider: { [weak self] in self?.isBubbleFollowEnabled ?? true }
+    )
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 配合 Info.plist LSUIElement=true，隐藏 Dock 图标
@@ -82,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.onSelectSizePreset = { [weak self] preset in
             self?.petWindow?.applySizePreset(preset)
+            self?.bubbleStack.repositionBubbles()
         }
         controller.onToggleMiniMode = { [weak self] enabled in
             self?.isMiniModeEnabled = enabled
@@ -91,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.onToggleBubbleFollow = { [weak self] enabled in
             self?.isBubbleFollowEnabled = enabled
+            self?.bubbleStack.repositionBubbles()
         }
         controller.onToggleHideBubbles = { [weak self] enabled in
             self?.isHideBubblesEnabled = enabled
@@ -126,7 +130,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        dismissPermissionBubble(respondingWith: .deny)
+        bubbleStack.dismissAll(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
         stateMachine?.cleanup()
@@ -182,6 +186,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             petWindow.orderFrontRegardless()
             petWebView?.resumeTracking()
         }
+
+        bubbleStack.repositionBubbles()
     }
 
     private func presentPermissionBubble(for request: PendingPermissionRequest) {
@@ -190,29 +196,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // 4.1 只支持单气泡；新请求到来时先结束旧请求，避免旧连接一直挂起。
-        dismissPermissionBubble(respondingWith: .deny)
-        pendingPermissionRequest = request
-
-        let bubbleWindow = BubbleWindow(content: content) { [weak self] decision in
-            self?.dismissPermissionBubble(respondingWith: decision.behavior)
-        }
-        self.bubbleWindow = bubbleWindow
-        bubbleWindow.present()
-    }
-
-    private func dismissPermissionBubble(respondingWith behavior: PermissionBehavior?) {
-        bubbleWindow?.close()
-        bubbleWindow = nil
-
-        guard let pendingPermissionRequest else {
+        guard request.isAwaitingDecision else {
             return
         }
 
-        self.pendingPermissionRequest = nil
-        if let behavior {
-            pendingPermissionRequest.respond(with: behavior)
+        if stateMachine?.doNotDisturbEnabled == true {
+            request.respond(with: .deny)
+            return
         }
+
+        if BubbleStack.passthroughTools.contains(content.toolName) {
+            request.respond(with: .allow)
+            return
+        }
+
+        bubbleStack.enqueue(content: content, request: request)
     }
 
     /// /state 只接受轻量 JSON，先在这里做字段清洗，再交给 StateMachine 聚合。
