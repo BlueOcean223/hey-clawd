@@ -55,7 +55,12 @@ struct PermissionBubbleContent {
     }
 
     var estimatedHeight: CGFloat {
-        200 + CGFloat(suggestions.count * 37)
+        // Suggestions are in HStack, so they only add one row of height if present.
+        // Base: ~160 for tool pill + input preview + button row + padding.
+        // Add one extra row (~37px) only if suggestions cause wrapping.
+        let baseHeight: CGFloat = 170
+        let suggestionRowHeight: CGFloat = suggestions.isEmpty ? 0 : 37
+        return baseHeight + suggestionRowHeight
     }
 
     private static func decodeSuggestions(from rawValue: Any?) -> [PermissionSuggestion] {
@@ -149,6 +154,31 @@ struct BubbleView: View {
     let toolInput: String
     let suggestions: [PermissionSuggestion]
     let onDecide: (PermissionDecision) -> Void
+    var onContentHeightChanged: (() -> Void)?
+
+    @State private var isInputExpanded = false
+
+    @ViewBuilder
+    private var buttonGroup: some View {
+        let buttons = Group {
+            Button("Allow") { onDecide(.allow) }
+
+            Button("Deny") { onDecide(.deny) }
+
+            ForEach(suggestions) { suggestion in
+                Button(suggestion.label) {
+                    onDecide(.suggestion(suggestion))
+                }
+                .font(.caption)
+            }
+        }
+
+        if #available(macOS 13.0, *) {
+            FlowLayout(spacing: 8) { buttons }
+        } else {
+            HStack(spacing: 8) { buttons }
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -163,25 +193,19 @@ struct BubbleView: View {
 
             Text(toolInput)
                 .font(.system(.body, design: .monospaced))
-                .lineLimit(3)
+                .lineLimit(isInputExpanded ? nil : 3)
                 .multilineTextAlignment(.leading)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-            HStack(spacing: 8) {
-                Button("Allow") { onDecide(.allow) }
-                    .keyboardShortcut(.defaultAction)
-
-                Button("Deny") { onDecide(.deny) }
-
-                ForEach(suggestions) { suggestion in
-                    Button(suggestion.label) {
-                        onDecide(.suggestion(suggestion))
-                    }
-                    .font(.caption)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isInputExpanded.toggle()
+                    DispatchQueue.main.async { onContentHeightChanged?() }
                 }
-            }
+
+            buttonGroup
         }
+        .fixedSize(horizontal: false, vertical: true)
         .padding(16)
         .frame(width: 340, alignment: .leading)
         .background(.ultraThinMaterial)
@@ -189,6 +213,67 @@ struct BubbleView: View {
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(.separator, lineWidth: 0.5)
+        )
+    }
+}
+
+@available(macOS 13.0, *)
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let result = computeLayout(proposal: proposal, subviews: subviews)
+        return result.size
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let result = computeLayout(proposal: proposal, subviews: subviews)
+        for (index, position) in result.positions.enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private struct LayoutResult {
+        var size: CGSize
+        var positions: [CGPoint]
+    }
+
+    private func computeLayout(proposal: ProposedViewSize, subviews: Subviews) -> LayoutResult {
+        let maxWidth = proposal.width ?? .infinity
+        var positions: [CGPoint] = []
+        var currentX: CGFloat = 0
+        var currentY: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if currentX + size.width > maxWidth, currentX > 0 {
+                currentX = 0
+                currentY += rowHeight + spacing
+                rowHeight = 0
+            }
+            positions.append(CGPoint(x: currentX, y: currentY))
+            rowHeight = max(rowHeight, size.height)
+            currentX += size.width + spacing
+            maxX = max(maxX, currentX - spacing)
+        }
+
+        return LayoutResult(
+            size: CGSize(width: maxX, height: currentY + rowHeight),
+            positions: positions
         )
     }
 }

@@ -18,6 +18,7 @@ final class BubbleStack {
     private let bubbleFollowProvider: @MainActor () -> Bool
 
     private var pendingPermissions: [PendingBubble] = []
+    private var petObservationTokens: [NSObjectProtocol] = []
     var onBubblesChanged: (() -> Void)?
 
     init(
@@ -85,13 +86,47 @@ final class BubbleStack {
         for bubble in pendingPermissions.reversed() {
             let window = bubble.window
             let size = window.frame.size
+            let clampedY = min(currentY, visibleFrame.maxY - size.height)
+            let finalY = max(visibleFrame.minY, clampedY)
             let nextOrigin = NSPoint(
                 x: clampedX(for: size.width, anchor: anchor, visibleFrame: visibleFrame, followPet: shouldUsePetAnchor),
-                y: currentY
+                y: finalY
             )
             window.setFrameOrigin(nextOrigin)
             currentY += size.height + 6
         }
+    }
+
+    func observePetWindow(_ petWindow: NSWindow) {
+        stopObservingPetWindow()
+
+        let center = NotificationCenter.default
+        let moveToken = center.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: petWindow,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.repositionBubbles()
+            }
+        }
+        let resizeToken = center.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: petWindow,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.repositionBubbles()
+            }
+        }
+        petObservationTokens = [moveToken, resizeToken]
+    }
+
+    func stopObservingPetWindow() {
+        for token in petObservationTokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+        petObservationTokens.removeAll()
     }
 
     func dismissAll(respondingWith behavior: PermissionBehavior) {
@@ -147,37 +182,41 @@ final class BubbleStack {
     }
 
     private func anchorRect(in visibleFrame: NSRect, followPet: Bool) -> NSRect {
-        guard
-            followPet,
-            let petWindow = petWindowProvider(),
-            petWindow.isVisible
-        else {
-            // 不跟随桌宠时，直接按工作区右下角作为堆叠基准点。
+        let petWindow = petWindowProvider()
+        let petIsVisible = petWindow?.isVisible == true
+
+        if followPet, petIsVisible, let petFrame = petWindow?.frame {
+            // 跟随桌宠：X/Y 都以桌宠为基准。
             return NSRect(
-                x: visibleFrame.maxX - 8,
+                x: max(visibleFrame.minX + 8, petFrame.minX - 8),
+                y: max(visibleFrame.minY + 8, petFrame.minY + 8),
+                width: 0,
+                height: max(0, petFrame.height)
+            )
+        }
+
+        // 高度回退时：Y 从屏幕底部开始，但 X 仍然偏移到桌宠左侧以免遮挡。
+        if petIsVisible, let petFrame = petWindow?.frame {
+            return NSRect(
+                x: max(visibleFrame.minX + 8, petFrame.minX - 8),
                 y: visibleFrame.minY + 8,
                 width: 0,
                 height: 0
             )
         }
 
-        let petFrame = petWindow.frame
+        // 无桌宠时，右下角。
         return NSRect(
-            x: max(visibleFrame.minX + 8, petFrame.minX - 8),
-            y: max(visibleFrame.minY + 8, petFrame.minY + 8),
+            x: visibleFrame.maxX - 8,
+            y: visibleFrame.minY + 8,
             width: 0,
-            height: max(0, petFrame.height)
+            height: 0
         )
     }
 
     private func clampedX(for width: CGFloat, anchor: NSRect, visibleFrame: NSRect, followPet: Bool) -> CGFloat {
-        let preferredX: CGFloat
-        if followPet {
-            preferredX = anchor.minX - width
-        } else {
-            preferredX = visibleFrame.maxX - width - 8
-        }
-
+        // 始终放在锚点左侧，无论是否 followPet。
+        let preferredX = anchor.minX - width
         return min(
             max(visibleFrame.minX + 8, preferredX),
             visibleFrame.maxX - width - 8

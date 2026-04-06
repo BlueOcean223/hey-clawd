@@ -38,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleStack.onBubblesChanged = { [weak self] in
             self?.updateHotKeyRegistration()
         }
+        if let petWindow {
+            bubbleStack.observePetWindow(petWindow)
+        }
 
         assembleCoreLoop()
         setupStatusBarController()
@@ -143,7 +146,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        hotKeyManager.unregister()
+        bubbleStack.stopObservingPetWindow()
+        hotKeyManager.teardown()
         bubbleStack.dismissAll(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
@@ -222,6 +226,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if BubbleStack.passthroughTools.contains(content.toolName) {
             request.respond(with: .allow)
+            return
+        }
+
+        if isHideBubblesEnabled {
+            request.respond(with: .deny)
             return
         }
 

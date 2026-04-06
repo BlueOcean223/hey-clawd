@@ -4,6 +4,7 @@ import SwiftUI
 @MainActor
 final class BubbleWindow: NSPanel {
     private let hostingView: NSHostingView<BubbleView>
+    private let minimumHeight: CGFloat
     var onHeightDidChange: (() -> Void)?
 
     override var canBecomeKey: Bool {
@@ -22,8 +23,14 @@ final class BubbleWindow: NSPanel {
             onDecide: onDecide
         )
         hostingView = NSHostingView(rootView: view)
+        minimumHeight = content.estimatedHeight
 
-        let size = NSSize(width: 340, height: content.estimatedHeight)
+        // 用宽裕高度预测量，让 fixedSize 的 VStack 计算出真实理想高度。
+        hostingView.frame = NSRect(origin: .zero, size: NSSize(width: 340, height: 600))
+        let measuredHeight = ceil(hostingView.fittingSize.height)
+        let actualHeight = max(minimumHeight, measuredHeight)
+        let size = NSSize(width: 340, height: actualHeight)
+
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -41,8 +48,11 @@ final class BubbleWindow: NSPanel {
         isReleasedWhenClosed = false
 
         contentView = hostingView
-        hostingView.frame = NSRect(origin: .zero, size: size)
         setFrame(bottomRightRect(for: size), display: false)
+
+        hostingView.rootView.onContentHeightChanged = { [weak self] in
+            self?.updateHeightToFitContent()
+        }
     }
 
     func present() {
@@ -68,14 +78,13 @@ final class BubbleWindow: NSPanel {
 
     private func updateHeightToFitContent() {
         hostingView.layoutSubtreeIfNeeded()
-        let fittingSize = hostingView.fittingSize
-        let nextHeight = max(160, ceil(fittingSize.height))
+        let fittingHeight = ceil(hostingView.fittingSize.height)
+        let nextHeight = max(minimumHeight, fittingHeight)
 
         guard abs(frame.height - nextHeight) > 1 else {
             return
         }
 
-        // 保持底边不动，只把实际高度向上长出来，方便后续 4.2 直接接堆叠布局。
         var nextFrame = frame
         nextFrame.size.height = nextHeight
         setFrame(nextFrame, display: true)
