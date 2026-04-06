@@ -100,7 +100,8 @@
             return
         }
 
-        let workArea = nearestWorkArea(for: frame.origin)
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        let workArea = nearestWorkArea(for: center)
         var clampedOrigin = frame.origin
         clampedOrigin.x = max(workArea.minX, min(clampedOrigin.x, workArea.maxX - frame.width))
         clampedOrigin.y = max(workArea.minY, min(clampedOrigin.y, workArea.maxY - frame.height))

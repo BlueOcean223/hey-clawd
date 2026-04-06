@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var miniModeController: MiniMode?
     private var gitUpdater: GitUpdater?
     private var sparkleUpdater: SparkleUpdater?
+    private var isUpdating = false
     private lazy var bubbleStack = BubbleStack(
         petWindowProvider: { [weak self] in self?.petWindow },
         bubbleFollowProvider: { [weak self] in self?.isBubbleFollowEnabled ?? true }
@@ -165,18 +166,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { [stateMachine] in
             await monitor.setOnStateUpdate { [stateMachine] update in
                 // emit 已经切回主线程，这里只把会话状态和 cwd 接回主状态机。
-                MainActor.assumeIsolated {
-                    stateMachine.setState(
-                        update.state,
-                        sessionId: update.sessionId,
-                        event: update.event,
-                        sourcePid: nil,
-                        cwd: update.cwd,
-                        editor: nil,
-                        agentId: update.agentId,
-                        headless: false
-                    )
-                }
+                stateMachine.setState(
+                    update.state,
+                    sessionId: update.sessionId,
+                    event: update.event,
+                    sourcePid: nil,
+                    cwd: update.cwd,
+                    editor: nil,
+                    agentId: update.agentId,
+                    headless: false
+                )
             }
             await monitor.start()
         }
@@ -460,7 +459,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cwd = normalizedString(payload["cwd"] as? String)
         let editor = normalizedEditor(payload["editor"] as? String)
         let agentId = normalizedString(payload["agent_id"] as? String)
-        let headless = payload["headless"] as? Bool ?? false
+        let headless: Bool? = payload.keys.contains("headless") ? (payload["headless"] as? Bool ?? false) : nil
 
         switch svgUpdate {
         case .unspecified:
@@ -539,10 +538,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkForGitUpdates() {
-        guard let gitUpdater else {
+        guard let gitUpdater, !isUpdating else {
             return
         }
 
+        isUpdating = true
         Task.detached(priority: .userInitiated) { [gitUpdater, weak self] in
             do {
                 let result = try await gitUpdater.checkForUpdates()
@@ -551,6 +551,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
+                    self.isUpdating = false
                     if result.isUpdateAvailable {
                         self.presentGitUpdatePrompt(using: gitUpdater, result: result)
                     } else {
@@ -569,6 +570,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
+                    self.isUpdating = false
                     self.presentErrorAlert(
                         title: self.updateString(zh: "检查更新失败", en: "Failed to check for updates"),
                         error: error
@@ -583,10 +585,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .informational
         alert.messageText = updateString(zh: "发现源码更新", en: "Source update available")
         alert.informativeText = updateString(
-            zh: "本地 \(result.localRevision.prefix(7))，远端 \(result.remoteRevision.prefix(7))。继续后会执行 git pull 并重启应用。",
-            en: "Local \(result.localRevision.prefix(7)), remote \(result.remoteRevision.prefix(7)). Continue to run git pull and relaunch the app."
+            zh: "本地 \(result.localRevision.prefix(7))，远端 \(result.remoteRevision.prefix(7))。继续后会执行 git pull，更新完成后需要重新构建并重启应用。",
+            en: "Local \(result.localRevision.prefix(7)), remote \(result.remoteRevision.prefix(7)). Continue to run git pull. After it finishes, rebuild and relaunch the app."
         )
-        alert.addButton(withTitle: updateString(zh: "更新并重启", en: "Update and Relaunch"))
+        alert.addButton(withTitle: updateString(zh: "更新源码", en: "Update Source"))
         alert.addButton(withTitle: updateString(zh: "取消", en: "Cancel"))
 
         guard alert.runModal() == .alertFirstButtonReturn else {
@@ -597,6 +599,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func performGitUpdate(using gitUpdater: GitUpdater) {
+        guard !isUpdating else {
+            return
+        }
+
+        isUpdating = true
         Task.detached(priority: .userInitiated) { [gitUpdater, weak self] in
             do {
                 _ = try await gitUpdater.update()
@@ -605,7 +612,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
-                    self.relaunchApplication()
+                    self.isUpdating = false
+                    self.presentInfoAlert(
+                        title: self.updateString(zh: "源码已更新", en: "Source updated"),
+                        message: self.updateString(
+                            zh: "源码已更新，请重新构建并重启应用。",
+                            en: "Source updated. Please rebuild and relaunch."
+                        )
+                    )
                 }
             } catch {
                 await MainActor.run { [weak self] in
@@ -613,6 +627,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         return
                     }
 
+                    self.isUpdating = false
                     self.presentErrorAlert(
                         title: self.updateString(zh: "更新失败", en: "Update failed"),
                         error: error

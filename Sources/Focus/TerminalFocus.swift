@@ -8,12 +8,22 @@ enum FocusEditor: String, Sendable {
 
 struct TerminalFocusTarget: Sendable {
     let pid: pid_t?
-    let cwd: String?
     let editor: FocusEditor?
 }
 
 @MainActor
 enum TerminalFocus {
+    private static let allowedBundleIDs: Set<String> = [
+        "com.apple.Terminal",
+        "com.googlecode.iterm2",
+        "io.alacritty",
+        "com.github.wez.wezterm",
+        "dev.warp.Warp-Stable",
+        "net.kovidgoyal.kitty",
+        "com.microsoft.VSCode",
+        "com.todesktop.230313mzl4w4u92",
+    ]
+
     static func focus(_ target: TerminalFocusTarget) {
         // 先尝试直接按 PID 激活，成功率最高，也最接近用户当前那一个终端窗口。
         if let pid = target.pid, focusTerminal(pid: pid) {
@@ -33,6 +43,13 @@ enum TerminalFocus {
             let app = NSRunningApplication(processIdentifier: pid),
             !app.isTerminated
         else {
+            return false
+        }
+
+        // 只允许激活已知终端/编辑器进程，避免本地 PID 被劫持后误激活任意应用。
+        if let bundleID = app.bundleIdentifier,
+           !allowedBundleIDs.contains(bundleID)
+        {
             return false
         }
 
