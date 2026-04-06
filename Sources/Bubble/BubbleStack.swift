@@ -136,6 +136,11 @@ final class BubbleStack {
         }
     }
 
+    func denyAllForDoNotDisturb() {
+        // DND 打开时不应该留下任何待决权限，统一按 deny 清空最符合用户预期。
+        dismissAll(respondingWith: .deny)
+    }
+
     func allowLatestBubble() {
         guard let latestBubble = pendingPermissions.last else {
             return

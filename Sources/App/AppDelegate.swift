@@ -103,6 +103,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.focusCurrentSession()
             }
         }
+        stateMachine.onDoNotDisturbChange = { [weak self] enabled in
+            guard enabled else {
+                return
+            }
+
+            self?.bubbleStack.denyAllForDoNotDisturb()
+        }
         self.stateMachine = stateMachine
 
         let server = HTTPServer()

@@ -184,6 +184,7 @@ final class StateMachine {
     private static let dozingDelay: TimeInterval = 3
     private static let deepSleepDelay: TimeInterval = 600
     private static let collapseDelay: TimeInterval = 0.8
+    private static let dndYawningDelay: TimeInterval = 1.2
     private static let wakingDelay: TimeInterval = 1.5
     private static let pointerMovementThreshold: CGFloat = 0.5
 
@@ -221,8 +222,10 @@ final class StateMachine {
     private(set) var miniModeEnabled = false
     private(set) var miniTransitioning = false
     private var miniPeekEnabled = false
+    private var suppressExternalEvents = false
 
     var onStateChange: ((PetState, String, pid_t?) -> Void)?
+    var onDoNotDisturbChange: ((Bool) -> Void)?
 
     private let soundPlayer = SoundPlayer.shared
     private var sessions: [String: Session] = [:]
@@ -296,6 +299,10 @@ final class StateMachine {
     }
 
     func refreshDisplayState() {
+        guard !suppressExternalEvents || miniModeEnabled else {
+            return
+        }
+
         let displayState: PetState
         if doNotDisturbEnabled {
             displayState = miniModeEnabled ? .miniSleep : .sleeping
@@ -306,29 +313,41 @@ final class StateMachine {
         requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
     }
 
-    /// DND 是一个显示层覆盖态。
-    /// 会话数据照常积累，醒来后直接回到当前真实状态，不丢上下文。
+    /// DND 会临时接管显示层，并在入睡/唤醒阶段吞掉外部 hook 事件。
+    /// 这样桌宠不会被工作流噪音反复打断，行为更接近“真的去睡了”。
     func setDoNotDisturbEnabled(_ enabled: Bool) {
         guard doNotDisturbEnabled != enabled else {
             return
         }
 
         doNotDisturbEnabled = enabled
+        onDoNotDisturbChange?(enabled)
         cancelSleepStageTimer()
+        clearQueuedDisplayTransitions()
 
         if enabled {
-            let sleepState: PetState = miniModeEnabled ? .miniSleep : .sleeping
-            requestDisplayTransition(to: sleepState, svgOverride: svgOverride(for: sleepState))
+            // DND 不是普通的“静态切 sleeping”，而是强制接管显示层并快速入睡。
+            suppressExternalEvents = true
+            lastPointerMovedAt = Date()
+
+            if miniModeEnabled {
+                sleepMode = .sleeping
+                let sleepState: PetState = .miniSleep
+                requestDisplayTransition(to: sleepState, svgOverride: svgOverride(for: sleepState))
+            } else {
+                beginDoNotDisturbSleepSequence()
+            }
             return
         }
 
         lastPointerMovedAt = Date()
         if miniModeEnabled {
+            suppressExternalEvents = false
+            sleepMode = .awake
             let nextState = stableMiniState()
             requestDisplayTransition(to: nextState, svgOverride: svgOverride(for: nextState))
         } else {
-            let displayState = resolveDisplayState()
-            requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
+            beginWakeFromDoNotDisturb()
         }
     }
 
@@ -344,6 +363,11 @@ final class StateMachine {
         agentId: String? = nil,
         headless: Bool = false
     ) {
+        // DND 打开和唤醒动画期间，hook 事件只会制造噪音，直接吞掉。
+        guard !suppressExternalEvents else {
+            return
+        }
+
         // 任何 hook 事件都视为“用户/会话仍在活动”，先打断本地睡眠链路，再按正常状态机处理。
         if !doNotDisturbEnabled {
             interruptSleepSequenceForExternalEvent()
@@ -581,6 +605,15 @@ final class StateMachine {
         cancelSleepStageTimer()
     }
 
+    private func clearQueuedDisplayTransitions() {
+        // DND 需要立刻抢占显示层，不能被旧的一次性动画或 auto-return 拖住。
+        pendingTimer?.invalidate()
+        pendingTimer = nil
+        pendingTransition = nil
+        autoReturnTimer?.invalidate()
+        autoReturnTimer = nil
+    }
+
     private func beginIdleAnimation() {
         guard let nextIdleAnim = Self.idleAnims.randomElement() else {
             return
@@ -606,6 +639,14 @@ final class StateMachine {
         requestDisplayTransition(to: .yawning, svgOverride: svgOverride(for: .yawning))
         scheduleSleepStageTimer(after: Self.dozingDelay) { [weak self] in
             self?.beginDozing()
+        }
+    }
+
+    private func beginDoNotDisturbSleepSequence() {
+        sleepMode = .yawning
+        requestDisplayTransition(to: .yawning, svgOverride: svgOverride(for: .yawning))
+        scheduleSleepStageTimer(after: Self.dndYawningDelay) { [weak self] in
+            self?.beginCollapsing()
         }
     }
 
@@ -640,6 +681,21 @@ final class StateMachine {
             }
 
             self.sleepMode = .awake
+            self.requestDisplayTransition(to: .idle, svgOverride: self.svgOverride(for: .idle))
+        }
+    }
+
+    private func beginWakeFromDoNotDisturb() {
+        sleepMode = .waking
+        requestDisplayTransition(to: .waking, svgOverride: svgOverride(for: .waking))
+        scheduleSleepStageTimer(after: Self.wakingDelay) { [weak self] in
+            guard let self else {
+                return
+            }
+
+            // 唤醒阶段结束前继续屏蔽 hook，等角色回到 idle 再恢复外部事件。
+            self.sleepMode = .awake
+            self.suppressExternalEvents = false
             self.requestDisplayTransition(to: .idle, svgOverride: self.svgOverride(for: .idle))
         }
     }
@@ -707,6 +763,10 @@ final class StateMachine {
         }
 
         guard didChange, shouldTransition else {
+            return
+        }
+
+        guard !suppressExternalEvents else {
             return
         }
 
