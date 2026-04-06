@@ -11,22 +11,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var stateMachine: StateMachine?
     private let hotKeyManager = HotKeyManager()
     private var terminationSignalSources: [DispatchSourceSignal] = []
-    private var appLanguage: AppLanguage = .zh
-    private var isMiniModeEnabled = false
-    private var isBubbleFollowEnabled = true
-    private var isHideBubblesEnabled = false
-    private var isSoundEffectsEnabled = true
+    private let preferences: Preferences
+    private var appLanguage: AppLanguage
+    private var isMiniModeEnabled: Bool
+    private var isBubbleFollowEnabled: Bool
+    private var isHideBubblesEnabled: Bool
+    private var isSoundEffectsEnabled: Bool
     private lazy var bubbleStack = BubbleStack(
         petWindowProvider: { [weak self] in self?.petWindow },
         bubbleFollowProvider: { [weak self] in self?.isBubbleFollowEnabled ?? true }
     )
+
+    override init() {
+        let preferences = Preferences.shared
+        self.preferences = preferences
+        appLanguage = preferences.language
+        isMiniModeEnabled = preferences.miniModeEnabled
+        isBubbleFollowEnabled = preferences.bubbleFollowPet
+        isHideBubblesEnabled = preferences.hideBubbles
+        isSoundEffectsEnabled = !preferences.soundMuted
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // 配合 Info.plist LSUIElement=true，隐藏 Dock 图标
         NSApp.setActivationPolicy(.accessory)
 
         // 创建桌面宠物窗口并显示
-        petWindow = PetWindow(sizePreset: .small)
+        petWindow = PetWindow(sizePreset: preferences.windowSizePreset)
+        restorePetWindowPositionIfNeeded()
+        petWindow?.onDragEnded = { [weak self] origin in
+            self?.preferences.windowOrigin = origin
+        }
         petWindow?.orderFront(nil)
 
         hotKeyManager.onAllow = { [weak self] in
@@ -43,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         assembleCoreLoop()
+        stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
         setupStatusBarController()
         installTerminationSignalHandlers()
         updateHotKeyRegistration()
@@ -98,28 +115,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.togglePetVisibility()
         }
         controller.onSelectSizePreset = { [weak self] preset in
+            self?.preferences.windowSizePreset = preset
             self?.petWindow?.applySizePreset(preset)
+            self?.persistPetWindowPosition()
             self?.bubbleStack.repositionBubbles()
         }
         controller.onToggleMiniMode = { [weak self] enabled in
             self?.isMiniModeEnabled = enabled
+            self?.preferences.miniModeEnabled = enabled
         }
         controller.onToggleDoNotDisturb = { [weak self] enabled in
             self?.stateMachine?.setDoNotDisturbEnabled(enabled)
+            self?.preferences.doNotDisturbEnabled = enabled
         }
         controller.onToggleBubbleFollow = { [weak self] enabled in
             self?.isBubbleFollowEnabled = enabled
+            self?.preferences.bubbleFollowPet = enabled
             self?.bubbleStack.repositionBubbles()
         }
         controller.onToggleHideBubbles = { [weak self] enabled in
             self?.isHideBubblesEnabled = enabled
+            self?.preferences.hideBubbles = enabled
             self?.updateHotKeyRegistration()
         }
         controller.onToggleSoundEffects = { [weak self] enabled in
             self?.isSoundEffectsEnabled = enabled
+            self?.preferences.soundMuted = !enabled
         }
         controller.onSelectLanguage = { [weak self] language in
             self?.appLanguage = language
+            self?.preferences.language = language
         }
         controller.onCheckForUpdates = {
             print("check for updates is not implemented yet")
@@ -146,6 +171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        persistPetWindowPosition()
+        preferences.windowSizePreset = petWindow?.sizePreset ?? preferences.windowSizePreset
+        preferences.doNotDisturbEnabled = stateMachine?.doNotDisturbEnabled ?? preferences.doNotDisturbEnabled
         bubbleStack.stopObservingPetWindow()
         hotKeyManager.teardown()
         bubbleStack.dismissAll(respondingWith: .deny)
@@ -235,6 +263,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         bubbleStack.enqueue(content: content, request: request)
+    }
+
+    private func restorePetWindowPositionIfNeeded() {
+        guard let petWindow else {
+            return
+        }
+
+        // 启动恢复时优先沿用保存位置，再把 Y 轴压回当前屏幕工作区。
+        guard let restoredOrigin = preferences.restoredWindowOrigin(for: petWindow.frame.size) else {
+            return
+        }
+
+        petWindow.setFrameOrigin(restoredOrigin)
+    }
+
+    private func persistPetWindowPosition() {
+        guard let petWindow else {
+            return
+        }
+
+        preferences.windowOrigin = petWindow.frame.origin
     }
 
     private func updateHotKeyRegistration() {

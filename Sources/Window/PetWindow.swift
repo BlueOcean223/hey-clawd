@@ -40,6 +40,8 @@ import AppKit
     private var lastClickPoint: NSPoint?
     private(set) var sizePreset: SizePreset
     var contextMenuProvider: (() -> NSMenu?)?
+    /// 只在拖拽落点确定后回调，避免把中间过程频繁写进 UserDefaults。
+    var onDragEnded: ((NSPoint) -> Void)?
 
     init(sizePreset: SizePreset = .small) {
         self.sizePreset = sizePreset
@@ -205,6 +207,7 @@ import AppKit
     private func handleLeftMouseUp(_ event: NSEvent) {
         if isDraggingPet {
             endDragReactionIfNeeded()
+            onDragEnded?(frame.origin)
         } else if dragStartPoint != nil {
             handlePetClick(event)
         }
