@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 60;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -12,6 +12,24 @@
 		A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000014 /* PetWindow.swift */; };
 		A1B2C3D4E5F6000000000004 /* PetWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000015 /* PetWebView.swift */; };
 		A1B2C3D4E5F6000000000005 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000016 /* Resources */; };
+		B100000000000000000000A0 /* HTTPParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B0 /* HTTPParser.swift */; };
+		B100000000000000000000A1 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B1 /* HTTPServer.swift */; };
+		B100000000000000000000A2 /* HotKeyManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B2 /* HotKeyManager.swift */; };
+		B100000000000000000000A3 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B3 /* Preferences.swift */; };
+		B100000000000000000000A4 /* Session.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B4 /* Session.swift */; };
+		B100000000000000000000A5 /* SoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B5 /* SoundPlayer.swift */; };
+		B100000000000000000000A6 /* StateMachine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B6 /* StateMachine.swift */; };
+		B100000000000000000000A7 /* EyeTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B7 /* EyeTracker.swift */; };
+		B100000000000000000000A8 /* BubbleStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B8 /* BubbleStack.swift */; };
+		B100000000000000000000A9 /* BubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B9 /* BubbleView.swift */; };
+		B10000000000000000000AA0 /* BubbleWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB0 /* BubbleWindow.swift */; };
+		B10000000000000000000AA1 /* TerminalFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB1 /* TerminalFocus.swift */; };
+		B10000000000000000000AA2 /* MiniMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB2 /* MiniMode.swift */; };
+		B10000000000000000000AA3 /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB3 /* SparkleUpdater.swift */; };
+		B10000000000000000000AA4 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB4 /* StatusBarController.swift */; };
+		B10000000000000000000AA5 /* MenuBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB5 /* MenuBuilder.swift */; };
+		B10000000000000000000FF0 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000FF1 /* Sparkle */; };
+		C100000000000000000000A0 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = C100000000000000000000B0 /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +40,23 @@
 		A1B2C3D4E5F6000000000014 /* PetWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWindow.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000015 /* PetWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWebView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000016 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		B100000000000000000000B0 /* HTTPParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPParser.swift; sourceTree = "<group>"; };
+		B100000000000000000000B1 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
+		B100000000000000000000B2 /* HotKeyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotKeyManager.swift; sourceTree = "<group>"; };
+		B100000000000000000000B3 /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		B100000000000000000000B4 /* Session.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Session.swift; sourceTree = "<group>"; };
+		B100000000000000000000B5 /* SoundPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundPlayer.swift; sourceTree = "<group>"; };
+		B100000000000000000000B6 /* StateMachine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StateMachine.swift; sourceTree = "<group>"; };
+		B100000000000000000000B7 /* EyeTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EyeTracker.swift; sourceTree = "<group>"; };
+		B100000000000000000000B8 /* BubbleStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleStack.swift; sourceTree = "<group>"; };
+		B100000000000000000000B9 /* BubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleView.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB0 /* BubbleWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindow.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB1 /* TerminalFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFocus.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB2 /* MiniMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniMode.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB3 /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB4 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
+		B10000000000000000000BB5 /* MenuBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBuilder.swift; sourceTree = "<group>"; };
+		C100000000000000000000B0 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -29,6 +64,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B10000000000000000000FF0 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -38,15 +74,22 @@
 		A1B2C3D4E5F6000000000030 = {
 			isa = PBXGroup;
 			children = (
-				A1B2C3D4E5F6000000000031 /* App */,
-				A1B2C3D4E5F6000000000033 /* Window */,
+				A1B2C3D4E5F6000000000031 /* Sources/App */,
+				B10000000000000000000C00 /* Sources/Core */,
+				A1B2C3D4E5F6000000000033 /* Sources/Window */,
+				B10000000000000000000C01 /* Sources/Bubble */,
+				B10000000000000000000C02 /* Sources/Focus */,
+				B10000000000000000000C03 /* Sources/Mini */,
+				B10000000000000000000C04 /* Sources/Update */,
+				B10000000000000000000C05 /* Sources/Tray */,
 				A1B2C3D4E5F6000000000016 /* Resources */,
+				C100000000000000000000B0 /* AppIcon.icns */,
 				A1B2C3D4E5F6000000000012 /* Info.plist */,
 				A1B2C3D4E5F6000000000032 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		A1B2C3D4E5F6000000000031 /* App */ = {
+		A1B2C3D4E5F6000000000031 /* Sources/App */ = {
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F6000000000010 /* HeyClawdApp.swift */,
@@ -55,21 +98,79 @@
 			path = Sources/App;
 			sourceTree = "<group>";
 		};
-		A1B2C3D4E5F6000000000033 /* Window */ = {
-			isa = PBXGroup;
-			children = (
-				A1B2C3D4E5F6000000000014 /* PetWindow.swift */,
-				A1B2C3D4E5F6000000000015 /* PetWebView.swift */,
-			);
-			path = Sources/Window;
-			sourceTree = "<group>";
-		};
 		A1B2C3D4E5F6000000000032 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F6000000000013 /* hey-clawd.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6000000000033 /* Sources/Window */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6000000000014 /* PetWindow.swift */,
+				A1B2C3D4E5F6000000000015 /* PetWebView.swift */,
+				B100000000000000000000B7 /* EyeTracker.swift */,
+			);
+			path = Sources/Window;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C00 /* Sources/Core */ = {
+			isa = PBXGroup;
+			children = (
+				B100000000000000000000B0 /* HTTPParser.swift */,
+				B100000000000000000000B1 /* HTTPServer.swift */,
+				B100000000000000000000B2 /* HotKeyManager.swift */,
+				B100000000000000000000B3 /* Preferences.swift */,
+				B100000000000000000000B4 /* Session.swift */,
+				B100000000000000000000B5 /* SoundPlayer.swift */,
+				B100000000000000000000B6 /* StateMachine.swift */,
+			);
+			path = Sources/Core;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C01 /* Sources/Bubble */ = {
+			isa = PBXGroup;
+			children = (
+				B100000000000000000000B8 /* BubbleStack.swift */,
+				B100000000000000000000B9 /* BubbleView.swift */,
+				B10000000000000000000BB0 /* BubbleWindow.swift */,
+			);
+			path = Sources/Bubble;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C02 /* Sources/Focus */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000BB1 /* TerminalFocus.swift */,
+			);
+			path = Sources/Focus;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C03 /* Sources/Mini */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000BB2 /* MiniMode.swift */,
+			);
+			path = Sources/Mini;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C04 /* Sources/Update */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000BB3 /* SparkleUpdater.swift */,
+			);
+			path = Sources/Update;
+			sourceTree = "<group>";
+		};
+		B10000000000000000000C05 /* Sources/Tray */ = {
+			isa = PBXGroup;
+			children = (
+				B10000000000000000000BB4 /* StatusBarController.swift */,
+				B10000000000000000000BB5 /* MenuBuilder.swift */,
+			);
+			path = Sources/Tray;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -89,6 +190,7 @@
 			);
 			name = "hey-clawd";
 			packageProductDependencies = (
+				B10000000000000000000FF1 /* Sparkle */,
 			);
 			productName = "hey-clawd";
 			productReference = A1B2C3D4E5F6000000000013 /* hey-clawd.app */;
@@ -103,7 +205,7 @@
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1600;
 				LastUpgradeCheck = 1600;
-				ORGANIZATIONNAME = "gongshuisanye";
+				ORGANIZATIONNAME = gongshuisanye;
 				TargetAttributes = {
 					A1B2C3D4E5F6000000000040 = {
 						CreatedOnToolsVersion = 16.0;
@@ -119,6 +221,9 @@
 				Base,
 			);
 			mainGroup = A1B2C3D4E5F6000000000030;
+			packageReferences = (
+				B10000000000000000000FF2 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			productRefGroup = A1B2C3D4E5F6000000000032 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -134,6 +239,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F6000000000005 /* Resources in Resources */,
+				C100000000000000000000A0 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -144,10 +250,26 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1B2C3D4E5F6000000000004 /* PetWebView.swift in Sources */,
-				A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */,
-				A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F6000000000001 /* HeyClawdApp.swift in Sources */,
+				A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */,
+				A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */,
+				A1B2C3D4E5F6000000000004 /* PetWebView.swift in Sources */,
+				B100000000000000000000A0 /* HTTPParser.swift in Sources */,
+				B100000000000000000000A1 /* HTTPServer.swift in Sources */,
+				B100000000000000000000A2 /* HotKeyManager.swift in Sources */,
+				B100000000000000000000A3 /* Preferences.swift in Sources */,
+				B100000000000000000000A4 /* Session.swift in Sources */,
+				B100000000000000000000A5 /* SoundPlayer.swift in Sources */,
+				B100000000000000000000A6 /* StateMachine.swift in Sources */,
+				B100000000000000000000A7 /* EyeTracker.swift in Sources */,
+				B100000000000000000000A8 /* BubbleStack.swift in Sources */,
+				B100000000000000000000A9 /* BubbleView.swift in Sources */,
+				B10000000000000000000AA0 /* BubbleWindow.swift in Sources */,
+				B10000000000000000000AA1 /* TerminalFocus.swift in Sources */,
+				B10000000000000000000AA2 /* MiniMode.swift in Sources */,
+				B10000000000000000000AA3 /* SparkleUpdater.swift in Sources */,
+				B10000000000000000000AA4 /* StatusBarController.swift in Sources */,
+				B10000000000000000000AA5 /* MenuBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -179,6 +301,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C9QTS488J3;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -187,7 +311,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongshuisanye.hey-clawd;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gongshuisanye.hey-clawd";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -200,6 +324,8 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = C9QTS488J3;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -208,7 +334,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.gongshuisanye.hey-clawd;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gongshuisanye.hey-clawd";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -238,6 +364,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B10000000000000000000FF2 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		B10000000000000000000FF1 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B10000000000000000000FF2 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = A1B2C3D4E5F6000000000041 /* Project object */;
 }
