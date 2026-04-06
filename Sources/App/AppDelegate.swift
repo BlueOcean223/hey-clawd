@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
     private var miniModeController: MiniMode?
+    private var gitUpdater: GitUpdater?
     private var sparkleUpdater: SparkleUpdater?
     private lazy var bubbleStack = BubbleStack(
         petWindowProvider: { [weak self] in self?.petWindow },
@@ -82,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
         setupMiniModeController()
-        setupSparkleUpdater()
+        setupUpdater()
         setupStatusBarController()
         installTerminationSignalHandlers()
         updateHotKeyRegistration()
@@ -124,8 +125,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func setupSparkleUpdater() {
-        // Sparkle 依赖 Info.plist 里的 feed / key 配置，应用启动后尽早初始化。
+    private func setupUpdater() {
+        let gitUpdater = GitUpdater()
+        if gitUpdater.isAvailable {
+            // 有 .git 就优先走源码更新，避免开发者环境还弹 Sparkle。
+            self.gitUpdater = gitUpdater
+            sparkleUpdater = nil
+            return
+        }
+
+        self.gitUpdater = nil
+
+        // Sparkle 依赖 Info.plist 里的 feed / key 配置，打包安装走这条路径。
         sparkleUpdater = SparkleUpdater()
     }
 
@@ -144,9 +155,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 sessions: []
             )
         }
-        controller.checkForUpdatesMenuTarget = sparkleUpdater?.controller
-        controller.checkForUpdatesMenuAction = sparkleUpdater?.checkForUpdatesAction
+        controller.checkForUpdatesMenuTarget = gitUpdater == nil ? sparkleUpdater?.controller : nil
+        controller.checkForUpdatesMenuAction = gitUpdater == nil ? sparkleUpdater?.checkForUpdatesAction : nil
         controller.canCheckForUpdatesMenu = { [weak self] in
+            if self?.gitUpdater?.isAvailable == true {
+                return true
+            }
+
             self?.sparkleUpdater?.canCheckForUpdates ?? false
         }
 
@@ -197,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.preferences.language = language
         }
         controller.onCheckForUpdates = { [weak self] in
-            self?.sparkleUpdater?.checkForUpdates()
+            self?.checkForUpdates()
         }
         controller.onQuit = {
             NSApp.terminate(nil)
@@ -464,6 +479,139 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         TerminalFocus.focus(target)
+    }
+
+    private func checkForUpdates() {
+        if gitUpdater?.isAvailable == true {
+            checkForGitUpdates()
+            return
+        }
+
+        sparkleUpdater?.checkForUpdates()
+    }
+
+    private func checkForGitUpdates() {
+        guard let gitUpdater else {
+            return
+        }
+
+        Task.detached(priority: .userInitiated) { [gitUpdater, weak self] in
+            do {
+                let result = try await gitUpdater.checkForUpdates()
+                await MainActor.run { [weak self] in
+                    guard let self else {
+                        return
+                    }
+
+                    if result.isUpdateAvailable {
+                        self.presentGitUpdatePrompt(using: gitUpdater, result: result)
+                    } else {
+                        self.presentInfoAlert(
+                            title: self.updateString(zh: "当前已是最新版本", en: "You’re up to date"),
+                            message: self.updateString(
+                                zh: "本地提交 \(result.localRevision.prefix(7)) 已和 origin/main 同步。",
+                                en: "Local commit \(result.localRevision.prefix(7)) already matches origin/main."
+                            )
+                        )
+                    }
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self else {
+                        return
+                    }
+
+                    self.presentErrorAlert(
+                        title: self.updateString(zh: "检查更新失败", en: "Failed to check for updates"),
+                        error: error
+                    )
+                }
+            }
+        }
+    }
+
+    private func presentGitUpdatePrompt(using gitUpdater: GitUpdater, result: GitUpdateCheckResult) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = updateString(zh: "发现源码更新", en: "Source update available")
+        alert.informativeText = updateString(
+            zh: "本地 \(result.localRevision.prefix(7))，远端 \(result.remoteRevision.prefix(7))。继续后会执行 git pull 并重启应用。",
+            en: "Local \(result.localRevision.prefix(7)), remote \(result.remoteRevision.prefix(7)). Continue to run git pull and relaunch the app."
+        )
+        alert.addButton(withTitle: updateString(zh: "更新并重启", en: "Update and Relaunch"))
+        alert.addButton(withTitle: updateString(zh: "取消", en: "Cancel"))
+
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            return
+        }
+
+        performGitUpdate(using: gitUpdater)
+    }
+
+    private func performGitUpdate(using gitUpdater: GitUpdater) {
+        Task.detached(priority: .userInitiated) { [gitUpdater, weak self] in
+            do {
+                _ = try await gitUpdater.update()
+                await MainActor.run { [weak self] in
+                    guard let self else {
+                        return
+                    }
+
+                    self.relaunchApplication()
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    guard let self else {
+                        return
+                    }
+
+                    self.presentErrorAlert(
+                        title: self.updateString(zh: "更新失败", en: "Update failed"),
+                        error: error
+                    )
+                }
+            }
+        }
+    }
+
+    private func relaunchApplication() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+
+        // 先启动当前 bundle，再退出当前进程，避免更新完成后桌宠直接消失。
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
+            Task { @MainActor in
+                if let error {
+                    self.presentErrorAlert(
+                        title: self.updateString(zh: "重启失败", en: "Failed to relaunch"),
+                        error: error
+                    )
+                    return
+                }
+
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    private func presentInfoAlert(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: updateString(zh: "好", en: "OK"))
+        alert.runModal()
+    }
+
+    private func presentErrorAlert(title: String, error: Error) {
+        let alert = NSAlert(error: error)
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.runModal()
+    }
+
+    private func updateString(zh: String, en: String) -> String {
+        appLanguage == .zh ? zh : en
     }
 
     private static func okResponse(_ object: [String: Any]) -> HTTPResponse {
