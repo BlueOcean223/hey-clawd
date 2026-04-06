@@ -73,6 +73,7 @@ final class MiniMode {
         miniSnap = CGRect(x: currentMiniX, y: clampedY, width: size.width, height: size.height)
 
         petWindow.allowsDragging = true
+        petWindow.allowsPartialOffscreenPlacement = true
         petWindow.setMiniLeft(edge == .left)
         petWindow.setFrameOrigin(NSPoint(x: currentMiniX, y: clampedY))
 
@@ -228,6 +229,7 @@ final class MiniMode {
             }
 
             self.petWindow.allowsDragging = true
+            self.petWindow.allowsPartialOffscreenPlacement = false
             self.stateMachine.setMiniModeEnabled(false)
             self.stateMachine.setMiniTransitioning(false)
             self.preferences.miniModeEnabled = false
@@ -327,6 +329,7 @@ final class MiniMode {
         dragDetachProgress = 0
 
         petWindow.setMiniLeft(edge == .left)
+        petWindow.allowsPartialOffscreenPlacement = true
         petWindow.allowsDragging = false
         stateMachine.setMiniModeEnabled(true)
         stateMachine.setMiniTransitioning(true)
@@ -557,6 +560,7 @@ final class MiniMode {
 
         petWindow.setMiniLeft(false)
         petWindow.allowsDragging = true
+        petWindow.allowsPartialOffscreenPlacement = false
         stateMachine.setMiniPeekEnabled(false)
         stateMachine.setMiniTransitioning(false)
         stateMachine.setMiniModeEnabled(false)

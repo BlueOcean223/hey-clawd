@@ -38,8 +38,11 @@ import AppKit
     private var clickWindowTimer: Timer?
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
+    private var screenChangeObserver: NSObjectProtocol?
     private(set) var sizePreset: SizePreset
     var allowsDragging = true
+    /// mini 模式需要允许窗口半藏在屏幕外；普通模式则始终钳回工作区。
+    var allowsPartialOffscreenPlacement = false
     var contextMenuProvider: (() -> NSMenu?)?
     /// 只在拖拽落点确定后回调，避免把中间过程频繁写进 UserDefaults。
     var onDragEnded: ((NSPoint) -> Void)?
@@ -72,8 +75,15 @@ import AppKit
         collectionBehavior = [.canJoinAllSpaces, .stationary]
         contentView = petWebView
         setFrame(originRect(for: size), display: false)
+        observeScreenChanges()
         // 先接默认 idle SVG，后续状态机会改这里。
         petWebView.loadSVG("clawd-idle-follow.svg")
+    }
+
+    deinit {
+        if let screenChangeObserver {
+            NotificationCenter.default.removeObserver(screenChangeObserver)
+        }
     }
 
     func applySizePreset(_ preset: SizePreset) {
@@ -85,6 +95,24 @@ import AppKit
         let newSize = NSSize(width: preset.dimension, height: preset.dimension)
         let nextFrame = NSRect(origin: frame.origin, size: newSize)
         setFrame(nextFrame, display: true, animate: false)
+        clampToScreen()
+    }
+
+    func clampToScreen() {
+        guard !allowsPartialOffscreenPlacement else {
+            return
+        }
+
+        let workArea = nearestWorkArea(for: frame.origin)
+        var clampedOrigin = frame.origin
+        clampedOrigin.x = max(workArea.minX, min(clampedOrigin.x, workArea.maxX - frame.width))
+        clampedOrigin.y = max(workArea.minY, min(clampedOrigin.y, workArea.maxY - frame.height))
+
+        guard clampedOrigin != frame.origin else {
+            return
+        }
+
+        setFrameOrigin(clampedOrigin)
     }
 
     private func originRect(for size: NSSize) -> NSRect {
@@ -99,6 +127,52 @@ import AppKit
         )
 
         return NSRect(origin: origin, size: size)
+    }
+
+    private func observeScreenChanges() {
+        // 外接显示器插拔会改变 visibleFrame；窗口自己要把位置压回最近工作区。
+        screenChangeObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.clampToScreen()
+            }
+        }
+    }
+
+    private func nearestWorkArea(for origin: NSPoint) -> NSRect {
+        let screens = NSScreen.screens
+        guard let nearestScreen = screens.min(by: { lhs, rhs in
+            distanceToWorkArea(origin, lhs.visibleFrame) < distanceToWorkArea(origin, rhs.visibleFrame)
+        }) else {
+            return NSScreen.main?.visibleFrame ?? NSRect(origin: .zero, size: frame.size)
+        }
+
+        return nearestScreen.visibleFrame
+    }
+
+    private func distanceToWorkArea(_ point: NSPoint, _ workArea: NSRect) -> CGFloat {
+        let dx: CGFloat
+        if point.x < workArea.minX {
+            dx = workArea.minX - point.x
+        } else if point.x > workArea.maxX {
+            dx = point.x - workArea.maxX
+        } else {
+            dx = 0
+        }
+
+        let dy: CGFloat
+        if point.y < workArea.minY {
+            dy = workArea.minY - point.y
+        } else if point.y > workArea.maxY {
+            dy = point.y - workArea.maxY
+        } else {
+            dy = 0
+        }
+
+        return hypot(dx, dy)
     }
 
     override func sendEvent(_ event: NSEvent) {

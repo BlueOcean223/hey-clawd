@@ -53,7 +53,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
 
-            self.preferences.windowOrigin = origin
+            self.petWindow?.clampToScreen()
+            self.preferences.windowOrigin = self.petWindow?.frame.origin ?? origin
         }
         petWindow?.onDragMove = { [weak self] proposedOrigin in
             guard let self else {
@@ -341,12 +342,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        // 启动恢复时优先沿用保存位置，再把 Y 轴压回当前屏幕工作区。
+        // 启动恢复时优先沿用保存位置，再把窗口整体钳回当前最近的工作区。
         guard let restoredOrigin = preferences.restoredWindowOrigin(for: petWindow.frame.size) else {
             return
         }
 
         petWindow.setFrameOrigin(restoredOrigin)
+        petWindow.clampToScreen()
     }
 
     private func persistPetWindowPosition() {
