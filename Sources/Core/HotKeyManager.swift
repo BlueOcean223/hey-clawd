@@ -20,13 +20,33 @@ final class HotKeyManager {
         if allowRef == nil {
             let allowID = EventHotKeyID(signature: Self.signature, id: Self.allowKeyID)
             // Ctrl+Shift+Y 直接命中最新权限气泡的 Allow。
-            RegisterEventHotKey(16, UInt32(controlKey | shiftKey), allowID, GetApplicationEventTarget(), 0, &allowRef)
+            let status = RegisterEventHotKey(
+                16,
+                UInt32(controlKey | shiftKey),
+                allowID,
+                GetApplicationEventTarget(),
+                0,
+                &allowRef
+            )
+            if status != noErr {
+                print("hotkey registration failed for Allow: \(status)")
+            }
         }
 
         if denyRef == nil {
             let denyID = EventHotKeyID(signature: Self.signature, id: Self.denyKeyID)
             // Ctrl+Shift+N 对应 Deny，和原计划保持一致。
-            RegisterEventHotKey(45, UInt32(controlKey | shiftKey), denyID, GetApplicationEventTarget(), 0, &denyRef)
+            let status = RegisterEventHotKey(
+                45,
+                UInt32(controlKey | shiftKey),
+                denyID,
+                GetApplicationEventTarget(),
+                0,
+                &denyRef
+            )
+            if status != noErr {
+                print("hotkey registration failed for Deny: \(status)")
+            }
         }
     }
 
@@ -42,6 +62,15 @@ final class HotKeyManager {
         }
     }
 
+    func teardown() {
+        unregister()
+
+        if let ref = handlerRef {
+            RemoveEventHandler(ref)
+            handlerRef = nil
+        }
+    }
+
     private func installHandlerIfNeeded() {
         guard handlerRef == nil else {
             return
@@ -53,7 +82,7 @@ final class HotKeyManager {
                 let event,
                 let userData
             else {
-                return noErr
+                return OSStatus(eventNotHandledErr)
             }
 
             let hotKeyManager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
@@ -61,7 +90,7 @@ final class HotKeyManager {
             return noErr
         }
 
-        InstallEventHandler(
+        let status = InstallEventHandler(
             GetApplicationEventTarget(),
             callback,
             1,
@@ -69,6 +98,9 @@ final class HotKeyManager {
             Unmanaged.passUnretained(self).toOpaque(),
             &handlerRef
         )
+        if status != noErr {
+            print("hotkey handler installation failed: \(status)")
+        }
     }
 
     private func handle(event: EventRef) {

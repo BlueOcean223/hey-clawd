@@ -310,6 +310,11 @@ final class HTTPServer: @unchecked Sendable {
         do {
             while true {
                 if let request = HTTPParser.parseRequest(buffer) {
+                    // 请求已完整解析，开始路由处理。
+                    // 对 /permission 这类挂起请求，客户端可能在等待期间断连。
+                    // TCP 半关闭不会触发 NWConnection 的 .failed 状态，
+                    // 所以主动启动一次读取来检测 EOF/RST。
+                    monitorDisconnect(connection: connection, tracker: permissionTracker)
                     let response = await route(request, permissionTracker: permissionTracker)
                     try await send(response.serialize(), on: connection)
                     return
@@ -375,6 +380,10 @@ final class HTTPServer: @unchecked Sendable {
 
             guard isValidJSONObjectData(request.body) else {
                 return errorResponse(statusCode: 400, message: "invalid json")
+            }
+
+            guard lock.withLock({ permissionRequestHandler }) != nil else {
+                return errorResponse(statusCode: 503, message: "permission handler unavailable")
             }
 
             // 挂起当前连接，直到上层通过 PendingPermissionRequest.respond() 返回结果
@@ -459,6 +468,16 @@ final class HTTPServer: @unchecked Sendable {
                 }
 
                 continuation.resume(returning: Data())
+            }
+        }
+    }
+
+    /// 在 /permission 挂起期间主动读取连接，检测客户端断连（EOF/RST）。
+    /// TCP 半关闭不会让 NWConnection 转到 .failed，但 receive 会收到 isComplete=true。
+    private func monitorDisconnect(connection: NWConnection, tracker: ConnectionPermissionTracker) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+            if error != nil || isComplete {
+                tracker.cancelPendingPermission()
             }
         }
     }
