@@ -143,9 +143,11 @@ final class GitUpdater: @unchecked Sendable {
         process.standardError = stderr
 
         try process.run()
+        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        let output = read(pipe: stdout) + read(pipe: stderr)
+        let output = String(decoding: stdoutData, as: UTF8.self) + String(decoding: stderrData, as: UTF8.self)
         guard process.terminationStatus == 0 else {
             let command = ([launchPath] + arguments).joined(separator: " ")
             throw GitUpdaterError.commandFailed(command: command, output: output)
@@ -154,20 +156,18 @@ final class GitUpdater: @unchecked Sendable {
         return output
     }
 
-    private func read(pipe: Pipe) -> String {
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(decoding: data, as: UTF8.self)
-    }
-
     private static func findGitRoot(fileManager: FileManager) -> URL? {
         let candidates = [
             URL(fileURLWithPath: #filePath),
-            URL(fileURLWithPath: fileManager.currentDirectoryPath),
             Bundle.main.bundleURL,
         ]
 
         for candidate in candidates {
             guard let root = walkUpToGitRoot(from: candidate, fileManager: fileManager) else {
+                continue
+            }
+
+            guard isExpectedRepository(at: root) else {
                 continue
             }
 
@@ -183,7 +183,8 @@ final class GitUpdater: @unchecked Sendable {
 
         while true {
             let gitDirectory = currentURL.appendingPathComponent(".git")
-            if fileManager.fileExists(atPath: gitDirectory.path) {
+            var isDirectory: ObjCBool = false
+            if fileManager.fileExists(atPath: gitDirectory.path, isDirectory: &isDirectory), isDirectory.boolValue {
                 return currentURL
             }
 
@@ -194,5 +195,34 @@ final class GitUpdater: @unchecked Sendable {
 
             currentURL = parentURL
         }
+    }
+
+    private static func isExpectedRepository(at url: URL) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+        process.arguments = ["-C", url.path, "remote", "get-url", "origin"]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        do {
+            try process.run()
+        } catch {
+            return false
+        }
+
+        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
+        _ = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        guard process.terminationStatus == 0 else {
+            return false
+        }
+
+        let remoteURL = String(decoding: stdoutData, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return remoteURL.contains("hey-clawd")
     }
 }
