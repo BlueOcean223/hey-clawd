@@ -22,8 +22,8 @@ final class MiniMode {
     private static let animationFrameInterval: TimeInterval = 0.016
     private static let hoverPollInterval: TimeInterval = 0.12
 
-    private unowned let petWindow: PetWindow
-    private unowned let stateMachine: StateMachine
+    private weak var petWindow: PetWindow?
+    private weak var stateMachine: StateMachine?
     private let preferences: Preferences
 
     var onNeedsBubbleReposition: (() -> Void)?
@@ -50,14 +50,26 @@ final class MiniMode {
     }
 
     var isEnabled: Bool {
-        stateMachine.miniModeEnabled
+        guard let stateMachine else {
+            return false
+        }
+
+        return stateMachine.miniModeEnabled
     }
 
     var isTransitioning: Bool {
-        stateMachine.miniTransitioning
+        guard let stateMachine else {
+            return false
+        }
+
+        return stateMachine.miniTransitioning
     }
 
     func restoreFromPreferencesIfNeeded() {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         guard preferences.miniModeEnabled else {
             return
         }
@@ -89,6 +101,10 @@ final class MiniMode {
 
     @discardableResult
     func handleDragEnded() -> Bool {
+        guard let petWindow else {
+            return false
+        }
+
         guard !isTransitioning else {
             dragDetachProgress = 0
             return true
@@ -131,6 +147,10 @@ final class MiniMode {
     }
 
     func handleDragMove(proposedOrigin: NSPoint) -> NSPoint {
+        guard let petWindow else {
+            return proposedOrigin
+        }
+
         guard isEnabled, !isTransitioning else {
             return proposedOrigin
         }
@@ -168,6 +188,10 @@ final class MiniMode {
     }
 
     func enterViaMenu() {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         guard !isEnabled, !isTransitioning else {
             return
         }
@@ -196,6 +220,10 @@ final class MiniMode {
     }
 
     func exit() {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         guard isEnabled else {
             return
         }
@@ -223,15 +251,15 @@ final class MiniMode {
             clamped.x = workArea.minX - margin + Self.snapTolerance + 100
         }
 
-        animateWindowParabola(to: clamped, duration: Self.jumpDuration) { [weak self] in
+        animateWindowParabola(to: clamped, duration: Self.jumpDuration) { [weak self, petWindow, stateMachine] in
             guard let self else {
                 return
             }
 
-            self.petWindow.allowsDragging = true
-            self.petWindow.allowsPartialOffscreenPlacement = false
-            self.stateMachine.setMiniModeEnabled(false)
-            self.stateMachine.setMiniTransitioning(false)
+            petWindow.allowsDragging = true
+            petWindow.allowsPartialOffscreenPlacement = false
+            stateMachine.setMiniModeEnabled(false)
+            stateMachine.setMiniTransitioning(false)
             self.preferences.miniModeEnabled = false
             self.preferences.windowOrigin = clamped
             self.onNeedsMenuRefresh?()
@@ -239,12 +267,16 @@ final class MiniMode {
             if self.preferences.doNotDisturbEnabled {
                 self.onDidWakeFromDND?()
             } else {
-                self.stateMachine.refreshDisplayState()
+                stateMachine.refreshDisplayState()
             }
         }
     }
 
     func handleSizeChange() {
+        guard let petWindow else {
+            return
+        }
+
         guard isEnabled else {
             return
         }
@@ -265,12 +297,20 @@ final class MiniMode {
     }
 
     private func enterFromDrag(in workArea: CGRect, edge: Edge) {
+        guard let petWindow else {
+            return
+        }
+
         let origin = petWindow.frame.origin
         prepareMiniMode(edge: edge, preMiniOrigin: origin)
         finishEntry(in: workArea, animatedFromMenu: false)
     }
 
     private func finishMenuEntry(in workArea: CGRect) {
+        guard let petWindow else {
+            return
+        }
+
         let size = petWindow.frame.size
         let jumpTargetX: CGFloat
         if edge == .right {
@@ -290,6 +330,10 @@ final class MiniMode {
     }
 
     private func finishEntry(in workArea: CGRect, animatedFromMenu: Bool) {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         let size = petWindow.frame.size
         currentMiniX = miniX(in: workArea, size: size, edge: edge)
         let clampedY = clampY(petWindow.frame.minY, in: workArea, height: size.height)
@@ -306,22 +350,26 @@ final class MiniMode {
         }
 
         preferences.windowOrigin = NSPoint(x: currentMiniX, y: clampedY)
-        scheduleTransition(after: Self.enterHoldDuration) { [weak self] in
+        scheduleTransition(after: Self.enterHoldDuration) { [weak self, petWindow, stateMachine] in
             guard let self else {
                 return
             }
 
-            self.stateMachine.setMiniTransitioning(false)
-            self.stateMachine.requestMiniDisplayState(
+            stateMachine.setMiniTransitioning(false)
+            stateMachine.requestMiniDisplayState(
                 self.preferences.doNotDisturbEnabled ? .miniSleep : .miniIdle
             )
-            self.petWindow.allowsDragging = true
+            petWindow.allowsDragging = true
             self.startHoverMonitoring()
             self.onNeedsMenuRefresh?()
         }
     }
 
     private func prepareMiniMode(edge: Edge, preMiniOrigin: NSPoint) {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         self.edge = edge
         self.preMiniOrigin = preMiniOrigin
         isHoveringPet = false
@@ -364,6 +412,10 @@ final class MiniMode {
     }
 
     private func pollHover() {
+        guard let stateMachine else {
+            return
+        }
+
         guard isEnabled, !isTransitioning, !isAnimating else {
             return
         }
@@ -401,6 +453,11 @@ final class MiniMode {
     }
 
     private func animateWindowX(to targetX: CGFloat, duration: TimeInterval, completion: (() -> Void)? = nil) {
+        guard let petWindow else {
+            completion?()
+            return
+        }
+
         cancelAnimationTimer()
         animationCompletion = completion
 
@@ -427,8 +484,8 @@ final class MiniMode {
                 let progress = min(1, elapsed / duration)
                 let eased = progress * (2 - progress)
                 let nextX = round(startX + (targetX - startX) * eased)
-                self.petWindow.setFrameOrigin(NSPoint(x: nextX, y: fixedY))
-                self.preferences.windowOrigin = self.petWindow.frame.origin
+                petWindow.setFrameOrigin(NSPoint(x: nextX, y: fixedY))
+                self.preferences.windowOrigin = petWindow.frame.origin
                 self.onNeedsBubbleReposition?()
 
                 if progress >= 1 {
@@ -442,6 +499,11 @@ final class MiniMode {
     }
 
     private func animateWindowParabola(to targetOrigin: NSPoint, duration: TimeInterval, completion: (() -> Void)? = nil) {
+        guard let petWindow else {
+            completion?()
+            return
+        }
+
         cancelAnimationTimer()
         animationCompletion = completion
 
@@ -468,7 +530,7 @@ final class MiniMode {
                 let nextX = round(startOrigin.x + (targetOrigin.x - startOrigin.x) * eased)
                 let arc = -4 * Self.jumpPeakHeight * progress * (progress - 1)
                 let nextY = round(startOrigin.y + (targetOrigin.y - startOrigin.y) * eased - arc)
-                self.petWindow.setFrameOrigin(NSPoint(x: nextX, y: nextY))
+                petWindow.setFrameOrigin(NSPoint(x: nextX, y: nextY))
                 self.onNeedsBubbleReposition?()
 
                 if progress >= 1 {
@@ -551,6 +613,10 @@ final class MiniMode {
     }
 
     private func detachFromMiniForDrag(at handoffOrigin: NSPoint) {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
         cancelTransitionTimers()
         stopHoverMonitoring()
         miniSnap = nil
@@ -575,6 +641,10 @@ final class MiniMode {
     }
 
     private func nearestWorkArea(for point: NSPoint) -> CGRect {
+        guard let petWindow else {
+            return NSScreen.main?.visibleFrame ?? CGRect(origin: .zero, size: .zero)
+        }
+
         if let exact = NSScreen.screens.first(where: { $0.visibleFrame.contains(point) }) {
             return exact.visibleFrame
         }
@@ -602,6 +672,10 @@ final class MiniMode {
     }
 
     private func isMouseOverPet() -> Bool {
+        guard let petWindow else {
+            return false
+        }
+
         let mouseLocation = NSEvent.mouseLocation
         guard petWindow.frame.contains(mouseLocation) else {
             return false
