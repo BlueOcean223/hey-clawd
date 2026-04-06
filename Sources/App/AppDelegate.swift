@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
+    private var codexMonitor: CodexMonitor?
     private let hotKeyManager = HotKeyManager()
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private let preferences: Preferences
@@ -83,6 +84,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
+        setupCodexMonitor()
         setupMiniModeController()
         setupUpdater()
         setupStatusBarController()
@@ -146,6 +148,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Sparkle 依赖 Info.plist 里的 feed / key 配置，打包安装走这条路径。
         sparkleUpdater = SparkleUpdater()
+    }
+
+    private func setupCodexMonitor() {
+        guard let stateMachine else {
+            return
+        }
+
+        let monitor = CodexMonitor()
+        monitor.onStateUpdate = { update in
+            // Codex JSONL 里拿不到终端 PID，这里只把会话状态和 cwd 接回主状态机。
+            stateMachine.setState(
+                update.state,
+                sessionId: update.sessionId,
+                event: update.event,
+                sourcePid: nil,
+                cwd: update.cwd,
+                editor: nil,
+                agentId: update.agentId,
+                headless: false
+            )
+        }
+        monitor.start()
+        codexMonitor = monitor
     }
 
     private func setupStatusBarController() {
@@ -250,6 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleStack.dismissAll(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
+        codexMonitor?.stop()
         stateMachine?.cleanup()
         petWebView?.teardown()
     }
