@@ -95,6 +95,13 @@ private enum SleepMode: Equatable {
 /// 这里不直接关心网络和 UI，只负责根据会话集决定当前该显示哪个状态和 SVG。
 @MainActor
 final class StateMachine {
+    private static let soundEffects: [PetState: String] = [
+        .attention: "complete.mp3",
+        .miniHappy: "complete.mp3",
+        .notification: "confirm.mp3",
+        .miniAlert: "confirm.mp3",
+    ]
+
     static let stateSVGs: [PetState: String] = [
         .idle: "clawd-idle-follow.svg",
         .thinking: "clawd-working-thinking.svg",
@@ -210,6 +217,7 @@ final class StateMachine {
 
     var onStateChange: ((PetState, String, pid_t?) -> Void)?
 
+    private let soundPlayer = SoundPlayer.shared
     private var sessions: [String: Session] = [:]
     private var stateChangedAt = Date()
     private var pendingTransition: PendingTransition?
@@ -721,6 +729,13 @@ final class StateMachine {
         currentState = state
         currentSvg = svg
         stateChangedAt = Date()
+
+        // 音效跟“最终真的显示出来的状态”绑定，而不是跟输入事件绑定。
+        // 这样最小展示时长、优先级覆盖、自动回退都不会让声音和画面错位。
+        if let soundName = Self.soundEffects[state] {
+            soundPlayer.play(soundName)
+        }
+
         onStateChange?(state, svg, currentDisplaySourcePid)
 
         autoReturnTimer?.invalidate()
