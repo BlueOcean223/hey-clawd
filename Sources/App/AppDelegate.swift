@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
     private var miniModeController: MiniMode?
+    private var sparkleUpdater: SparkleUpdater?
     private lazy var bubbleStack = BubbleStack(
         petWindowProvider: { [weak self] in self?.petWindow },
         bubbleFollowProvider: { [weak self] in self?.isBubbleFollowEnabled ?? true }
@@ -81,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
         setupMiniModeController()
+        setupSparkleUpdater()
         setupStatusBarController()
         installTerminationSignalHandlers()
         updateHotKeyRegistration()
@@ -122,6 +124,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func setupSparkleUpdater() {
+        // Sparkle 依赖 Info.plist 里的 feed / key 配置，应用启动后尽早初始化。
+        sparkleUpdater = SparkleUpdater()
+    }
+
     private func setupStatusBarController() {
         let controller = StatusBarController { [weak self] in
             self?.currentMenuState ?? AppMenuState(
@@ -136,6 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isPetVisible: true,
                 sessions: []
             )
+        }
+        controller.checkForUpdatesMenuTarget = sparkleUpdater?.controller
+        controller.checkForUpdatesMenuAction = sparkleUpdater?.checkForUpdatesAction
+        controller.canCheckForUpdatesMenu = { [weak self] in
+            self?.sparkleUpdater?.canCheckForUpdates ?? false
         }
 
         controller.onTogglePetVisibility = { [weak self] in
@@ -184,8 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.appLanguage = language
             self?.preferences.language = language
         }
-        controller.onCheckForUpdates = {
-            print("check for updates is not implemented yet")
+        controller.onCheckForUpdates = { [weak self] in
+            self?.sparkleUpdater?.checkForUpdates()
         }
         controller.onQuit = {
             NSApp.terminate(nil)

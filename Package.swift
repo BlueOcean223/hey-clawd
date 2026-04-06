@@ -12,10 +12,16 @@ let package = Package(
             targets: ["HeyClawdApp"]
         ),
     ],
-    dependencies: [],
+    dependencies: [
+        // Phase 5.5: .dmg / .zip 安装走 Sparkle 自动更新。
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
+    ],
     targets: [
         .executableTarget(
             name: "HeyClawdApp",
+            dependencies: [
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: ".",
             exclude: [
                 ".ace-tool",

@@ -122,11 +122,7 @@ enum MenuBuilder {
         ))
         menu.addItem(.separator())
         menu.addItem(languageMenuItem(state: state, target: target))
-        menu.addItem(actionItem(
-            title: text("checkForUpdates", lang: state.language),
-            selector: #selector(StatusBarController.checkForUpdates(_:)),
-            target: target
-        ))
+        menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
         menu.addItem(.separator())
         menu.addItem(actionItem(
             title: text(state.isPetVisible ? "hidePet" : "showPet", lang: state.language),
@@ -251,7 +247,18 @@ enum MenuBuilder {
         return item
     }
 
-    private static func actionItem(title: String, selector: Selector, target: StatusBarController) -> NSMenuItem {
+    private static func checkForUpdatesMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
+        // 直接把菜单项交给 Sparkle 控制器，保持和官方接法一致。
+        let item = actionItem(
+            title: text("checkForUpdates", lang: state.language),
+            selector: target.checkForUpdatesMenuAction ?? #selector(StatusBarController.checkForUpdates(_:)),
+            target: target.checkForUpdatesMenuTarget ?? target
+        )
+        item.isEnabled = target.canCheckForUpdatesMenu()
+        return item
+    }
+
+    private static func actionItem(title: String, selector: Selector?, target: AnyObject?) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: "")
         item.target = target
         return item
