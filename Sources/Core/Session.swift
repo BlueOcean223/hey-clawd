@@ -22,6 +22,6 @@ struct SessionMenuSnapshot: Sendable {
     let agentId: String?
 
     var focusTarget: TerminalFocusTarget {
-        TerminalFocusTarget(pid: sourcePid, cwd: cwd, editor: editor)
+        TerminalFocusTarget(pid: sourcePid, editor: editor)
     }
 }

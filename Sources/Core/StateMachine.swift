@@ -74,6 +74,7 @@ enum PetState: String, CaseIterable, Sendable {
 private struct PendingTransition {
     let state: PetState
     let svg: String
+    let triggeringSession: Session?
 }
 
 private enum SleepMode: Equatable {
@@ -193,14 +194,22 @@ final class StateMachine {
     /// 点击桌宠时拿它来做“聚焦当前会话终端”的目标。
     /// 这里返回的是当前聚合结果对应的胜出会话，而不是所有会话里最新的一条。
     var currentDisplaySourcePid: pid_t? {
-        winningVisibleSession()?.sourcePid
+        if currentState.isOneShot, let oneShotSourcePid {
+            return oneShotSourcePid
+        }
+
+        return winningVisibleSession()?.sourcePid
     }
     var currentDisplayFocusTarget: TerminalFocusTarget? {
+        if currentState.isOneShot, let oneShotFocusTarget {
+            return oneShotFocusTarget
+        }
+
         guard let session = winningVisibleSession() else {
             return nil
         }
 
-        return TerminalFocusTarget(pid: session.sourcePid, cwd: session.cwd, editor: session.editor)
+        return TerminalFocusTarget(pid: session.sourcePid, editor: session.editor)
     }
     var activeSessionSnapshots: [SessionMenuSnapshot] {
         sessions.values
@@ -241,6 +250,8 @@ final class StateMachine {
     private var sleepMode: SleepMode = .awake
     private var lastPointerLocation: NSPoint?
     private var lastPointerMovedAt = Date()
+    private var oneShotSourcePid: pid_t?
+    private var oneShotFocusTarget: TerminalFocusTarget?
 
     init() {
         startStaleCleanup()
@@ -361,7 +372,7 @@ final class StateMachine {
         cwd: String? = nil,
         editor: FocusEditor? = nil,
         agentId: String? = nil,
-        headless: Bool = false
+        headless: Bool? = nil
     ) {
         // DND 打开和唤醒动画期间，hook 事件只会制造噪音，直接吞掉。
         guard !suppressExternalEvents else {
@@ -379,7 +390,12 @@ final class StateMachine {
         let nextCwd = normalizedString(cwd) ?? existing?.cwd
         let nextEditor = editor ?? existing?.editor
         let nextAgentId = normalizedString(agentId) ?? existing?.agentId
-        let nextHeadless = headless || (existing?.headless ?? false)
+        let nextHeadless: Bool
+        if let headless {
+            nextHeadless = headless
+        } else {
+            nextHeadless = existing?.headless ?? false
+        }
 
         if sessions[normalizedSessionId] == nil, sessions.count >= Self.maxSessions {
             evictOldestSession()
@@ -467,7 +483,11 @@ final class StateMachine {
         }
 
         if state.isOneShot {
-            requestDisplayTransition(to: state, svgOverride: svgOverride(for: state))
+            requestDisplayTransition(
+                to: state,
+                svgOverride: svgOverride(for: state),
+                triggeringSession: sessions[normalizedSessionId]
+            )
             return
         }
 
@@ -820,7 +840,7 @@ final class StateMachine {
         }
     }
 
-    private func requestDisplayTransition(to state: PetState, svgOverride: String?) {
+    private func requestDisplayTransition(to state: PetState, svgOverride: String?, triggeringSession: Session? = nil) {
         guard let effectiveState = normalizedDisplayState(state) else {
             return
         }
@@ -835,6 +855,9 @@ final class StateMachine {
         let sameState = effectiveState == currentState
         let sameSvg = nextSvg == currentSvg
         if sameState, sameSvg {
+            if effectiveState.isOneShot {
+                applyTransition(to: effectiveState, svg: nextSvg, triggeringSession: triggeringSession)
+            }
             return
         }
 
@@ -845,7 +868,7 @@ final class StateMachine {
         if remaining > 0 {
             // 当前动画还在最小展示窗口内时，只保留最后一个更高优先级请求。
             pendingTimer?.invalidate()
-            pendingTransition = PendingTransition(state: effectiveState, svg: nextSvg)
+            pendingTransition = PendingTransition(state: effectiveState, svg: nextSvg, triggeringSession: triggeringSession)
             autoReturnTimer?.invalidate()
             autoReturnTimer = nil
 
@@ -860,7 +883,7 @@ final class StateMachine {
                     self.pendingTransition = nil
 
                     if let queued, queued.state.isOneShot {
-                        self.applyTransition(to: queued.state, svg: queued.svg)
+                        self.applyTransition(to: queued.state, svg: queued.svg, triggeringSession: queued.triggeringSession)
                     } else {
                         let resolvedState = self.resolveDisplayState()
                         self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
@@ -876,13 +899,28 @@ final class StateMachine {
         pendingTimer?.invalidate()
         pendingTimer = nil
         pendingTransition = nil
-        applyTransition(to: effectiveState, svg: nextSvg)
+        applyTransition(to: effectiveState, svg: nextSvg, triggeringSession: triggeringSession)
     }
 
-    private func applyTransition(to state: PetState, svg: String) {
+    private func applyTransition(to state: PetState, svg: String, triggeringSession: Session? = nil) {
         currentState = state
         currentSvg = svg
         stateChangedAt = Date()
+
+        if state.isOneShot {
+            oneShotSourcePid = triggeringSession?.sourcePid
+            if let triggeringSession {
+                oneShotFocusTarget = TerminalFocusTarget(
+                    pid: triggeringSession.sourcePid,
+                    editor: triggeringSession.editor
+                )
+            } else {
+                oneShotFocusTarget = nil
+            }
+        } else {
+            oneShotSourcePid = nil
+            oneShotFocusTarget = nil
+        }
 
         // 音效跟“最终真的显示出来的状态”绑定，而不是跟输入事件绑定。
         // 这样最小展示时长、优先级覆盖、自动回退都不会让声音和画面错位。
@@ -907,6 +945,8 @@ final class StateMachine {
                 }
 
                 self.autoReturnTimer = nil
+                self.oneShotSourcePid = nil
+                self.oneShotFocusTarget = nil
                 let resolvedState = self.resolveDisplayState()
                 self.requestDisplayTransition(to: resolvedState, svgOverride: self.svgOverride(for: resolvedState))
             }
