@@ -6,13 +6,16 @@ final class HotKeyManager {
     private static let signature: OSType = 0x434C5744
     private static let allowKeyID: UInt32 = 1
     private static let denyKeyID: UInt32 = 2
+    private static let toggleVisibilityKeyID: UInt32 = 3
 
     private var allowRef: EventHotKeyRef?
     private var denyRef: EventHotKeyRef?
+    private var toggleVisibilityRef: EventHotKeyRef?
     private var handlerRef: EventHandlerRef?
 
     var onAllow: @MainActor () -> Void = {}
     var onDeny: @MainActor () -> Void = {}
+    var onToggleVisibility: @MainActor () -> Void = {}
 
     func register() {
         installHandlerIfNeeded()
@@ -50,6 +53,26 @@ final class HotKeyManager {
         }
     }
 
+    func registerVisibilityToggle() {
+        installHandlerIfNeeded()
+
+        if toggleVisibilityRef == nil {
+            let toggleID = EventHotKeyID(signature: Self.signature, id: Self.toggleVisibilityKeyID)
+            // Cmd+Shift+C 始终保留给显示/隐藏桌宠，不受气泡显示状态影响。
+            let status = RegisterEventHotKey(
+                UInt32(kVK_ANSI_C),
+                UInt32(cmdKey | shiftKey),
+                toggleID,
+                GetApplicationEventTarget(),
+                0,
+                &toggleVisibilityRef
+            )
+            if status != noErr {
+                print("hotkey registration failed for Toggle Visibility: \(status)")
+            }
+        }
+    }
+
     func unregister() {
         if let ref = allowRef {
             UnregisterEventHotKey(ref)
@@ -62,8 +85,16 @@ final class HotKeyManager {
         }
     }
 
+    private func unregisterVisibilityToggle() {
+        if let ref = toggleVisibilityRef {
+            UnregisterEventHotKey(ref)
+            toggleVisibilityRef = nil
+        }
+    }
+
     func teardown() {
         unregister()
+        unregisterVisibilityToggle()
 
         if let ref = handlerRef {
             RemoveEventHandler(ref)
@@ -124,6 +155,8 @@ final class HotKeyManager {
             onAllow()
         case Self.denyKeyID:
             onDeny()
+        case Self.toggleVisibilityKeyID:
+            onToggleVisibility()
         default:
             break
         }

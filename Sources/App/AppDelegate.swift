@@ -75,6 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeyManager.onDeny = { [weak self] in
             self?.bubbleStack.denyLatestBubble()
         }
+        hotKeyManager.onToggleVisibility = { [weak self] in
+            self?.togglePetVisibility()
+        }
+        // 全局显示/隐藏快捷键始终常驻，不能跟着权限气泡一起注销。
+        hotKeyManager.registerVisibilityToggle()
         bubbleStack.onBubblesChanged = { [weak self] in
             self?.updateHotKeyRegistration()
         }
@@ -195,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return true
             }
 
-            self?.sparkleUpdater?.canCheckForUpdates ?? false
+            return self?.sparkleUpdater?.canCheckForUpdates ?? false
         }
 
         controller.onTogglePetVisibility = { [weak self] in

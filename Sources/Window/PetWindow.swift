@@ -1,4 +1,4 @@
-import AppKit
+@preconcurrency import AppKit
 
 // 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
 @MainActor final class PetWindow: NSWindow {
@@ -38,7 +38,6 @@ import AppKit
     private var clickWindowTimer: Timer?
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
-    private var screenChangeObserver: NSObjectProtocol?
     private(set) var sizePreset: SizePreset
     var allowsDragging = true
     /// mini 模式需要允许窗口半藏在屏幕外；普通模式则始终钳回工作区。
@@ -81,9 +80,7 @@ import AppKit
     }
 
     deinit {
-        if let screenChangeObserver {
-            NotificationCenter.default.removeObserver(screenChangeObserver)
-        }
+        NotificationCenter.default.removeObserver(self)
     }
 
     func applySizePreset(_ preset: SizePreset) {
@@ -131,15 +128,17 @@ import AppKit
 
     private func observeScreenChanges() {
         // 外接显示器插拔会改变 visibleFrame；窗口自己要把位置压回最近工作区。
-        screenChangeObserver = NotificationCenter.default.addObserver(
-            forName: NSApplication.didChangeScreenParametersNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.clampToScreen()
-            }
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScreenParametersChanged(_:)),
+            name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+    }
+
+    @objc private func handleScreenParametersChanged(_ notification: Notification) {
+        _ = notification
+        clampToScreen()
     }
 
     private func nearestWorkArea(for origin: NSPoint) -> NSRect {
