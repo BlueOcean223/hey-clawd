@@ -39,6 +39,8 @@ final class PetWebView: NSView {
     private var lastNonBooleanHitTestDescription: String?
     /// 窗口隐藏时暂停所有轮询，避免空转浪费 CPU。
     private(set) var isTrackingPaused = false
+    /// mini 模式挂在左边缘时，CSS scaleX(-1) 水平镜像整个容器。
+    private(set) var isMirrored = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -104,6 +106,15 @@ final class PetWebView: NSView {
         switchSVG(svgFilename)
     }
 
+    func setMiniLeft(_ enabled: Bool) {
+        isMirrored = enabled
+        guard isBridgeReady else {
+            return
+        }
+
+        evaluateBridgeCall("window.HeyClawdBridge.setMiniLeft(\(enabled ? "true" : "false"))")
+    }
+
     func pauseTracking() {
         isTrackingPaused = true
         hitTestTimer?.invalidate()
@@ -145,8 +156,10 @@ final class PetWebView: NSView {
             return nil
         }
 
+        // 镜像时眼球中心也要跟着翻转到对称位置。
+        let xRatio: CGFloat = isMirrored ? (1 - 22.0 / 45.0) : (22.0 / 45.0)
         return NSPoint(
-            x: window.frame.minX + (window.frame.width * 22.0 / 45.0),
+            x: window.frame.minX + (window.frame.width * xRatio),
             y: window.frame.minY + (window.frame.height * 34.0 / 45.0)
         )
     }
@@ -157,7 +170,9 @@ final class PetWebView: NSView {
         }
 
         // AppKit Y 轴向上，CSS Y 轴向下，必须取反。
-        evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(dx), \(-dy))")
+        // 镜像时 CSS scaleX(-1) 会把 dx 再翻一次，所以 Swift 侧预先反转。
+        let effectiveDx = isMirrored ? -dx : dx
+        evaluateBridgeCall("window.HeyClawdBridge.applyEyeMove(\(effectiveDx), \(-dy))")
     }
 
     private func setBridgeReacting(_ isReacting: Bool) {
@@ -187,6 +202,32 @@ final class PetWebView: NSView {
         let dx = abs(lastHitTestPoint.x - localPoint.x)
         let dy = abs(lastHitTestPoint.y - localPoint.y)
         guard dx <= 2, dy <= 2 else {
+            return false
+        }
+
+        return lastHitTestResult
+    }
+
+    /// mini peek 会带着整个窗口滑动，鼠标不动时窗口局部坐标会持续变化。
+    /// hover 判定不能沿用点击那套 2px 严格容差，否则动画中会反复判进判出。
+    func shouldHandleHover(at windowPoint: NSPoint) -> Bool {
+        guard window != nil else {
+            return false
+        }
+
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            return false
+        }
+
+        guard let lastHitTestPoint else {
+            return false
+        }
+
+        let hoverTolerance: CGFloat = 12
+        let dx = abs(lastHitTestPoint.x - localPoint.x)
+        let dy = abs(lastHitTestPoint.y - localPoint.y)
+        guard dx <= hoverTolerance, dy <= hoverTolerance else {
             return false
         }
 
@@ -374,6 +415,10 @@ final class PetWebView: NSView {
         if type == "bridge-ready" {
             isBridgeReady = true
             mountedSVGFilename = nil
+
+            if isMirrored {
+                evaluateBridgeCall("window.HeyClawdBridge.setMiniLeft(true)")
+            }
 
             if let filename = pendingSVGFilename {
                 // JS bridge 就绪后补发初始化阶段积压的 SVG 请求。

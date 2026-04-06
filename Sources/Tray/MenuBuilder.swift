@@ -10,6 +10,7 @@ struct AppMenuState {
     var language: AppLanguage
     var sizePreset: PetWindow.SizePreset
     var isMiniModeEnabled: Bool
+    var isMiniTransitioning: Bool
     var isDoNotDisturbEnabled: Bool
     var isBubbleFollowEnabled: Bool
     var isHideBubblesEnabled: Bool
@@ -27,6 +28,7 @@ enum MenuBuilder {
             "medium": "Medium (M)",
             "large": "Large (L)",
             "miniMode": "Mini Mode",
+            "exitMiniMode": "Exit Mini Mode",
             "sessions": "Sessions",
             "noSessions": "No active sessions",
             "sleep": "Sleep (Do Not Disturb)",
@@ -48,6 +50,7 @@ enum MenuBuilder {
             "medium": "中 (M)",
             "large": "大 (L)",
             "miniMode": "极简模式",
+            "exitMiniMode": "退出极简模式",
             "sessions": "会话",
             "noSessions": "没有活跃会话",
             "sleep": "休眠（免打扰）",
@@ -86,11 +89,11 @@ enum MenuBuilder {
         menu.addItem(sizeMenuItem(state: state, target: target))
         menu.addItem(.separator())
         menu.addItem(toggleItem(
-            title: text("miniMode", lang: state.language),
+            title: text(state.isMiniModeEnabled ? "exitMiniMode" : "miniMode", lang: state.language),
             selector: #selector(StatusBarController.toggleMiniMode(_:)),
             isOn: state.isMiniModeEnabled,
             target: target,
-            isEnabled: false
+            isEnabled: !state.isMiniTransitioning
         ))
         menu.addItem(sessionsMenuItem(state: state, target: target))
         menu.addItem(actionItem(

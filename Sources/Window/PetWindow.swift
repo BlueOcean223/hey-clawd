@@ -39,9 +39,12 @@ import AppKit
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
     private(set) var sizePreset: SizePreset
+    var allowsDragging = true
     var contextMenuProvider: (() -> NSMenu?)?
     /// 只在拖拽落点确定后回调，避免把中间过程频繁写进 UserDefaults。
     var onDragEnded: ((NSPoint) -> Void)?
+    /// mini 模式会在这里接管拖拽中的位置约束，比如贴边移动或拖拽脱离。
+    var onDragMove: ((NSPoint) -> NSPoint)?
     /// 聚焦逻辑交给上层协调，这里只负责把点击事件抛出去。
     var onPetClick: (() -> Void)?
 
@@ -127,6 +130,10 @@ import AppKit
         super.sendEvent(event)
     }
 
+    func setMiniLeft(_ enabled: Bool) {
+        petWebView.setMiniLeft(enabled)
+    }
+
     /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
     func display(state _: PetState, svgFilename: String, sourcePid: pid_t?) {
         currentDisplaySVGFilename = svgFilename
@@ -168,6 +175,10 @@ import AppKit
     }
 
     private func handleLeftMouseDragged(_ event: NSEvent) {
+        guard allowsDragging else {
+            return
+        }
+
         guard
             let dragStartPoint,
             let dragStartScreenPoint
@@ -198,10 +209,12 @@ import AppKit
 
         let deltaX = screenPoint.x - lastDragScreenPoint.x
         let deltaY = screenPoint.y - lastDragScreenPoint.y
-        setFrameOrigin(NSPoint(
+        let proposedOrigin = NSPoint(
             x: frame.origin.x + deltaX,
             y: frame.origin.y + deltaY
-        ))
+        )
+        let resolvedOrigin = onDragMove?(proposedOrigin) ?? proposedOrigin
+        setFrameOrigin(resolvedOrigin)
         self.lastDragScreenPoint = screenPoint
         self.dragStartPoint = dragStartPoint
     }

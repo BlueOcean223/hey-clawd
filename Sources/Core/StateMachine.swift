@@ -25,6 +25,10 @@ enum PetState: String, CaseIterable, Sendable {
     case miniEnterSleep = "mini-enter-sleep"
     case miniSleep = "mini-sleep"
 
+    var isMiniState: Bool {
+        rawValue.hasPrefix("mini-")
+    }
+
     var priority: Int {
         switch self {
         case .error:
@@ -50,7 +54,7 @@ enum PetState: String, CaseIterable, Sendable {
 
     var isOneShot: Bool {
         switch self {
-        case .attention, .error, .sweeping, .notification, .carrying:
+        case .attention, .error, .sweeping, .notification, .carrying, .miniAlert, .miniHappy:
             return true
         default:
             return false
@@ -214,6 +218,9 @@ final class StateMachine {
             }
     }
     private(set) var doNotDisturbEnabled = false
+    private(set) var miniModeEnabled = false
+    private(set) var miniTransitioning = false
+    private var miniPeekEnabled = false
 
     var onStateChange: ((PetState, String, pid_t?) -> Void)?
 
@@ -251,6 +258,54 @@ final class StateMachine {
         pendingTransition = nil
     }
 
+    func setMiniModeEnabled(_ enabled: Bool) {
+        miniModeEnabled = enabled
+
+        if !enabled {
+            miniTransitioning = false
+            miniPeekEnabled = false
+        }
+    }
+
+    func setMiniTransitioning(_ enabled: Bool) {
+        miniTransitioning = enabled
+    }
+
+    func setMiniPeekEnabled(_ enabled: Bool) {
+        guard miniPeekEnabled != enabled else {
+            return
+        }
+
+        miniPeekEnabled = enabled
+
+        guard miniModeEnabled, !miniTransitioning else {
+            return
+        }
+
+        // mini-alert / mini-happy 展示期内不强行打断，等 auto-return 后再根据 hover 落到稳定态。
+        guard currentState == .miniIdle || currentState == .miniPeek else {
+            return
+        }
+
+        let nextState = stableMiniState()
+        requestDisplayTransition(to: nextState, svgOverride: svgOverride(for: nextState))
+    }
+
+    func requestMiniDisplayState(_ state: PetState) {
+        requestDisplayTransition(to: state, svgOverride: svgOverride(for: state))
+    }
+
+    func refreshDisplayState() {
+        let displayState: PetState
+        if doNotDisturbEnabled {
+            displayState = miniModeEnabled ? .miniSleep : .sleeping
+        } else {
+            displayState = resolveDisplayState()
+        }
+
+        requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
+    }
+
     /// DND 是一个显示层覆盖态。
     /// 会话数据照常积累，醒来后直接回到当前真实状态，不丢上下文。
     func setDoNotDisturbEnabled(_ enabled: Bool) {
@@ -262,13 +317,19 @@ final class StateMachine {
         cancelSleepStageTimer()
 
         if enabled {
-            requestDisplayTransition(to: .sleeping, svgOverride: svgOverride(for: .sleeping))
+            let sleepState: PetState = miniModeEnabled ? .miniSleep : .sleeping
+            requestDisplayTransition(to: sleepState, svgOverride: svgOverride(for: sleepState))
             return
         }
 
         lastPointerMovedAt = Date()
-        let displayState = resolveDisplayState()
-        requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
+        if miniModeEnabled {
+            let nextState = stableMiniState()
+            requestDisplayTransition(to: nextState, svgOverride: svgOverride(for: nextState))
+        } else {
+            let displayState = resolveDisplayState()
+            requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
+        }
     }
 
     func setState(
@@ -450,7 +511,7 @@ final class StateMachine {
     }
 
     private func pollSleepSequence() {
-        guard !doNotDisturbEnabled else {
+        guard !doNotDisturbEnabled, !miniModeEnabled else {
             return
         }
 
@@ -657,6 +718,34 @@ final class StateMachine {
         winningVisibleSession()?.state ?? .idle
     }
 
+    private func stableMiniState() -> PetState {
+        if doNotDisturbEnabled {
+            return .miniSleep
+        }
+
+        return miniPeekEnabled ? .miniPeek : .miniIdle
+    }
+
+    private func normalizedDisplayState(_ state: PetState) -> PetState? {
+        if miniTransitioning, !state.isMiniState {
+            return nil
+        }
+
+        guard miniModeEnabled, !state.isMiniState else {
+            return state
+        }
+
+        switch state {
+        case .notification:
+            return .miniAlert
+        case .attention:
+            return .miniHappy
+        default:
+            // mini 模式下其他工作态静默，不额外切动画，只维持当前稳定姿态。
+            return stableMiniState()
+        }
+    }
+
     private func winningVisibleSession() -> Session? {
         let visibleSessions = sessions.values.filter { !$0.headless }
         guard !visibleSessions.isEmpty else {
@@ -672,26 +761,31 @@ final class StateMachine {
     }
 
     private func requestDisplayTransition(to state: PetState, svgOverride: String?) {
-        let nextSvg = svgOverride ?? defaultSvg(for: state)
-
-        if let pendingTransition, pendingTransition.state.priority > state.priority {
+        guard let effectiveState = normalizedDisplayState(state) else {
             return
         }
 
-        let sameState = state == currentState
+        let effectiveSvgOverride = effectiveState == state ? svgOverride : self.svgOverride(for: effectiveState)
+        let nextSvg = effectiveSvgOverride ?? defaultSvg(for: effectiveState)
+
+        if let pendingTransition, pendingTransition.state.priority > effectiveState.priority {
+            return
+        }
+
+        let sameState = effectiveState == currentState
         let sameSvg = nextSvg == currentSvg
         if sameState, sameSvg {
             return
         }
 
-        let minDisplay = state.isSleepSequence ? 0 : (Self.minDisplayMs[currentState] ?? 0)
+        let minDisplay = effectiveState.isSleepSequence ? 0 : (Self.minDisplayMs[currentState] ?? 0)
         let elapsed = Date().timeIntervalSince(stateChangedAt)
         let remaining = (Double(minDisplay) / 1000.0) - elapsed
 
         if remaining > 0 {
             // 当前动画还在最小展示窗口内时，只保留最后一个更高优先级请求。
             pendingTimer?.invalidate()
-            pendingTransition = PendingTransition(state: state, svg: nextSvg)
+            pendingTransition = PendingTransition(state: effectiveState, svg: nextSvg)
             autoReturnTimer?.invalidate()
             autoReturnTimer = nil
 
@@ -722,7 +816,7 @@ final class StateMachine {
         pendingTimer?.invalidate()
         pendingTimer = nil
         pendingTransition = nil
-        applyTransition(to: state, svg: nextSvg)
+        applyTransition(to: effectiveState, svg: nextSvg)
     }
 
     private func applyTransition(to state: PetState, svg: String) {

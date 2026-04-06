@@ -14,9 +14,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let preferences: Preferences
     private var appLanguage: AppLanguage
     private var isMiniModeEnabled: Bool
+    private var isMiniTransitioning = false
     private var isBubbleFollowEnabled: Bool
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
+    private var miniModeController: MiniMode?
     private lazy var bubbleStack = BubbleStack(
         petWindowProvider: { [weak self] in self?.petWindow },
         bubbleFollowProvider: { [weak self] in self?.isBubbleFollowEnabled ?? true }
@@ -41,7 +43,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow = PetWindow(sizePreset: preferences.windowSizePreset)
         restorePetWindowPositionIfNeeded()
         petWindow?.onDragEnded = { [weak self] origin in
-            self?.preferences.windowOrigin = origin
+            guard let self else {
+                return
+            }
+
+            if self.miniModeController?.handleDragEnded() == true {
+                return
+            }
+
+            self.preferences.windowOrigin = origin
+        }
+        petWindow?.onDragMove = { [weak self] proposedOrigin in
+            guard let self else {
+                return proposedOrigin
+            }
+
+            return self.miniModeController?.handleDragMove(proposedOrigin: proposedOrigin) ?? proposedOrigin
         }
         petWindow?.onPetClick = { [weak self] in
             self?.focusCurrentSession()
@@ -63,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
+        setupMiniModeController()
         setupStatusBarController()
         installTerminationSignalHandlers()
         updateHotKeyRegistration()
@@ -110,6 +128,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 language: .zh,
                 sizePreset: .small,
                 isMiniModeEnabled: false,
+                isMiniTransitioning: false,
                 isDoNotDisturbEnabled: false,
                 isBubbleFollowEnabled: true,
                 isHideBubblesEnabled: false,
@@ -125,12 +144,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onSelectSizePreset = { [weak self] preset in
             self?.preferences.windowSizePreset = preset
             self?.petWindow?.applySizePreset(preset)
-            self?.persistPetWindowPosition()
+            if self?.miniModeController?.isEnabled == true {
+                self?.miniModeController?.handleSizeChange()
+            } else {
+                self?.persistPetWindowPosition()
+            }
             self?.bubbleStack.repositionBubbles()
         }
         controller.onToggleMiniMode = { [weak self] enabled in
-            self?.isMiniModeEnabled = enabled
-            self?.preferences.miniModeEnabled = enabled
+            guard let self else {
+                return
+            }
+
+            if enabled {
+                self.miniModeController?.enterViaMenu()
+            } else {
+                self.miniModeController?.exit()
+            }
         }
         controller.onToggleDoNotDisturb = { [weak self] enabled in
             self?.stateMachine?.setDoNotDisturbEnabled(enabled)
@@ -172,9 +202,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        persistPetWindowPosition()
+        if miniModeController?.isEnabled == true {
+            preferences.windowOrigin = petWindow?.frame.origin ?? preferences.windowOrigin
+        } else {
+            persistPetWindowPosition()
+        }
         preferences.windowSizePreset = petWindow?.sizePreset ?? preferences.windowSizePreset
         preferences.doNotDisturbEnabled = stateMachine?.doNotDisturbEnabled ?? preferences.doNotDisturbEnabled
+        miniModeController?.cleanup()
         bubbleStack.stopObservingPetWindow()
         hotKeyManager.teardown()
         bubbleStack.dismissAll(respondingWith: .deny)
@@ -208,6 +243,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             language: appLanguage,
             sizePreset: petWindow?.sizePreset ?? .small,
             isMiniModeEnabled: isMiniModeEnabled,
+            isMiniTransitioning: isMiniTransitioning,
             isDoNotDisturbEnabled: stateMachine?.doNotDisturbEnabled ?? false,
             isBubbleFollowEnabled: isBubbleFollowEnabled,
             isHideBubblesEnabled: isHideBubblesEnabled,
@@ -285,6 +321,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         preferences.windowOrigin = petWindow.frame.origin
+    }
+
+    private func setupMiniModeController() {
+        guard let petWindow, let stateMachine else {
+            return
+        }
+
+        let miniMode = MiniMode(petWindow: petWindow, stateMachine: stateMachine, preferences: preferences)
+        miniMode.onNeedsBubbleReposition = { [weak self] in
+            self?.bubbleStack.repositionBubbles()
+        }
+        miniMode.onNeedsMenuRefresh = { [weak self, weak miniMode] in
+            guard let self, let miniMode else {
+                return
+            }
+
+            self.isMiniModeEnabled = miniMode.isEnabled
+            self.isMiniTransitioning = miniMode.isTransitioning
+        }
+        miniMode.onDidWakeFromDND = { [weak self] in
+            guard let self else {
+                return
+            }
+
+            self.stateMachine?.setDoNotDisturbEnabled(false)
+            self.preferences.doNotDisturbEnabled = false
+            self.stateMachine?.refreshDisplayState()
+        }
+        miniModeController = miniMode
+        miniMode.restoreFromPreferencesIfNeeded()
+        isMiniModeEnabled = miniMode.isEnabled
+        isMiniTransitioning = miniMode.isTransitioning
     }
 
     private func updateHotKeyRegistration() {
