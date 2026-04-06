@@ -1,0 +1,95 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Set build version in Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.VERSION }}" Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Info.plist
+
+      - name: Resolve Xcode packages
+        run: xcodebuild -resolvePackageDependencies -project hey-clawd.xcodeproj -scheme hey-clawd
+
+      - name: Archive
+        run: |
+          xcodebuild -project hey-clawd.xcodeproj \
+            -scheme hey-clawd \
+            -configuration Release \
+            -archivePath ${{ runner.temp }}/hey-clawd.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="-" \
+            ENABLE_HARDENED_RUNTIME=YES
+
+      - name: Create zip
+        run: |
+          cd "${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications"
+          ditto -c -k --sequesterRsrc hey-clawd.app "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
+
+      - name: Download Sparkle
+        run: |
+          cd ${{ runner.temp }}
+          curl -L -O https://github.com/sparkle-project/Sparkle/releases/download/2.9.1/Sparkle-2.9.1.tar.xz
+          tar xf Sparkle-2.9.1.tar.xz
+
+      - name: Sign update with Sparkle
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          echo "$SPARKLE_PRIVATE_KEY" > "${{ runner.temp }}/sparkle_key"
+          SIGNATURE=$(${{ runner.temp }}/bin/sign_update "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip" --ed-key-file "${{ runner.temp }}/sparkle_key" | grep "sparkle:edSignature" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+          LENGTH=$(stat -f%z "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip")
+          echo "SIGNATURE=$SIGNATURE" >> "$GITHUB_ENV"
+          echo "LENGTH=$LENGTH" >> "$GITHUB_ENV"
+          rm "${{ runner.temp }}/sparkle_key"
+
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip
+          generate_release_notes: true
+
+      - name: Generate appcast.xml
+        run: |
+          DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
+          cat > appcast.xml << XMLEOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+            <channel>
+              <title>hey-clawd</title>
+              <item>
+                <title>Version ${{ steps.version.outputs.VERSION }}</title>
+                <pubDate>$(date -R)</pubDate>
+                <sparkle:version>${{ github.run_number }}</sparkle:version>
+                <sparkle:shortVersionString>${{ steps.version.outputs.VERSION }}</sparkle:shortVersionString>
+                <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
+                <enclosure url="${DOWNLOAD_URL}" length="${LENGTH}" type="application/octet-stream" sparkle:edSignature="${SIGNATURE}" />
+              </item>
+            </channel>
+          </rss>
+          XMLEOF
+          # Remove leading whitespace from heredoc
+          sed -i '' 's/^          //' appcast.xml
+
+      - name: Commit appcast.xml
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git add appcast.xml
+          git commit -m "update appcast.xml for ${{ github.ref_name }}" || echo "No changes"
+          git push origin main
