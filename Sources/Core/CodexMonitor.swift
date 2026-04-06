@@ -68,7 +68,7 @@ actor CodexMonitor {
     private var trackedFiles: [URL: TrackedFile] = [:]
     private var scanTask: Task<Void, Never>?
 
-    var onStateUpdate: (@Sendable (CodexStateUpdate) -> Void)?
+    var onStateUpdate: (@MainActor @Sendable (CodexStateUpdate) -> Void)?
 
     init(homeDirectoryURL: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.homeDirectoryURL = homeDirectoryURL
@@ -96,11 +96,11 @@ actor CodexMonitor {
         scanTask = nil
         let urls = Array(trackedFiles.keys)
         for url in urls {
-            stopTracking(fileURL: url, emitSleeping: false)
+            stopTracking(fileURL: url, emitSessionEnd: false)
         }
     }
 
-    func setOnStateUpdate(_ handler: @escaping @Sendable (CodexStateUpdate) -> Void) {
+    func setOnStateUpdate(_ handler: @escaping @MainActor @Sendable (CodexStateUpdate) -> Void) {
         onStateUpdate = handler
     }
 
@@ -261,12 +261,15 @@ actor CodexMonitor {
         }
 
         do {
+            // Blocking I/O on the actor's cooperative executor. Acceptable for small
+            // incremental reads of Codex JSONL logs. For large files, consider moving
+            // file reads to a DispatchQueue and bridging back via continuation.
             try tracked.fileHandle.seek(toOffset: tracked.offset)
             let data = tracked.fileHandle.readDataToEndOfFile()
             tracked.offset = fileSize
             consume(data: data, tracked: tracked)
         } catch {
-            stopTracking(fileURL: fileURL, emitSleeping: false)
+            stopTracking(fileURL: fileURL, emitSessionEnd: false)
         }
     }
 
@@ -355,11 +358,11 @@ actor CodexMonitor {
                 continue
             }
 
-            stopTracking(fileURL: fileURL, emitSleeping: true)
+            stopTracking(fileURL: fileURL, emitSessionEnd: true)
         }
     }
 
-    private func stopTracking(fileURL: URL, emitSleeping: Bool) {
+    private func stopTracking(fileURL: URL, emitSessionEnd: Bool) {
         guard let tracked = trackedFiles.removeValue(forKey: fileURL) else {
             return
         }
@@ -369,11 +372,11 @@ actor CodexMonitor {
         tracked.source.cancel()
         try? tracked.fileHandle.close()
 
-        if emitSleeping {
+        if emitSessionEnd {
             let update = CodexStateUpdate(
-                state: .sleeping,
+                state: .idle,
                 sessionId: tracked.sessionId,
-                event: "stale-cleanup",
+                event: "SessionEnd",
                 cwd: tracked.cwd,
                 agentId: agentId
             )
