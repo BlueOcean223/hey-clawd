@@ -98,6 +98,8 @@ final class HotKeyManager {
 
         if let ref = handlerRef {
             RemoveEventHandler(ref)
+            // Balance the passRetained from installHandlerIfNeeded.
+            Unmanaged.passUnretained(self).release()
             handlerRef = nil
         }
     }
@@ -117,19 +119,23 @@ final class HotKeyManager {
             }
 
             let hotKeyManager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
-            hotKeyManager.handle(event: event)
+            MainActor.assumeIsolated {
+                hotKeyManager.handle(event: event)
+            }
             return noErr
         }
 
+        let userData = Unmanaged.passRetained(self).toOpaque()
         let status = InstallEventHandler(
             GetApplicationEventTarget(),
             callback,
             1,
             &eventType,
-            Unmanaged.passUnretained(self).toOpaque(),
+            userData,
             &handlerRef
         )
         if status != noErr {
+            Unmanaged<HotKeyManager>.fromOpaque(userData).release()
             print("hotkey handler installation failed: \(status)")
         }
     }
