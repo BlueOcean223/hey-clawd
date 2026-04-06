@@ -183,6 +183,13 @@ final class StateMachine {
     var currentDisplaySourcePid: pid_t? {
         winningVisibleSession()?.sourcePid
     }
+    var currentDisplayFocusTarget: TerminalFocusTarget? {
+        guard let session = winningVisibleSession() else {
+            return nil
+        }
+
+        return TerminalFocusTarget(pid: session.sourcePid, cwd: session.cwd, editor: session.editor)
+    }
     var activeSessionSnapshots: [SessionMenuSnapshot] {
         sessions.values
             .filter { !$0.headless }
@@ -194,6 +201,7 @@ final class StateMachine {
                     updatedAt: $0.updatedAt,
                     sourcePid: $0.sourcePid,
                     cwd: $0.cwd,
+                    editor: $0.editor,
                     agentId: $0.agentId
                 )
             }
@@ -263,6 +271,7 @@ final class StateMachine {
         svgWasProvided: Bool = false,
         sourcePid: pid_t? = nil,
         cwd: String? = nil,
+        editor: FocusEditor? = nil,
         agentId: String? = nil,
         headless: Bool = false
     ) {
@@ -275,6 +284,7 @@ final class StateMachine {
         let existing = sessions[normalizedSessionId]
         let nextSourcePid = sourcePid ?? existing?.sourcePid
         let nextCwd = normalizedString(cwd) ?? existing?.cwd
+        let nextEditor = editor ?? existing?.editor
         let nextAgentId = normalizedString(agentId) ?? existing?.agentId
         let nextHeadless = headless || (existing?.headless ?? false)
 
@@ -314,6 +324,7 @@ final class StateMachine {
                 displaySvg: nil,
                 sourcePid: nextSourcePid,
                 cwd: nextCwd,
+                editor: nextEditor,
                 agentId: nextAgentId,
                 headless: nextHeadless
             )
@@ -333,6 +344,7 @@ final class StateMachine {
             )
             updated.sourcePid = nextSourcePid
             updated.cwd = nextCwd
+            updated.editor = nextEditor
             updated.agentId = nextAgentId
             updated.headless = nextHeadless
             sessions[normalizedSessionId] = updated
@@ -349,6 +361,7 @@ final class StateMachine {
                 ),
                 sourcePid: nextSourcePid,
                 cwd: nextCwd,
+                editor: nextEditor,
                 agentId: nextAgentId,
                 headless: nextHeadless
             )

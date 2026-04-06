@@ -42,6 +42,8 @@ import AppKit
     var contextMenuProvider: (() -> NSMenu?)?
     /// 只在拖拽落点确定后回调，避免把中间过程频繁写进 UserDefaults。
     var onDragEnded: ((NSPoint) -> Void)?
+    /// 聚焦逻辑交给上层协调，这里只负责把点击事件抛出去。
+    var onPetClick: (() -> Void)?
 
     init(sizePreset: SizePreset = .small) {
         self.sizePreset = sizePreset
@@ -228,7 +230,7 @@ import AppKit
     }
 
     private func handlePetClick(_ event: NSEvent) {
-        focusCurrentTerminal()
+        onPetClick?()
         lastClickPoint = event.locationInWindow
 
         guard canPlayClickReaction else {
@@ -315,17 +317,5 @@ import AppKit
         }
 
         return lastClickPoint.x < midX ? "clawd-react-left.svg" : "clawd-react-right.svg"
-    }
-
-    private func focusCurrentTerminal() {
-        guard
-            let currentSourcePid,
-            let app = NSRunningApplication(processIdentifier: currentSourcePid),
-            !app.isTerminated
-        else {
-            return
-        }
-
-        app.activate(options: [.activateIgnoringOtherApps])
     }
 }

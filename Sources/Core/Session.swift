@@ -7,6 +7,7 @@ struct Session: Sendable {
     var displaySvg: String?
     var sourcePid: pid_t?
     var cwd: String?
+    var editor: FocusEditor?
     var agentId: String?
     var headless: Bool
 }
@@ -17,5 +18,10 @@ struct SessionMenuSnapshot: Sendable {
     let updatedAt: Date
     let sourcePid: pid_t?
     let cwd: String?
+    let editor: FocusEditor?
     let agentId: String?
+
+    var focusTarget: TerminalFocusTarget {
+        TerminalFocusTarget(pid: sourcePid, cwd: cwd, editor: editor)
+    }
 }

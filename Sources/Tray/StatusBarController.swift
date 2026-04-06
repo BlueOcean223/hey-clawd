@@ -15,7 +15,7 @@ final class StatusBarController: NSObject {
     var onSelectLanguage: @MainActor (AppLanguage) -> Void = { _ in }
     var onCheckForUpdates: @MainActor () -> Void = {}
     var onQuit: @MainActor () -> Void = {}
-    var onFocusSession: @MainActor (pid_t?) -> Void = { _ in }
+    var onFocusSession: @MainActor (SessionMenuSnapshot) -> Void = { _ in }
 
     init(stateProvider: @escaping @MainActor () -> AppMenuState) {
         self.stateProvider = stateProvider
@@ -105,7 +105,11 @@ final class StatusBarController: NSObject {
     }
 
     @objc func focusSession(_ sender: NSMenuItem) {
-        onFocusSession(sender.representedObject as? pid_t)
+        guard let session = sender.representedObject as? SessionMenuSnapshot else {
+            return
+        }
+
+        onFocusSession(session)
     }
 
     @objc func toggleDoNotDisturb(_ sender: NSMenuItem) {

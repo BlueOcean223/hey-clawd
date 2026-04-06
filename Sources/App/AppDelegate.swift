@@ -43,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow?.onDragEnded = { [weak self] origin in
             self?.preferences.windowOrigin = origin
         }
+        petWindow?.onPetClick = { [weak self] in
+            self?.focusCurrentSession()
+        }
         petWindow?.orderFront(nil)
 
         hotKeyManager.onAllow = { [weak self] in
@@ -71,8 +74,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func assembleCoreLoop() {
         let stateMachine = StateMachine()
-        stateMachine.onStateChange = { [weak petWindow = self.petWindow] state, svg, sourcePid in
+        stateMachine.onStateChange = { [weak self, weak petWindow = self.petWindow] state, svg, sourcePid in
             petWindow?.display(state: state, svgFilename: svg, sourcePid: sourcePid)
+
+            // attention / notification 是“该回到会话看看”的信号，到前台更符合原交互。
+            if state == .attention || state == .notification {
+                self?.focusCurrentSession()
+            }
         }
         self.stateMachine = stateMachine
 
@@ -152,15 +160,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onQuit = {
             NSApp.terminate(nil)
         }
-        controller.onFocusSession = { pid in
-            guard
-                let pid,
-                let app = NSRunningApplication(processIdentifier: pid),
-                !app.isTerminated
-            else {
-                return
-            }
-            app.activate(options: [.activateIgnoringOtherApps])
+        controller.onFocusSession = { session in
+            TerminalFocus.focus(session.focusTarget)
         }
 
         statusBarController = controller
@@ -314,6 +315,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let svgUpdate = extractSVGUpdate(from: payload)
         let sourcePid = normalizedPID(payload["source_pid"])
         let cwd = normalizedString(payload["cwd"] as? String)
+        let editor = normalizedEditor(payload["editor"] as? String)
         let agentId = normalizedString(payload["agent_id"] as? String)
         let headless = payload["headless"] as? Bool ?? false
 
@@ -327,6 +329,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 svgWasProvided: false,
                 sourcePid: sourcePid,
                 cwd: cwd,
+                editor: editor,
                 agentId: agentId,
                 headless: headless
             )
@@ -339,6 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 svgWasProvided: true,
                 sourcePid: sourcePid,
                 cwd: cwd,
+                editor: editor,
                 agentId: agentId,
                 headless: headless
             )
@@ -364,6 +368,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func normalizedEditor(_ value: String?) -> FocusEditor? {
+        guard let normalized = normalizedString(value) else {
+            return nil
+        }
+
+        return FocusEditor(rawValue: normalized)
+    }
+
+    private func focusCurrentSession() {
+        guard let target = stateMachine?.currentDisplayFocusTarget else {
+            return
+        }
+
+        TerminalFocus.focus(target)
     }
 
     private static func okResponse(_ object: [String: Any]) -> HTTPResponse {

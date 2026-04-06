@@ -182,8 +182,8 @@ enum MenuBuilder {
                     selector: #selector(StatusBarController.focusSession(_:)),
                     target: target
                 )
-                sessionItem.representedObject = session.sourcePid
-                sessionItem.isEnabled = session.sourcePid != nil
+                sessionItem.representedObject = session
+                sessionItem.isEnabled = session.sourcePid != nil || session.editor != nil
                 submenu.addItem(sessionItem)
             }
         }
