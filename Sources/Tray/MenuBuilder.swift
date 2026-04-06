@@ -103,22 +103,19 @@ enum MenuBuilder {
             title: text("bubbleFollow", lang: state.language),
             selector: #selector(StatusBarController.toggleBubbleFollow(_:)),
             isOn: state.isBubbleFollowEnabled,
-            target: target,
-            isEnabled: false
+            target: target
         ))
         menu.addItem(toggleItem(
             title: text("hideBubbles", lang: state.language),
             selector: #selector(StatusBarController.toggleHideBubbles(_:)),
             isOn: state.isHideBubblesEnabled,
-            target: target,
-            isEnabled: false
+            target: target
         ))
         menu.addItem(toggleItem(
             title: text("soundEffects", lang: state.language),
             selector: #selector(StatusBarController.toggleSoundEffects(_:)),
             isOn: state.isSoundEffectsEnabled,
-            target: target,
-            isEnabled: false
+            target: target
         ))
         menu.addItem(.separator())
         menu.addItem(languageMenuItem(state: state, target: target))
