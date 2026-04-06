@@ -9,8 +9,7 @@ struct CodexStateUpdate: Sendable {
     let agentId: String
 }
 
-@MainActor
-final class CodexMonitor {
+actor CodexMonitor {
     private enum EventMapping {
         case direct(PetState)
         case turnEnd
@@ -22,7 +21,7 @@ final class CodexMonitor {
         let fileURL: URL
         let fileHandle: FileHandle
         let source: DispatchSourceFileSystemObject
-        var debounceTimer: Timer?
+        var debounceTask: Task<Void, Never>?
         var offset: UInt64 = 0
         var partial = ""
         var cwd: String?
@@ -49,6 +48,8 @@ final class CodexMonitor {
     private static let recentFileWindow: TimeInterval = 120
     private static let maxTrackedFiles = 50
     private static let maxPartialBytes = 65_536
+    // DispatchSource runs on a utility queue, then hops back into the actor for debounced reads.
+    private static let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor", qos: .utility)
     private static let eventMap: [String: EventMapping] = [
         "session_meta": .direct(.idle),
         "event_msg:task_started": .direct(.thinking),
@@ -64,41 +65,43 @@ final class CodexMonitor {
 
     private let agentId = "codex"
     private let homeDirectoryURL: URL
-    private let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor")
     private var trackedFiles: [URL: TrackedFile] = [:]
-    private var scanTimer: Timer?
+    private var scanTask: Task<Void, Never>?
 
-    var onStateUpdate: ((CodexStateUpdate) -> Void)?
+    var onStateUpdate: (@Sendable (CodexStateUpdate) -> Void)?
 
     init(homeDirectoryURL: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.homeDirectoryURL = homeDirectoryURL
     }
 
     func start() {
-        guard scanTimer == nil else {
+        guard scanTask == nil else {
             return
         }
 
         scanForSessionFiles()
-
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.scanInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.scanForSessionFiles()
+        scanTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(Self.scanInterval * 1_000_000_000))
+                guard !Task.isCancelled else {
+                    break
+                }
+                await self?.scanForSessionFiles()
             }
         }
-
-        scanTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     func stop() {
-        scanTimer?.invalidate()
-        scanTimer = nil
-
+        scanTask?.cancel()
+        scanTask = nil
         let urls = Array(trackedFiles.keys)
         for url in urls {
             stopTracking(fileURL: url, emitSleeping: false)
         }
+    }
+
+    func setOnStateUpdate(_ handler: @escaping @Sendable (CodexStateUpdate) -> Void) {
+        onStateUpdate = handler
     }
 
     private var baseDirectoryURL: URL {
@@ -198,7 +201,7 @@ final class CodexMonitor {
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: watchFD,
             eventMask: .write,
-            queue: watchQueue
+            queue: Self.watchQueue
         )
 
         let tracked = TrackedFile(
@@ -209,8 +212,11 @@ final class CodexMonitor {
         )
 
         source.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
-                self?.scheduleRead(for: fileURL)
+            guard let self else {
+                return
+            }
+            Task {
+                await self.scheduleRead(for: fileURL)
             }
         }
 
@@ -228,15 +234,14 @@ final class CodexMonitor {
             return
         }
 
-        tracked.debounceTimer?.invalidate()
-        let timer = Timer.scheduledTimer(withTimeInterval: Self.readDebounce, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.readNewLines(from: fileURL)
+        tracked.debounceTask?.cancel()
+        tracked.debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.readDebounce * 1_000_000_000))
+            guard !Task.isCancelled else {
+                return
             }
+            await self?.readNewLines(from: fileURL)
         }
-
-        tracked.debounceTimer = timer
-        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func readNewLines(from fileURL: URL) {
@@ -331,15 +336,17 @@ final class CodexMonitor {
 
         tracked.lastState = state
         tracked.lastEventAt = Date()
-        onStateUpdate?(
-            CodexStateUpdate(
-                state: state,
-                sessionId: tracked.sessionId,
-                event: event,
-                cwd: tracked.cwd,
-                agentId: agentId
-            )
+        let update = CodexStateUpdate(
+            state: state,
+            sessionId: tracked.sessionId,
+            event: event,
+            cwd: tracked.cwd,
+            agentId: agentId
         )
+        let callback = onStateUpdate
+        Task { @MainActor in
+            callback?(update)
+        }
     }
 
     private func cleanStaleFiles(referenceTime: Date) {
@@ -357,21 +364,23 @@ final class CodexMonitor {
             return
         }
 
-        tracked.debounceTimer?.invalidate()
-        tracked.debounceTimer = nil
+        tracked.debounceTask?.cancel()
+        tracked.debounceTask = nil
         tracked.source.cancel()
         try? tracked.fileHandle.close()
 
         if emitSleeping {
-            onStateUpdate?(
-                CodexStateUpdate(
-                    state: .sleeping,
-                    sessionId: tracked.sessionId,
-                    event: "stale-cleanup",
-                    cwd: tracked.cwd,
-                    agentId: agentId
-                )
+            let update = CodexStateUpdate(
+                state: .sleeping,
+                sessionId: tracked.sessionId,
+                event: "stale-cleanup",
+                cwd: tracked.cwd,
+                agentId: agentId
             )
+            let callback = onStateUpdate
+            Task { @MainActor in
+                callback?(update)
+            }
         }
     }
 

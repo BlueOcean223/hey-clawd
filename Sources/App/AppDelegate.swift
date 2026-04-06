@@ -161,21 +161,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let monitor = CodexMonitor()
-        monitor.onStateUpdate = { update in
-            // Codex JSONL 里拿不到终端 PID，这里只把会话状态和 cwd 接回主状态机。
-            stateMachine.setState(
-                update.state,
-                sessionId: update.sessionId,
-                event: update.event,
-                sourcePid: nil,
-                cwd: update.cwd,
-                editor: nil,
-                agentId: update.agentId,
-                headless: false
-            )
-        }
-        monitor.start()
         codexMonitor = monitor
+        Task { [stateMachine] in
+            await monitor.setOnStateUpdate { [stateMachine] update in
+                // emit 已经切回主线程，这里只把会话状态和 cwd 接回主状态机。
+                MainActor.assumeIsolated {
+                    stateMachine.setState(
+                        update.state,
+                        sessionId: update.sessionId,
+                        event: update.event,
+                        sourcePid: nil,
+                        cwd: update.cwd,
+                        editor: nil,
+                        agentId: update.agentId,
+                        headless: false
+                    )
+                }
+            }
+            await monitor.start()
+        }
     }
 
     private func setupStatusBarController() {
@@ -280,7 +284,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleStack.dismissAll(respondingWith: .deny)
         httpServerTask?.cancel()
         httpServer?.stop()
-        codexMonitor?.stop()
+        if let codexMonitor {
+            Task {
+                await codexMonitor.stop()
+            }
+        }
         stateMachine?.cleanup()
         petWebView?.teardown()
     }
