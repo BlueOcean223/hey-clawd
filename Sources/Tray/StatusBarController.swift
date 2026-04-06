@@ -63,17 +63,17 @@ final class StatusBarController: NSObject {
                 NSRect(x: ox + x * s, y: y * s, width: w * s, height: h * s).fill()
             }
 
-            fill(2, 6, 11, 2)   // 头顶到眼睛上方
-            fill(2, 8, 2, 2)    // 左眼左侧
-            fill(5, 8, 5, 2)    // 两眼之间
-            fill(11, 8, 2, 2)   // 右眼右侧
-            fill(2, 10, 11, 3)  // 眼下到腰部
-            fill(0, 9, 2, 2)    // 左臂
-            fill(13, 9, 2, 2)   // 右臂
-            fill(3, 13, 1, 2)   // 四足
-            fill(5, 13, 1, 2)
-            fill(9, 13, 1, 2)
-            fill(11, 13, 1, 2)
+            fill(2, 3, 11, 2)   // 头顶到眼睛上方
+            fill(2, 5, 2, 2)    // 左眼左侧
+            fill(5, 5, 5, 2)    // 两眼之间
+            fill(11, 5, 2, 2)   // 右眼右侧
+            fill(2, 7, 11, 3)   // 眼下到腰部
+            fill(0, 6, 2, 2)    // 左臂
+            fill(13, 6, 2, 2)   // 右臂
+            fill(3, 10, 1, 2)   // 四足
+            fill(5, 10, 1, 2)
+            fill(9, 10, 1, 2)
+            fill(11, 10, 1, 2)
 
             return true
         }
