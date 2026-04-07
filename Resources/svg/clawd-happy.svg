@@ -1,161 +1,163 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* Bouncing Character Body */
-      .bounce-anim {
-        transform-box: fill-box;
-        transform-origin: 50% 100%; /* Base of the feet */
-        animation: bounce 1s infinite ease-in-out;
-      }
-      
-      /* Ground Shadow Pulse */
-      .shadow-anim {
-        transform-box: fill-box;
-        transform-origin: 50% 50%;
-        animation: shadow 1s infinite ease-in-out;
+      /* ===== 1. Independent sub-animations (breathe omitted: bounce replaces it) ===== */
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 2.2s infinite linear;
       }
 
-      /* Enthusiastic Waving Arms */
+      /* ===== 2. Main timeline: physics bounce 1s loop ===== */
+      .action-body {
+        transform-origin: 7.5px 15px;
+        animation: body-bounce 1s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
       .arm-l {
-        transform-box: fill-box;
-        transform-origin: 100% 50%; /* Shoulder joint */
+        transform-origin: 2px 10px;
         animation: wave-l 0.15s infinite alternate ease-in-out;
       }
       .arm-r {
-        transform-box: fill-box;
-        transform-origin: 0% 50%; /* Shoulder joint */
-        animation: wave-r 0.15s infinite alternate ease-in-out;
+        transform-origin: 13px 10px;
+        animation: wave-r 0.18s infinite alternate ease-in-out;
       }
 
-      /* Happy Blinking Eyes */
-      .eyes-blink {
-        transform-box: fill-box;
-        transform-origin: 50% 50%;
-        animation: blink 2s infinite linear;
+      /* ===== 4. Effects: shadow + sparkles ===== */
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-bounce 1s infinite ease-in-out;
       }
 
-      /* Pixel-Art Sparkle Animations (Frame-by-frame style) */
-      .spark-center {
-        opacity: 0;
-        animation: flash-center 1.5s infinite step-end;
-        animation-delay: var(--delay, 0s);
-      }
-      
-      .spark-outer {
-        opacity: 0;
-        animation: flash-outer 1.5s infinite step-end;
-        animation-delay: var(--delay, 0s);
+      .sp { opacity: 0; }
+      .sp1 { animation: sp-flash 1.5s 0.0s step-end infinite; }
+      .sp2 { animation: sp-flash 1.5s -0.3s step-end infinite; }
+      .sp3 { animation: sp-flash 1.5s -0.6s step-end infinite; }
+      .sp4 { animation: sp-flash 1.5s -0.9s step-end infinite; }
+      .sp5 { animation: sp-flash 1.5s -1.2s step-end infinite; }
+      .sp6 { animation: sp-flash 1.5s -0.7s step-end infinite; }
+
+      /* Legs bounce with body, slightly less amplitude */
+      .legs-bounce {
+        transform-origin: 7.5px 15px;
+        animation: legs-bounce 1s infinite ease-in-out;
       }
 
-      /* Character Keyframes */
-      @keyframes bounce {
-        0%, 15%, 100% { transform: translateY(0) scaleY(1); }
-        20% { transform: translateY(0) scaleY(0.85); }     /* Anticipation squash */
-        40% { transform: translateY(-10px) scaleY(1.05); } /* Fast up + stretch */
-        50% { transform: translateY(-12px) scaleY(1); }    /* Hangtime peak */
-        60% { transform: translateY(-10px) scaleY(1.05); } /* Fast fall + stretch */
-        80% { transform: translateY(0) scaleY(0.85); }     /* Landing squash */
-        85% { transform: translateY(0) scaleY(1); }        /* Recover */
+      /* ===== Keyframes ===== */
+
+      /* Bounce: squash-anticipation -> stretch-up -> hangtime -> stretch-down -> squash-land */
+      @keyframes body-bounce {
+        0%, 12%, 100% { transform: translateY(0) scaleY(1); }
+        18%           { transform: translateY(0) scaleY(0.82); }     /* anticipation squash */
+        35%           { transform: translateY(-13px) scaleY(1.06); } /* stretch up */
+        50%           { transform: translateY(-15px) scaleY(1); }    /* hangtime peak */
+        65%           { transform: translateY(-13px) scaleY(1.06); } /* stretch down */
+        82%           { transform: translateY(0) scaleY(0.82); }     /* landing squash */
+        88%           { transform: translateY(0) scaleY(1.02); }     /* recover overshoot */
       }
 
-      @keyframes shadow {
-        0%, 15%, 100% { transform: scale(1); opacity: 0.5; }
-        20% { transform: scale(1.1); opacity: 0.6; }
-        40% { transform: scale(0.6); opacity: 0.2; }
-        50% { transform: scale(0.5); opacity: 0.15; }
-        60% { transform: scale(0.6); opacity: 0.2; }
-        80% { transform: scale(1.1); opacity: 0.6; }
-        85% { transform: scale(1); opacity: 0.5; }
+      /* Shadow contracts in air, expands on land */
+      @keyframes shadow-bounce {
+        0%, 12%, 100% { transform: scaleX(1); opacity: 0.5; }
+        18%           { transform: scaleX(1.1); opacity: 0.6; }
+        35%           { transform: scaleX(0.6); opacity: 0.2; }
+        50%           { transform: scaleX(0.5); opacity: 0.15; }
+        65%           { transform: scaleX(0.6); opacity: 0.2; }
+        82%           { transform: scaleX(1.12); opacity: 0.6; }
+        88%           { transform: scaleX(1); opacity: 0.5; }
       }
 
+      /* Legs follow body bounce, slightly less amplitude */
+      @keyframes legs-bounce {
+        0%, 12%, 100% { transform: translateY(0); }
+        18%           { transform: translateY(0); }
+        35%           { transform: translateY(-11px); }
+        50%           { transform: translateY(-13px); }
+        65%           { transform: translateY(-11px); }
+        82%           { transform: translateY(0); }
+        88%           { transform: translateY(0); }
+      }
+
+      /* Fast asymmetric arm wave */
       @keyframes wave-l {
-        0% { transform: rotate(45deg); }
-        100% { transform: rotate(85deg); }
+        0%   { transform: rotate(48deg); }
+        100% { transform: rotate(88deg); }
       }
-
       @keyframes wave-r {
-        0% { transform: rotate(-45deg); }
+        0%   { transform: rotate(-50deg); }
         100% { transform: rotate(-85deg); }
       }
 
-      @keyframes blink {
-        0%, 46%, 54%, 100% { transform: scaleY(1); }
-        50% { transform: scaleY(0.1); }
+      /* Blink with happy squint timing */
+      @keyframes eye-blink {
+        0%, 44%, 56%, 100% { transform: scaleY(1); }
+        50%                { transform: scaleY(0.08); }
       }
 
-      /* 
-        True 8-Bit Sparkle Timeline:
-        1. Small center dot appears
-        2. Outer arms appear (Full Star)
-        3. Center dot disappears (Hollow Ring)
-        4. Everything disappears 
-      */
-      @keyframes flash-center {
-        0%  { opacity: 0; }
-        10% { opacity: 1; }  /* Small dot */
-        30% { opacity: 0; }  /* Disappears, leaving hollow star */
-        100%{ opacity: 0; }
-      }
-      
-      @keyframes flash-outer {
-        0%  { opacity: 0; }
-        20% { opacity: 1; }  /* Outer arms appear to complete the star */
-        40% { opacity: 0; }  /* Entire star disappears */
-        100%{ opacity: 0; }
+      /* Pixel sparkle: step-end for pixel-art feel */
+      @keyframes sp-flash {
+        0%, 100% { opacity: 0; }
+        10%      { opacity: 1; }
+        30%      { opacity: 0; }
       }
     </style>
 
-    <!-- Reusable Pixel Art Sparkle Definition -->
+    <!-- Reusable pixel-art sparkle (+ cross shape) -->
     <g id="px-sparkle">
-      <!-- Center pixel -->
-      <rect class="spark-center" x="-0.5" y="-0.5" width="1" height="1" />
-      <!-- Outer 4 pixels forming the cross -->
-      <path class="spark-outer" d="M -0.5,-1.5 h1 v1 h-1 z 
-                                   M -0.5,0.5 h1 v1 h-1 z 
-                                   M -1.5,-0.5 h1 v1 h-1 z 
-                                   M 0.5,-0.5 h1 v1 h-1 z" />
+      <rect x="-0.5" y="-0.5" width="1" height="1"/>
+      <rect x="-0.5" y="-1.5" width="1" height="1"/>
+      <rect x="-0.5" y="0.5" width="1" height="1"/>
+      <rect x="-1.5" y="-0.5" width="1" height="1"/>
+      <rect x="0.5" y="-0.5" width="1" height="1"/>
     </g>
   </defs>
 
-  <!-- Ground Shadow -->
-  <rect id="ground-shadow" class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000"/>
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000"/>
 
-  <!-- Pixel-Art Sparkle Particles Group -->
-  <g class="sparkles">
-    <use href="#px-sparkle" x="-4" y="-2" fill="#FFD700" style="--delay: 0.0s"/>
-    <use href="#px-sparkle" x="18" y="-4" fill="#FFA000" style="--delay: 0.3s"/>
-    <use href="#px-sparkle" x="20" y="10" fill="#FFF59D" style="--delay: 0.6s"/>
-    <use href="#px-sparkle" x="-6" y="12" fill="#FFC107" style="--delay: 0.9s"/>
-    <use href="#px-sparkle" x="7" y="-8" fill="#FFF59D" style="--delay: 1.2s"/>
-    <use href="#px-sparkle" x="-2" y="6" fill="#FFD700" style="--delay: 0.7s"/>
+  <!-- Layer 1: Legs (bounce with body, slightly less amplitude) -->
+  <g id="legs" class="legs-bounce" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
   </g>
 
-  <!-- Main Animated Character -->
-  <g class="bounce-anim">
-    <!-- Body Color Group -->
-    <g id="body-color-group" fill="#DE886D">
-      <!-- Legs (Move and squash with the body naturally) -->
-      <rect id="outer-left-leg" x="3" y="13" width="1" height="2"/>
-      <rect id="inner-left-leg" x="5" y="13" width="1" height="2"/>
-      <rect id="inner-right-leg" x="9" y="13" width="1" height="2"/>
-      <rect id="outer-right-leg" x="11" y="13" width="1" height="2"/>
+  <!-- Layer 2: Upper Body (bounces) -->
+  <g class="action-body">
+    <!-- Torso -->
+    <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+    <!-- Arms (each independent animation) -->
+    <g class="arm-l">
+      <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+    </g>
+    <g class="arm-r">
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+    </g>
+    <!-- Eyes -->
+    <g class="eyes-blink" fill="#000">
+      <rect x="4" y="8" width="1" height="2"/>
+      <rect x="10" y="8" width="1" height="2"/>
+    </g>
+  </g>
 
-      <!-- Main Torso -->
-      <rect id="torso" x="2" y="6" width="11" height="7"/>
-      
-      <!-- Waving Arms -->
-      <g class="arm-l">
-        <rect id="left-arm" x="0" y="9" width="2" height="2"/>
-      </g>
-      <g class="arm-r">
-        <rect id="right-arm" x="13" y="9" width="2" height="2"/>
-      </g>
-    </g>
-    
-    <!-- Eyes Color Group -->
-    <g class="eyes-blink" fill="#000000">
-      <rect id="left-eye" x="4" y="8" width="1" height="2"/>
-      <rect id="right-eye" x="10" y="8" width="1" height="2"/>
-    </g>
+  <!-- Layer 3: Sparkle effects (staggered step-end flash) -->
+  <g class="sp sp1" fill="#FFD700">
+    <use href="#px-sparkle" x="-4" y="-2"/>
+  </g>
+  <g class="sp sp2" fill="#FFA000">
+    <use href="#px-sparkle" x="18" y="-4"/>
+  </g>
+  <g class="sp sp3" fill="#FFF59D">
+    <use href="#px-sparkle" x="20" y="10"/>
+  </g>
+  <g class="sp sp4" fill="#FFC107">
+    <use href="#px-sparkle" x="-6" y="12"/>
+  </g>
+  <g class="sp sp5" fill="#FFF59D">
+    <use href="#px-sparkle" x="7" y="-8"/>
+  </g>
+  <g class="sp sp6" fill="#FFD700">
+    <use href="#px-sparkle" x="-2" y="6"/>
   </g>
 </svg>

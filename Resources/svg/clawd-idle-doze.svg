@@ -1,49 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* Dozing — looping gentle breathing in yawn-end squashed pose, eyes shut */
+      /* ===== clawd-idle-doze.svg =====
+         4s gentle breathing loop. Eyes shut. Arms relaxed at slight angle.
+         Base pose = yawn-end pose: body scale(1.05, 0.95) translate(0, 1px),
+         eyes scaleY(0.1), arms rotate(+/-15deg) translate(0, 1px).
+         This is the intermediate state between yawn and collapse. */
+
+      /* ===== 1. Body breathing (gentle, in yawn-end squashed pose) ===== */
+
       .doze-body {
         transform-origin: 7.5px 13px;
         animation: doze-breathe 4s infinite ease-in-out;
       }
+
+      /* ===== 2. Shadow ===== */
 
       .doze-shadow {
         transform-origin: 7.5px 15.5px;
         animation: doze-shadow 4s infinite ease-in-out;
       }
 
-      .eyes-shut {
-        transform-origin: 7.5px 9px;
-        transform: scaleY(0.1);
-        transition: transform 0.3s ease-out;
-      }
+      /* ===== 3. Arms (very subtle drift, asymmetric) ===== */
 
       .arm-l-doze {
-        transform-origin: 1px 10px;
-        transform: translate(0px, 1px) rotate(-15deg);
+        transform-origin: 2px 10px;
+        animation: arm-l-doze 4s infinite ease-in-out;
       }
 
       .arm-r-doze {
-        transform-origin: 14px 10px;
-        transform: translate(0px, 1px) rotate(15deg);
+        transform-origin: 13px 10px;
+        animation: arm-r-doze 4.6s infinite ease-in-out;
       }
 
+      /* ===== 4. Eyes (shut with occasional micro-twitch) ===== */
+
+      .eyes-shut {
+        transform-origin: 7.5px 9px;
+        animation: eyes-doze-twitch 4s infinite ease-in-out;
+      }
+
+      /* ===== Keyframes ===== */
+
+      /* Breathing oscillates around yawn-end pose.
+         Start/end = scale(1.05, 0.95) translate(0, 1px)
+         Inhale peak = slightly more squashed + settled */
       @keyframes doze-breathe {
-        0%, 100% { transform: scale(1.05, 0.95) translate(0, 1px); }
-        50% { transform: scale(1.08, 0.92) translate(0, 1.8px); }
+        0%, 100%  { transform: scale(1.05, 0.95) translate(0, 1px); }
+        8%        { transform: scale(1.052, 0.948) translate(0, 1.05px); }
+        25%       { transform: scale(1.06, 0.94) translate(0, 1.3px); }
+        38%, 48%  { transform: scale(1.08, 0.92) translate(0, 1.8px); }  /* inhale peak */
+        62%       { transform: scale(1.06, 0.94) translate(0, 1.3px); }
+        78%       { transform: scale(1.05, 0.95) translate(0, 1px); }
+        92%       { transform: scale(1.048, 0.952) translate(0, 0.95px); } /* tiny exhale dip */
       }
 
+      /* Shadow tracks body width gently */
       @keyframes doze-shadow {
-        0%, 100% { transform: scaleX(1.05); opacity: 0.55; }
-        50% { transform: scaleX(1.08); opacity: 0.5; }
+        0%, 100%  { transform: scaleX(1.05); opacity: 0.55; }
+        8%        { transform: scaleX(1.052); opacity: 0.548; }
+        38%, 48%  { transform: scaleX(1.08); opacity: 0.52; }
+        78%       { transform: scaleX(1.05); opacity: 0.55; }
+        92%       { transform: scaleX(1.048); opacity: 0.56; }
+      }
+
+      /* Left arm: gentle droop with breathing, stays at ~-15deg */
+      @keyframes arm-l-doze {
+        0%, 100%  { transform: translate(0, 1px) rotate(-15deg); }
+        38%, 48%  { transform: translate(0, 1.5px) rotate(-17deg); }      /* droop with inhale */
+        78%       { transform: translate(0, 0.9px) rotate(-14deg); }
+      }
+
+      /* Right arm: similar but different timing (4.6s vs 4s) */
+      @keyframes arm-r-doze {
+        0%, 100%  { transform: translate(0, 1px) rotate(15deg); }
+        35%, 50%  { transform: translate(0, 1.6px) rotate(17.5deg); }
+        75%       { transform: translate(0, 0.85px) rotate(13.5deg); }
+      }
+
+      /* Eyes stay mostly shut but twitch once per cycle */
+      @keyframes eyes-doze-twitch {
+        0%, 40%   { transform: scaleY(0.1); }
+        44%       { transform: scaleY(0.18); }  /* micro-twitch */
+        48%, 100% { transform: scaleY(0.1); }
       }
     </style>
   </defs>
 
-  <!-- Ground Shadow -->
+  <!-- Layer 0: Shadow -->
   <rect class="doze-shadow" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.55"/>
 
-  <!-- Static Legs -->
+  <!-- Layer 1: Legs (static, independent) -->
   <g id="legs" fill="#DE886D">
     <rect x="3" y="12" width="1" height="3"/>
     <rect x="5" y="12" width="1" height="3"/>
@@ -51,20 +98,20 @@
     <rect x="11" y="12" width="1" height="3"/>
   </g>
 
-  <!-- Dozing Body (squashed yawn-end pose + gentle breathing) -->
+  <!-- Layer 2: Dozing Body (yawn-end pose + gentle breathing) -->
   <g class="doze-body">
     <!-- Torso -->
     <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
-    <!-- Left Arm (relaxed down) -->
+    <!-- Left Arm (relaxed, slight outward angle) -->
     <g class="arm-l-doze">
       <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
-    <!-- Right Arm (relaxed down) -->
+    <!-- Right Arm (relaxed, slight outward angle) -->
     <g class="arm-r-doze">
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
-    <!-- Eyes shut (JS can open via style.transform override) -->
-    <g id="eyes-doze" class="eyes-shut" fill="#000000">
+    <!-- Eyes shut -->
+    <g class="eyes-shut" fill="#000000">
       <rect x="4" y="8" width="1" height="2"/>
       <rect x="10" y="8" width="1" height="2"/>
     </g>

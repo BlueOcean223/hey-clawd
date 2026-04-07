@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
+      /* ===== 1. Independent sub-animations ===== */
+
       .breathe-anim {
         transform-origin: 7.5px 13px;
         animation: breathe 3.2s infinite ease-in-out;
@@ -11,6 +13,8 @@
         animation: eye-blink 4s infinite ease-in-out;
       }
 
+      /* ===== 2. JS hook styles ===== */
+
       #eyes-js, #body-js, #shadow-js {
         transition: transform 0.2s ease-out;
       }
@@ -18,24 +22,26 @@
         transform-origin: 7.5px 15px;
       }
 
+      /* ===== Keyframes ===== */
+
       @keyframes breathe {
         0%, 100% { transform: scale(1, 1) translate(0, 0); }
-        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
       }
 
       @keyframes eye-blink {
         0%, 10%, 100% { transform: scaleY(1); }
-        5% { transform: scaleY(0.1); }
+        5%            { transform: scaleY(0.1); }
       }
     </style>
   </defs>
 
-  <!-- Ground Shadow (JS-controlled horizontal shift) -->
+  <!-- Layer 0: Shadow (JS-controlled horizontal shift) -->
   <g id="shadow-js">
     <rect x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
   </g>
 
-  <!-- Static Legs (slightly taller for upward body shift) -->
+  <!-- Layer 1: Legs (static, independent of body transforms) -->
   <g id="legs" fill="#DE886D">
     <rect x="3" y="11" width="1" height="4"/>
     <rect x="5" y="11" width="1" height="4"/>
@@ -43,7 +49,7 @@
     <rect x="11" y="11" width="1" height="4"/>
   </g>
 
-  <!-- Upper Body (JS body-shift + CSS breathe) -->
+  <!-- Layer 2: Upper Body (JS body-shift + CSS breathe) -->
   <g id="body-js">
     <g class="breathe-anim">
       <!-- Torso -->
@@ -52,11 +58,13 @@
       <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
       <!-- Right Arm -->
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
-      <!-- Eyes: JS translate wrapper + CSS blink -->
+      <!-- Eyes: JS translate > CSS look (unused here) > CSS blink -->
       <g id="eyes-js" fill="#000000">
-        <g class="eyes-blink">
-          <rect x="4" y="8" width="1" height="2"/>
-          <rect x="10" y="8" width="1" height="2"/>
+        <g class="eyes-look">
+          <g class="eyes-blink">
+            <rect x="4" y="8" width="1" height="2"/>
+            <rect x="10" y="8" width="1" height="2"/>
+          </g>
         </g>
       </g>
     </g>

@@ -1,8 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500" shape-rendering="crispEdges">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
+      /* ===== clawd-wake.svg =====
+         3.5s one-shot (forwards). From splooted -> standing -> yawn -> idle.
+         Phase 1 (0-43%):  Wake up from splooted to standing (original 1.5s)
+         Phase 2 (43-55%): Anticipation, slight settle
+         Phase 3 (55-80%): Yawn stretch (body up, arms out, mouth open, eyes shut)
+         Phase 4 (80-92%): Yawn squash (body compress, arms down)
+         Phase 5 (92-100%): Settle to idle neutral
+
+         Start pose = sleeping splooted pose
+         End pose = standing neutral (idle-follow start) */
+
+      /* Shared one-shot properties */
       .once {
-        animation-duration: 1.5s;
+        animation-duration: 3.5s;
         animation-fill-mode: forwards;
         animation-iteration-count: 1;
       }
@@ -12,11 +24,15 @@
         transform-origin: top left;
       }
 
-      .shadow {
+      /* ===== 1. Shadow ===== */
+
+      .shadow-wake {
         transform-origin: 7.5px 15.5px;
         animation-name: shadow-wake;
         animation-timing-function: linear;
       }
+
+      /* ===== 2. Body overall motion ===== */
 
       .body-motion {
         transform-origin: 7.5px 15px;
@@ -24,220 +40,206 @@
         animation-timing-function: cubic-bezier(0.24, 0.8, 0.24, 1);
       }
 
+      /* ===== 3. Torso ===== */
+
       .torso-shift {
-        animation: torso-shift 1.5s linear forwards;
+        animation-name: torso-shift;
+        animation-timing-function: linear;
       }
 
       .torso-shape {
-        animation: torso-shape 1.5s linear forwards;
+        animation-name: torso-shape;
+        animation-timing-function: linear;
       }
 
+      /* ===== 4. Arms ===== */
+
       .arm-left {
-        animation: arm-left 1.5s linear forwards;
+        transform-origin: 2px 10px;
+        animation-name: arm-left;
+        animation-timing-function: linear;
       }
 
       .arm-right {
-        animation: arm-right 1.5s linear forwards;
+        transform-origin: 13px 10px;
+        animation-name: arm-right;
+        animation-timing-function: linear;
       }
 
+      /* ===== 5. Legs ===== */
+
       .leg-shift {
-        animation: leg-shift 1.5s linear forwards;
+        animation-name: leg-shift;
+        animation-timing-function: linear;
       }
 
       .leg-grow {
-        animation: leg-grow 1.5s linear forwards;
+        animation-name: leg-grow;
+        animation-timing-function: linear;
       }
 
+      /* ===== 6. Eyes ===== */
+
       .eye-shift {
-        animation: eye-shift 1.5s linear forwards;
+        animation-name: eye-shift;
+        animation-timing-function: linear;
       }
 
       .eye-shape {
-        animation: eye-shape 1.5s linear forwards;
+        animation-name: eye-shape;
+        animation-timing-function: linear;
       }
 
+      /* ===== 7. Yawn mouth ===== */
+
+      .yawn-mouth {
+        opacity: 0;
+        animation-name: yawn-mouth;
+        animation-timing-function: ease-in-out;
+      }
+
+      /* ===== Keyframes ===== */
+
+      /* Shadow: wide splooted -> narrow standing -> yawn narrow -> settle */
       @keyframes shadow-wake {
-        0% {
-          opacity: 0.4;
-          transform: scaleX(1);
-        }
-        20% {
-          opacity: 0.47;
-          transform: scaleX(0.56);
-        }
-        33.333% {
-          opacity: 0.54;
-          transform: scaleX(0.42);
-        }
-        46.667% {
-          opacity: 0.48;
-          transform: scaleX(0.48);
-        }
-        56% {
-          opacity: 0.52;
-          transform: scaleX(0.56);
-        }
-        66.667%, 100% {
-          opacity: 0.5;
-          transform: scaleX(0.5294);
-        }
+        0%         { opacity: 0.4; transform: scaleX(1); }
+        3%         { opacity: 0.41; transform: scaleX(0.92); }
+        6%         { opacity: 0.44; transform: scaleX(0.72); }
+        9%         { opacity: 0.48; transform: scaleX(0.55); }
+        14%        { opacity: 0.53; transform: scaleX(0.42); }
+        19%        { opacity: 0.49; transform: scaleX(0.47); }
+        24%        { opacity: 0.52; transform: scaleX(0.55); }
+        29%, 55%   { opacity: 0.5; transform: scaleX(0.53); }
+        /* yawn: body stretches up, shadow narrows */
+        65%, 75%   { opacity: 0.42; transform: scaleX(0.45); }
+        /* yawn squash: shadow widens */
+        85%        { opacity: 0.55; transform: scaleX(0.58); }
+        92%, 100%  { opacity: 0.5; transform: scaleX(0.53); }
       }
 
+      /* Body: splooted -> spring up -> settle -> yawn stretch -> squash -> settle */
       @keyframes body-motion {
-        0% {
-          transform: translate(0, 0) scale(1, 1) rotate(0deg);
-        }
-        6.667% {
-          transform: translate(0, 0.35px) scale(1.03, 0.96) rotate(0deg);
-        }
-        20% {
-          transform: translate(0, -2.6px) scale(0.98, 1.04) rotate(-6deg);
-        }
-        33.333% {
-          transform: translate(0, -4.1px) scale(0.9, 1.22) rotate(2deg);
-        }
-        46.667% {
-          transform: translate(0, -2px) scale(0.95, 1.11) rotate(0deg);
-        }
-        54% {
-          transform: translate(0, -0.55px) scale(1.02, 0.98) rotate(-4deg);
-        }
-        60% {
-          transform: translate(0, -0.2px) scale(0.99, 1.02) rotate(2.5deg);
-        }
-        66.667%, 100% {
-          transform: translate(0, 0) scale(1, 1) rotate(0deg);
-        }
+        0%         { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
+        3%         { transform: translate(0, 0.4px) scale(1.03, 0.96) rotate(0deg); }
+        6%         { transform: translate(0, -1.2px) scale(0.99, 1.02) rotate(-3deg); }
+        9%         { transform: translate(0, -2.8px) scale(0.96, 1.08) rotate(-5deg); }
+        14%        { transform: translate(0, -4.2px) scale(0.9, 1.22) rotate(2deg); }
+        18%        { transform: translate(0, -2.8px) scale(0.94, 1.14) rotate(0deg); }
+        21%        { transform: translate(0, -1.2px) scale(0.98, 1.04) rotate(-2deg); }
+        25%        { transform: translate(0, -0.3px) scale(1.02, 0.97) rotate(-3deg); }
+        27%        { transform: translate(0, -0.1px) scale(0.99, 1.01) rotate(1.5deg); }
+        30%, 50%   { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
+        /* yawn: body stretches up */
+        55%        { transform: translate(0, 0.3px) scale(1.02, 0.97) rotate(0deg); }
+        62%, 75%   { transform: translate(0, -0.8px) scale(0.97, 1.07) rotate(0deg); }
+        /* yawn end: squash down */
+        83%        { transform: translate(0, 0.5px) scale(1.04, 0.96) rotate(0deg); }
+        90%        { transform: translate(0, 0.2px) scale(1.01, 0.99) rotate(0deg); }
+        95%, 100%  { transform: translate(0, 0) scale(1, 1) rotate(0deg); }
       }
 
+      /* Torso position: splooted offset -> normal (completes early, stays) */
       @keyframes torso-shift {
-        0% {
-          transform: translate(-1px, 4px);
-        }
-        8% {
-          transform: translate(-0.82px, 3.4px);
-        }
-        20%, 100% {
-          transform: translate(0, 0);
-        }
+        0%         { transform: translate(-1px, 4px); }
+        3%         { transform: translate(-0.82px, 3.4px); }
+        6%         { transform: translate(-0.4px, 1.5px); }
+        9%, 100%   { transform: translate(0, 0); }
       }
 
+      /* Torso shape: squashed -> normal */
       @keyframes torso-shape {
-        0% {
-          transform: scale(1.1818, 0.7143);
-        }
-        8% {
-          transform: scale(1.14, 0.76);
-        }
-        20%, 100% {
-          transform: scale(1, 1);
-        }
+        0%         { transform: scale(1.18, 0.71); }
+        3%         { transform: scale(1.14, 0.76); }
+        6%         { transform: scale(1.06, 0.88); }
+        9%, 100%   { transform: scale(1, 1); }
       }
 
+      /* Left arm: flat -> neutral -> yawn reach up -> back down */
       @keyframes arm-left {
-        0% {
-          transform: translate(-1px, 4px);
-        }
-        8% {
-          transform: translate(-0.8px, 3.4px);
-        }
-        20%, 100% {
-          transform: translate(0, 0);
-        }
+        0%         { transform: translate(-1px, 4px) rotate(0deg); }
+        3%         { transform: translate(-0.8px, 3.4px) rotate(0deg); }
+        6%         { transform: translate(-0.35px, 1.5px) rotate(0deg); }
+        9%, 50%    { transform: translate(0, 0) rotate(0deg); }
+        /* yawn: arm reaches up */
+        62%, 75%   { transform: translate(-1px, -2px) rotate(-40deg); }
+        /* yawn end: arm drops */
+        85%        { transform: translate(0, 0.5px) rotate(-5deg); }
+        92%, 100%  { transform: translate(0, 0) rotate(0deg); }
       }
 
+      /* Right arm: flat -> neutral -> yawn reach up -> back down */
       @keyframes arm-right {
-        0% {
-          transform: translate(1px, 4px);
-        }
-        8% {
-          transform: translate(0.8px, 3.4px);
-        }
-        20%, 100% {
-          transform: translate(0, 0);
-        }
+        0%         { transform: translate(1px, 4px) rotate(0deg); }
+        3%         { transform: translate(0.8px, 3.4px) rotate(0deg); }
+        6%         { transform: translate(0.35px, 1.5px) rotate(0deg); }
+        9%, 50%    { transform: translate(0, 0) rotate(0deg); }
+        /* yawn: arm reaches up */
+        62%, 75%   { transform: translate(1px, -2px) rotate(40deg); }
+        /* yawn end: arm drops */
+        85%        { transform: translate(0, 0.5px) rotate(5deg); }
+        92%, 100%  { transform: translate(0, 0) rotate(0deg); }
       }
 
+      /* Legs: stubs -> full (completes early, stays) */
       @keyframes leg-shift {
-        0% {
-          transform: translate(0, -2px);
-        }
-        8% {
-          transform: translate(0, -1.5px);
-        }
-        20%, 100% {
-          transform: translate(0, 0);
-        }
+        0%         { transform: translate(0, -2px); }
+        3%         { transform: translate(0, -1.5px); }
+        6%         { transform: translate(0, -0.5px); }
+        9%, 100%   { transform: translate(0, 0); }
       }
 
       @keyframes leg-grow {
-        0% {
-          transform: scale(1, 0.25);
-        }
-        8% {
-          transform: scale(1, 0.45);
-        }
-        20%, 100% {
-          transform: scale(1, 1);
-        }
+        0%         { transform: scale(1, 0.25); }
+        3%         { transform: scale(1, 0.45); }
+        6%         { transform: scale(1, 0.75); }
+        9%, 100%   { transform: scale(1, 1); }
       }
 
+      /* Eyes: dashes -> pop open -> flutter -> stable -> yawn shut -> open */
       @keyframes eye-shift {
-        0% {
-          transform: translate(-0.5px, 4.5px);
-        }
-        6.667% {
-          transform: translate(-0.5px, 4.15px);
-        }
-        10% {
-          transform: translate(-0.2px, 1px);
-        }
-        14% {
-          transform: translate(-0.06px, 0.2px);
-        }
-        20%, 54% {
-          transform: translate(0, 0);
-        }
-        58% {
-          transform: translate(0, 0.5px);
-        }
-        62%, 100% {
-          transform: translate(0, 0);
-        }
+        0%         { transform: translate(-0.5px, 4.5px); }
+        3%         { transform: translate(-0.5px, 4.15px); }
+        4%         { transform: translate(-0.2px, 1px); }
+        6%         { transform: translate(-0.06px, 0.2px); }
+        9%, 100%   { transform: translate(0, 0); }
       }
 
       @keyframes eye-shape {
-        0% {
-          transform: scale(2, 0.2);
-        }
-        6.667% {
-          transform: scale(2.12, 0.12);
-        }
-        10% {
-          transform: scale(1.45, 1.8);
-        }
-        14% {
-          transform: scale(0.92, 1.08);
-        }
-        20%, 54% {
-          transform: scale(1, 1);
-        }
-        58% {
-          transform: scale(1, 0.08);
-        }
-        62% {
-          transform: scale(1, 1.08);
-        }
-        66.667%, 100% {
-          transform: scale(1, 1);
-        }
+        0%         { transform: scale(2, 0.2); }
+        3%         { transform: scale(2.1, 0.12); }
+        4%         { transform: scale(1.5, 1.6); }
+        6%         { transform: scale(1.1, 1.15); }
+        8%         { transform: scale(0.95, 0.9); }
+        9%         { transform: scale(1.05, 1.1); }
+        12%, 24%   { transform: scale(1, 1); }
+        /* drowsy blink */
+        25%        { transform: scale(1, 0.08); }
+        27%        { transform: scale(1, 1.08); }
+        29%, 50%   { transform: scale(1, 1); }
+        /* yawn: eyes squeeze shut */
+        58%        { transform: scale(1, 0.6); }
+        62%, 78%   { transform: scale(1, 0.1); }
+        /* yawn end: eyes open */
+        83%        { transform: scale(1, 0.1); }
+        87%        { transform: scale(1, 1.1); }
+        92%, 100%  { transform: scale(1, 1); }
+      }
+
+      /* Yawn mouth: appears during yawn phase only */
+      @keyframes yawn-mouth {
+        0%, 55%    { opacity: 0; }
+        60%, 78%   { opacity: 1; }
+        84%, 100%  { opacity: 0; }
       }
     </style>
   </defs>
 
-  <rect class="once shadow" x="-1" y="15" width="17" height="1" fill="#000000" opacity="0.4"/>
+  <!-- Layer 0: Shadow -->
+  <rect class="once shadow-wake" x="-1" y="15" width="17" height="1" fill="#000000" opacity="0.4"/>
 
+  <!-- Layer 1+2: Body (motion wrapper > parts) -->
   <g class="once body-motion">
+    <!-- Legs (grow from stubs) -->
     <g fill="#DE886D">
       <g class="once leg-shift">
         <rect class="once scale-top-left leg-grow" x="3" y="11" width="1" height="4"/>
@@ -253,18 +255,27 @@
       </g>
     </g>
 
+    <!-- Torso (unsquash from flat) -->
     <g class="once torso-shift">
       <rect class="once scale-top-left torso-shape" x="2" y="6" width="11" height="7" fill="#DE886D"/>
     </g>
 
+    <!-- Left Arm -->
     <g class="once arm-left">
       <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
 
+    <!-- Right Arm -->
     <g class="once arm-right">
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
 
+    <!-- Yawn mouth -->
+    <g class="once yawn-mouth">
+      <rect x="6" y="11" width="3" height="2" fill="#8B4513"/>
+    </g>
+
+    <!-- Eyes (open from dashes, flutter, yawn shut, reopen) -->
     <g fill="#000000">
       <g class="once eye-shift">
         <rect class="once scale-top-left eye-shape" x="4" y="8" width="1" height="2"/>

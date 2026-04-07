@@ -1,94 +1,67 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
-  <defs>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500" shape-rendering="crispEdges">
+  <style>
+    .hc-body { animation: hc-shake 2.5s infinite; transform-origin: 7.5px 15px; }
+    .hc-l-arm { transform-origin: 2px 10px; animation: hc-arms-up 2.5s infinite; }
+    .hc-r-arm { transform-origin: 13px 10px; animation: hc-arms-up 2.5s infinite; }
+    .hc-smoke { fill: #555; opacity: 0; animation: hc-smoke-puff 2.5s infinite; }
+    .hc-exclamation { fill: #FF0000; opacity: 0; animation: hc-alert-up 2.5s infinite; }
+    
+    @keyframes hc-shake {
+      0%, 20% { transform: translateX(0); }
+      2%, 6%, 10%, 14%, 18% { transform: translateX(-2px); }
+      4%, 8%, 12%, 16% { transform: translateX(2px); }
+      22%, 100% { transform: translate(0, 0.5px); } /* Tense tremble base */
+      25%, 35%, 45%, 55%, 65%, 75%, 85%, 95% { transform: translate(0.2px, 0.5px); }
+      30%, 40%, 50%, 60%, 70%, 80%, 90% { transform: translate(-0.2px, 0.5px); }
+    }
+    
+    @keyframes hc-arms-up {
+      0%, 20% { transform: rotate(0); }
+      25%, 100% { transform: rotate(-45deg); } /* L-arm up, R-arm is mirrored by transform-origin logic below */
+    }
+    
+    @keyframes hc-smoke-puff {
+      22% { opacity: 0; transform: translateY(0) scale(1); }
+      35% { opacity: 0.8; transform: translateY(-5px) scale(1.5); }
+      50% { opacity: 0; transform: translateY(-10px) scale(2); }
+    }
+    
+    @keyframes hc-alert-up {
+      0%, 5% { opacity: 0; transform: translateY(0); }
+      10%, 40% { opacity: 1; transform: translateY(-5px); }
+      45%, 100% { opacity: 0; transform: translateY(-10px); }
+    }
+  </style>
+  
+  <g class="hc-body">
+    <rect x="3" y="15" width="9" height="1" fill="rgba(0,0,0,0.15)" />
+    <rect x="3" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="5" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="9" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="11" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="2" y="6" width="11" height="7" fill="#DE886D" />
+    <rect class="hc-l-arm" x="0" y="9" width="2" height="2" fill="#DE886D" />
+    <g style="transform-origin: 13px 10px; animation: hc-arms-up-r 2.5s infinite;">
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D" />
+    </g>
     <style>
-      .body-exhausted {
-        transform-origin: 7.5px 15px;
-        animation: heavy-breathe 2.5s infinite ease-in-out;
-      }
-      .arm-fan {
-        transform-origin: 14px 10px;
-        animation: fan-self 0.4s infinite alternate ease-in-out;
-      }
-      .smoke {
-        opacity: 0;
-        animation: puff-smoke 3s infinite ease-out;
-      }
-      .sm1 { animation-delay: 0s; }
-      .sm2 { animation-delay: 1s; }
-      .sm3 { animation-delay: 2s; }
-
-      /* Error warning flash */
-      .error-warning {
-        animation: error-flash 0.8s infinite ease-in-out;
-      }
-
-      @keyframes heavy-breathe {
-        0%, 100% { transform: scale(1, 1) translateY(0); }
-        50% { transform: scale(1.05, 0.9) translateY(1.5px); }
-      }
-      @keyframes fan-self {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(-60deg); }
-      }
-      @keyframes puff-smoke {
-        0% { transform: translate(7.5px, 6px) scale(0.5); opacity: 0; }
-        20% { opacity: 0.6; }
-        100% { transform: translate(7.5px, -15px) scale(2); opacity: 0; }
-      }
-      @keyframes error-flash {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.15; }
-      }
+      @keyframes hc-arms-up-r { 0%, 20% { transform: rotate(0); } 25%, 100% { transform: rotate(45deg); } }
     </style>
-    <g id="smoke-puff">
-      <rect x="-1" y="-1" width="2" height="2" fill="#B0BEC5" rx="0.5"/>
-      <rect x="0" y="-2" width="2" height="2" fill="#CFD8DC" rx="0.5"/>
-    </g>
-  </defs>
-
-  <rect id="ground-shadow" x="-1" y="15" width="17" height="1" fill="#000000" opacity="0.5"/>
-
-  <!-- Smoke -->
-  <g>
-    <use href="#smoke-puff" class="smoke sm1"/>
-    <use href="#smoke-puff" class="smoke sm2" transform="translate(-2, 0)"/>
-    <use href="#smoke-puff" class="smoke sm3" transform="translate(2, 0)"/>
-  </g>
-
-  <g class="body-exhausted">
-    <!-- Sploot Legs -->
-    <g fill="#DE886D">
-      <rect x="3" y="9" width="1" height="1"/>
-      <rect x="5" y="9" width="1" height="1"/>
-      <rect x="9" y="9" width="1" height="1"/>
-      <rect x="11" y="9" width="1" height="1"/>
-    </g>
-
-    <!-- Torso Sploot -->
-    <g fill="#DE886D">
-      <rect x="1" y="10" width="13" height="5"/>
-      <rect x="-1" y="13" width="2" height="2"/>
-    </g>
-
-    <!-- Fanning Arm (closer to body) -->
-    <g class="arm-fan">
-      <rect x="13" y="11" width="2" height="2" fill="#DE886D"/>
-    </g>
-
-    <!-- XX Eyes -->
-    <g fill="#000000">
-      <!-- Left X -->
-      <rect x="3" y="12" width="0.6" height="2.2" transform="rotate(45 3.3 13.1)"/>
-      <rect x="3" y="12" width="0.6" height="2.2" transform="rotate(-45 3.3 13.1)"/>
-      <!-- Right X -->
-      <rect x="10" y="12" width="0.6" height="2.2" transform="rotate(45 10.3 13.1)"/>
-      <rect x="10" y="12" width="0.6" height="2.2" transform="rotate(-45 10.3 13.1)"/>
+    <!-- X-eyes: clean vector × -->
+    <g stroke="#000" stroke-width="0.9" stroke-linecap="round">
+      <line x1="3.2" y1="7.2" x2="5.2" y2="9.2"/>
+      <line x1="5.2" y1="7.2" x2="3.2" y2="9.2"/>
+      <line x1="9.2" y1="7.2" x2="11.2" y2="9.2"/>
+      <line x1="11.2" y1="7.2" x2="9.2" y2="9.2"/>
     </g>
   </g>
-
-  <!-- Error Warning (flashing) -->
-  <g class="error-warning">
-    <!-- Error text only -->
-    <text x="7.5" y="6" text-anchor="middle" font-family="'Söhne', 'Helvetica Neue', Arial, sans-serif" font-size="3.5" font-weight="700" fill="#FF3B30">ERROR</text>
+  
+  <rect class="hc-smoke" x="5" y="2" width="2" height="2" />
+  <rect class="hc-smoke" x="8" y="0" width="1" height="1" style="animation-delay: 0.2s;" />
+  <rect class="hc-smoke" x="4" y="-2" width="1" height="1" style="animation-delay: 0.4s;" />
+  
+  <g class="hc-exclamation">
+    <rect x="7" y="-5" width="1" height="3" />
+    <rect x="7" y="-1" width="1" height="1" />
   </g>
 </svg>

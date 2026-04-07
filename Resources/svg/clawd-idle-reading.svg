@@ -1,120 +1,58 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* ═══ 14s story: arm sway → grab book → read (with thought bits) → book slides away ═══ */
+      /* ===== 14s reading loop: arm sway > book appear > read (scan + nod) > book away ===== */
 
-      /* ── Independent ── */
+      /* ===== 1. Independent sub-animations ===== */
 
-      .breathe {
+      .breathe-anim {
         transform-origin: 7.5px 13px;
         animation: breathe 3.2s infinite ease-in-out;
       }
-      @keyframes breathe {
-        0%, 100% { transform: scale(1, 1) translate(0, 0); }
-        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
-      }
 
-      .blink {
+      .eyes-blink {
         transform-origin: 7.5px 9px;
-        animation: blink 5s infinite;
-      }
-      @keyframes blink {
-        0%, 6%, 100% { transform: scaleY(1); }
-        3% { transform: scaleY(0.1); }
+        animation: eye-blink 5s infinite ease-in-out;
       }
 
-      .shadow {
+      .shadow-anim {
         transform-origin: 7.5px 15.5px;
-        animation: shadow-breathe 3.2s infinite ease-in-out;
-      }
-      @keyframes shadow-breathe {
-        0%, 100% { transform: scaleX(1); opacity: 0.5; }
-        50% { transform: scaleX(1.03); opacity: 0.47; }
+        animation: shadow-sync 3.2s infinite ease-in-out;
       }
 
-      /* ── Main 14s ── */
+      /* ===== 2. Main 14s timeline ===== */
 
-      /* Body: nod twice during reading */
       .body-nod {
+        transform-origin: 7.5px 13px;
         animation: body-nod 14s infinite ease-in-out;
       }
-      @keyframes body-nod {
-        0%, 36%, 44%, 54%, 62%, 100% { transform: translateY(0); }
-        40% { transform: translateY(0.4px); }
-        58% { transform: translateY(0.4px); }
-      }
 
-      /* Left arm: BIG casual sway → reach → hold → follow book → return */
+      /* ===== 3. Component animations ===== */
+
       .arm-l {
         transform-origin: 2px 10px;
         animation: arm-l-anim 14s infinite ease-in-out;
       }
-      @keyframes arm-l-anim {
-        /* sway (big, visible fidgeting) */
-        0%        { transform: translate(0, 0) rotate(0deg); }
-        2.5%      { transform: translate(-0.5px, 0) rotate(25deg); }
-        5%        { transform: translate(0.3px, 0) rotate(-20deg); }
-        7.5%      { transform: translate(-0.5px, 0) rotate(22deg); }
-        10%       { transform: translate(0, 0) rotate(0deg); }
-        /* reach out left to grab book */
-        18%       { transform: translate(-1px, -1px) rotate(15deg); }
-        /* bring to chest (hand visible at book left edge) */
-        26%       { transform: translate(2px, 0) rotate(-5deg); }
-        /* hold during reading */
-        76%       { transform: translate(2px, 0) rotate(-5deg); }
-        /* follow book sliding down */
-        84%       { transform: translate(1px, 2px) rotate(0deg); }
-        /* return to normal */
-        92%       { transform: translate(0, 0) rotate(0deg); }
-        100%      { transform: translate(0, 0) rotate(0deg); }
-      }
 
-      /* Right arm: nudge inward during reading */
       .arm-r {
+        transform-origin: 14px 10px;
         animation: arm-r-anim 14s infinite ease-in-out;
       }
-      @keyframes arm-r-anim {
-        0%, 22%   { transform: translate(0, 0); }
-        28%, 76%  { transform: translate(-1px, 0); }
-        84%, 100% { transform: translate(0, 0); }
+
+      .eyes-read {
+        animation: eyes-read 14s infinite ease-in-out;
       }
 
-      /* Book: appear in hand → widen to chest → slide down → gone */
       .book {
         opacity: 0;
         transform-origin: 7px 11.5px;
         animation: book-anim 14s infinite ease-in-out;
       }
-      @keyframes book-anim {
-        0%, 12%   { opacity: 0; transform: translate(-5px, -2px) scaleX(0.5); }
-        18%       { opacity: 1; transform: translate(-5px, -2px) scaleX(0.5); }
-        26%       { opacity: 1; transform: translate(0, 0) scaleX(1); }
-        76%       { opacity: 1; transform: translate(0, 0) scaleX(1); }
-        84%       { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
-        100%      { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
-      }
 
-      /* Eyes: normal → slow gaze down → drift → normal */
-      .eyes-read {
-        animation: eyes-read 14s infinite ease-in-out;
-      }
-      @keyframes eyes-read {
-        0%, 22%   { transform: translate(0, 0); }
-        30%       { transform: translate(0, 0.5px); }
-        46%       { transform: translate(-0.3px, 0.5px); }
-        60%       { transform: translate(0.3px, 0.5px); }
-        70%       { transform: translate(0, 0.5px); }
-        80%, 100% { transform: translate(0, 0); }
-      }
+      /* ===== 4. Thought particle effects ===== */
 
-      /* ── Thought particles (visible only during reading) ── */
       .reading-fx {
         animation: reading-fx-vis 14s infinite;
-      }
-      @keyframes reading-fx-vis {
-        0%, 27%   { opacity: 0; }
-        32%, 75%  { opacity: 1; }
-        78%, 100% { opacity: 0; }
       }
 
       .thought-bit {
@@ -126,18 +64,122 @@
       .t3 { animation-delay: -1.4s; }
       .t4 { animation-delay: -2.1s; }
 
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      @keyframes eye-blink {
+        0%, 6%, 100% { transform: scaleY(1); }
+        3%           { transform: scaleY(0.1); }
+      }
+
+      @keyframes shadow-sync {
+        0%, 100% { transform: scaleX(1); opacity: 0.5; }
+        50%      { transform: scaleX(1.03); opacity: 0.47; }
+      }
+
+      /*
+       * 14s timeline:
+       *   0%-10%   arm fidget / idle sway
+       *  12%-20%   left arm reaches out for book
+       *  22%-28%   book appears, arm brings to chest
+       *  30%-72%   reading: eyes scan, two nods
+       *  74%-82%   book slides away / arm releases
+       *  84%-92%   arms return, settle
+       *  94%-100%  idle
+       */
+
+      @keyframes body-nod {
+        0%, 34%         { transform: translateY(0); }
+        /* first nod */
+        38%             { transform: translateY(0.5px); }
+        40%             { transform: translateY(0); }
+        /* pause */
+        50%, 54%        { transform: translateY(0); }
+        /* second nod */
+        58%             { transform: translateY(0.5px); }
+        60%             { transform: translateY(0); }
+        /* settle */
+        66%, 100%       { transform: translateY(0); }
+      }
+
+      @keyframes arm-l-anim {
+        /* idle fidget */
+        0%              { transform: translate(0, 0) rotate(0deg); }
+        2.5%            { transform: translate(-0.5px, 0) rotate(25deg); }
+        5%              { transform: translate(0.3px, 0) rotate(-20deg); }
+        7.5%            { transform: translate(-0.5px, 0) rotate(22deg); }
+        10%             { transform: translate(0, 0) rotate(0deg); }
+        /* reach out to grab book */
+        18%             { transform: translate(-1px, -1px) rotate(15deg); }
+        /* bring to chest */
+        26%             { transform: translate(2px, 0) rotate(-5deg); }
+        /* hold during reading */
+        76%             { transform: translate(2px, 0) rotate(-5deg); }
+        /* follow book sliding down */
+        84%             { transform: translate(1px, 2px) rotate(0deg); }
+        /* return to normal */
+        92%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes arm-r-anim {
+        0%, 22%         { transform: translate(0, 0) rotate(0deg); }
+        /* nudge inward to hold book */
+        28%             { transform: translate(-1px, 0) rotate(5deg); }
+        /* hold */
+        76%             { transform: translate(-1px, 0) rotate(5deg); }
+        /* release */
+        84%             { transform: translate(-0.5px, 0.5px) rotate(2deg); }
+        90%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes eyes-read {
+        0%, 22%         { transform: translate(0, 0); }
+        /* gaze down at book */
+        30%             { transform: translate(0, 0.5px); }
+        /* slow left-right scan */
+        40%             { transform: translate(-0.5px, 0.5px); }
+        50%             { transform: translate(0.5px, 0.5px); }
+        60%             { transform: translate(-0.3px, 0.5px); }
+        70%             { transform: translate(0.3px, 0.5px); }
+        /* look up, done reading */
+        80%, 100%       { transform: translate(0, 0); }
+      }
+
+      @keyframes book-anim {
+        0%, 12%         { opacity: 0; transform: translate(-5px, -2px) scaleX(0.5); }
+        /* appear in hand */
+        18%             { opacity: 1; transform: translate(-5px, -2px) scaleX(0.5); }
+        /* widen to chest */
+        26%             { opacity: 1; transform: translate(0, 0) scaleX(1); }
+        /* hold open during reading */
+        76%             { opacity: 1; transform: translate(0, 0) scaleX(1); }
+        /* slide down and disappear */
+        84%             { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
+        100%            { opacity: 0; transform: translate(0, 4px) scaleX(0.8); }
+      }
+
+      @keyframes reading-fx-vis {
+        0%, 27%         { opacity: 0; }
+        32%, 75%        { opacity: 1; }
+        78%, 100%       { opacity: 0; }
+      }
+
       @keyframes float-thought {
-        0%   { transform: translateY(0); opacity: 0; }
-        10%  { opacity: 0.6; }
-        100% { transform: translateY(-12px); opacity: 0; }
+        0%              { transform: translateY(0); opacity: 0; }
+        10%             { opacity: 0.6; }
+        100%            { transform: translateY(-12px); opacity: 0; }
       }
     </style>
   </defs>
 
-  <!-- Ground shadow -->
-  <rect class="shadow" x="3" y="15" width="9" height="1" fill="#000"/>
+  <!-- Layer 0: Ground Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000"/>
 
-  <!-- Thought particles (behind body, float up during reading) -->
+  <!-- Layer 0.5: Thought particles (behind body, float up during reading) -->
   <g class="reading-fx">
     <rect class="thought-bit t1" x="2"  y="4" width="2" height="2" fill="#40C4FF"/>
     <rect class="thought-bit t2" x="8"  y="3" width="1.5" height="1.5" fill="#B388FF"/>
@@ -145,33 +187,35 @@
     <rect class="thought-bit t4" x="5"  y="3" width="1.5" height="1.5" fill="#69F0AE"/>
   </g>
 
-  <!-- Nod wrapper -->
-  <g class="body-nod">
+  <!-- Layer 1: Static Legs (independent of body transforms) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="11" width="1" height="4"/>
+    <rect x="5" y="11" width="1" height="4"/>
+    <rect x="9" y="11" width="1" height="4"/>
+    <rect x="11" y="11" width="1" height="4"/>
+  </g>
 
-    <!-- ── Body layer ── -->
-    <g class="breathe">
-      <!-- Legs (idle style) -->
-      <g fill="#DE886D">
-        <rect x="3" y="11" width="1" height="4"/>
-        <rect x="5" y="11" width="1" height="4"/>
-        <rect x="9" y="11" width="1" height="4"/>
-        <rect x="11" y="11" width="1" height="4"/>
-      </g>
+  <!-- Layer 2: Nod wrapper (main 14s timeline) > Breathe > Body -->
+  <g class="body-nod">
+    <g class="breathe-anim">
+
       <!-- Torso -->
-      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
-      <!-- Eyes -->
+      <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Eyes: read gaze > blink -->
       <g class="eyes-read">
-        <g class="blink" fill="#000">
+        <g class="eyes-blink" fill="#000000">
           <rect x="4" y="8" width="1" height="2"/>
           <rect x="10" y="8" width="1" height="2"/>
         </g>
       </g>
+
     </g>
 
-    <!-- ── Book layer (on top of body, chest level) ── -->
-    <g class="breathe">
+    <!-- Book layer (on top of body torso, breathes with nod wrapper) -->
+    <g class="breathe-anim">
       <g class="book">
-        <!-- Back cover (blue) -->
+        <!-- Back cover -->
         <rect x="3" y="10" width="8" height="4" fill="#4A90D9"/>
         <!-- Spine -->
         <rect x="7" y="10" width="1" height="4" fill="#2E6AB0"/>
@@ -189,11 +233,17 @@
       </g>
     </g>
 
-    <!-- ── Arms layer (on top of book) ── -->
-    <g class="breathe">
+    <!-- Arms layer (on top of book, also breathes) -->
+    <g class="breathe-anim">
       <g fill="#DE886D">
-        <g class="arm-l"><rect x="0" y="9" width="2" height="2"/></g>
-        <g class="arm-r"><rect x="13" y="9" width="2" height="2"/></g>
+        <!-- Left Arm (fidget + grab + hold + release) -->
+        <g class="arm-l">
+          <rect x="0" y="9" width="2" height="2"/>
+        </g>
+        <!-- Right Arm (nudge inward to hold, asymmetric) -->
+        <g class="arm-r">
+          <rect x="13" y="9" width="2" height="2"/>
+        </g>
       </g>
     </g>
 

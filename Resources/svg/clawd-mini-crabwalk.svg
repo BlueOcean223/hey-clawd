@@ -1,76 +1,122 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      .body-hunch {
-        transform-origin: 7.5px 15px;
-        animation: hunch-walk 2s infinite alternate ease-in-out;
-      }
-      .leg-1 { animation: sneak-1 0.5s infinite linear; transform-origin: top center; transform-box: fill-box; }
-      .leg-2 { animation: sneak-2 0.5s infinite linear; transform-origin: top center; transform-box: fill-box; }
-      .shadow-sneak {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-shift 2s infinite alternate ease-in-out;
+      /* ===== 1. Sub-animations (breathe, blink) ===== */
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
       }
 
-      /* Sneaking forward and backward */
-      @keyframes hunch-walk {
-        0% { transform: translate(-2px, 1px) rotate(2deg); }
-        100% { transform: translate(3px, 1px) rotate(2deg); }
-      }
-      @keyframes shadow-shift {
-        0% { transform: translateX(-2px) scale(0.9); opacity: 0.4; }
-        100% { transform: translateX(3px) scale(0.9); opacity: 0.4; }
-      }
-
-      /* Fast tiptoe / sneak leg movement */
-      @keyframes sneak-1 {
-        0%, 100% { transform: rotate(0deg) scaleY(1); }
-        50% { transform: rotate(-25deg) scaleY(0.7); }
-      }
-      @keyframes sneak-2 {
-        0%, 100% { transform: rotate(-25deg) scaleY(0.7); }
-        50% { transform: rotate(0deg) scaleY(1); }
-      }
-
-      /* Eyes: look right (toward destination), occasionally glance back and blink */
-      .eyes-crabwalk {
+      .eyes-blink {
         transform-origin: 7.5px 9px;
         animation: crab-eyes 5s infinite ease-in-out;
       }
+
+      /* ===== 2. Main timeline: 6s sideways walk ===== */
+      /*
+        Entire character sways right 0->8px over 3s, then back.
+        Body bobs up/down 0.8s. Legs alternate stepping 0.4s.
+        Eyes look right (toward destination), occasionally glance back + blink.
+      */
+
+      .crab-sway {
+        animation: crab-sway 6s ease-in-out infinite;
+      }
+
+      /* ===== 3. Limb animations ===== */
+      .arm-swing {
+        transform-origin: 2px 9px;
+        animation: arm-swing 6s ease-in-out infinite;
+      }
+
+      .leg-a {
+        animation: step-a 0.4s ease-in-out infinite;
+      }
+
+      .leg-b {
+        animation: step-b 0.4s ease-in-out infinite;
+      }
+
+      /* ===== Keyframes ===== */
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      @keyframes crab-sway {
+        0%, 100% { transform: translateX(0); }
+        50%      { transform: translateX(8px); }
+      }
+
+      @keyframes step-a {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-1px); }
+      }
+
+      @keyframes step-b {
+        0%, 100% { transform: translateY(-1px); }
+        50%      { transform: translateY(0); }
+      }
+
+      @keyframes arm-swing {
+        0%, 100% { transform: rotate(0deg); }
+        25%      { transform: rotate(20deg); }
+        75%      { transform: rotate(-10deg); }
+      }
+
+      /* Eyes: look right, occasionally glance back + blink */
       @keyframes crab-eyes {
-        0%, 55%  { transform: translateX(2px) scaleY(1); }
-        62%      { transform: translateX(0) scaleY(1); }
-        66%      { transform: translateX(0) scaleY(0.1); }
-        70%      { transform: translateX(0) scaleY(1); }
-        75%      { transform: translateX(0) scaleY(0.1); }
-        80%, 85% { transform: translateX(0) scaleY(1); }
+        0%, 55%   { transform: translateX(2px) scaleY(1); }
+        62%       { transform: translateX(0) scaleY(1); }
+        66%       { transform: translateX(0) scaleY(0.1); }
+        70%       { transform: translateX(0) scaleY(1); }
+        75%       { transform: translateX(0) scaleY(0.1); }
+        80%, 85%  { transform: translateX(0) scaleY(1); }
         92%, 100% { transform: translateX(2px) scaleY(1); }
       }
     </style>
   </defs>
 
-  <rect id="ground-shadow" class="shadow-sneak" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+  <!-- No shadow (mini mode) -->
 
-  <g class="body-hunch">
-    <g id="legs" fill="#DE886D">
-      <rect id="outer-left-leg" class="leg-1" x="3" y="13" width="1" height="2"/>
-      <rect id="inner-left-leg" class="leg-2" x="5" y="13" width="1" height="2"/>
-      <rect id="inner-right-leg" class="leg-1" x="9" y="13" width="1" height="2"/>
-      <rect id="outer-right-leg" class="leg-2" x="11" y="13" width="1" height="2"/>
+  <!-- Entire character tilted -12deg (mini mode) -->
+  <g transform="rotate(-12, 7.5, 15)">
+
+    <g class="crab-sway">
+
+      <!-- Layer 1: Legs (independent, alternating step) -->
+      <g fill="#DE886D">
+        <g class="leg-a">
+          <rect x="3" y="11" width="1" height="4"/>
+          <rect x="9" y="11" width="1" height="4"/>
+        </g>
+        <g class="leg-b">
+          <rect x="5" y="11" width="1" height="4"/>
+          <rect x="11" y="11" width="1" height="4"/>
+        </g>
+      </g>
+
+      <!-- Layer 2: Upper Body -->
+      <g class="breathe-anim">
+        <!-- Torso -->
+        <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+        <!-- Left Arm (extended, swinging) -->
+        <g class="arm-swing">
+          <rect x="-1.5" y="9" width="4.5" height="2" fill="#DE886D"/>
+        </g>
+
+        <!-- Right Arm -->
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+
+        <!-- Eyes: look right + blink -->
+        <g class="eyes-blink" fill="#000000">
+          <rect x="4" y="8" width="1" height="2"/>
+          <rect x="10" y="8" width="1" height="2"/>
+        </g>
+      </g>
+
     </g>
 
-    <g id="body-color-group" fill="#DE886D">
-      <rect id="torso" x="2" y="6" width="11" height="7"/>
-      <!-- Left arm (normal pose) -->
-      <rect id="left-arm" x="0" y="9" width="2" height="2"/>
-      <!-- Right arm (normal pose, no magnifying glass) -->
-      <rect id="right-arm" x="13" y="9" width="2" height="2"/>
-    </g>
-
-    <!-- Eyes: look right, occasionally glance back + blink -->
-    <g class="eyes-crabwalk" fill="#000000">
-      <rect x="4" y="8" width="1" height="2"/>
-      <rect x="10" y="8" width="1" height="2"/>
-    </g>
   </g>
 </svg>

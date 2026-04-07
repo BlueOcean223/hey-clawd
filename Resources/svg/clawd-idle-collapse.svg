@@ -1,89 +1,208 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* 0.8s Collapse — One-shot transition from yawn-end to sploot */
-      .body-collapse {
-        transform-origin: 7.5px 13px;
-        animation: body-collapse 1s ease-in -0.2s forwards;
-      }
+      /* ===== clawd-idle-collapse.svg =====
+         0.8s one-shot (forwards) with -0.2s negative delay for snappy feel.
+         From doze/yawn-end pose to splooted flat. SHORT version, no Zzz/breathing.
+
+         Start pose: body scale(1.05, 0.95) translate(0, 1px), eyes scaleY(0.1),
+                     arms rotate(+/-15deg) translate(0, 1px)
+         End pose:   torso scale(1.18, 0.71) translate(-1px, 4px),
+                     legs scaleY(0.33), eyes as sleeping dashes,
+                     arms translate(+/-1px, 4px) rotate(0deg)
+
+         Two-layer body architecture:
+         - body-frame: normalizes from yawn-end scale(1.05, 0.95) to scale(1, 1)
+         - parts inside: independently animate their collapse to splooted positions */
+
+      /* ===== Shadow ===== */
 
       .shadow-collapse {
         transform-origin: 7.5px 15.5px;
-        animation: shadow-collapse 1s ease-in -0.2s forwards;
+        animation: shadow-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
 
-      .legs-collapse {
-        transform-origin: 7.5px 12px;
-        animation: legs-collapse 1s ease-in -0.2s forwards;
+      /* ===== Body frame (normalizes yawn-end -> neutral) ===== */
+
+      .body-frame {
+        transform-origin: 7.5px 13px;
+        animation: body-frame-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
+
+      /* ===== Torso collapse ===== */
+
+      .torso-collapse {
+        transform-origin: 2px 6px;
+        animation: torso-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
+      }
+
+      /* ===== Arms ===== */
 
       .arm-l-collapse {
-        transform-origin: 1px 10px;
-        animation: arm-l-collapse 1s ease-in -0.2s forwards;
+        transform-origin: 2px 10px;
+        animation: arm-l-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
 
       .arm-r-collapse {
-        transform-origin: 14px 10px;
-        animation: arm-r-collapse 1s ease-in -0.2s forwards;
+        transform-origin: 13px 10px;
+        animation: arm-r-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
 
-      /* Eyes stay shut the entire time */
-      .eyes-shut {
-        transform-origin: 7.5px 9px;
-        transform: scaleY(0.1);
+      /* ===== Eyes (left and right separate for independent transform-origin) ===== */
+
+      .eye-l-collapse {
+        transform-origin: 4px 8px;
+        animation: eye-l-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
 
-      /* Body sinks and widens gently — closer to sleeping proportions */
-      @keyframes body-collapse {
-        0% { transform: scale(1.05, 0.95) translate(0, 1px); }
-        40% { transform: scale(1.08, 0.85) translate(0, 1.5px); }
-        70% { transform: scale(1.12, 0.75) translate(0, 2px); }
-        100% { transform: scale(1.15, 0.7) translate(0, 3px); }
+      .eye-r-collapse {
+        transform-origin: 10px 8px;
+        animation: eye-r-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
       }
 
-      /* Shadow widens to match sleeping shadow */
-      @keyframes shadow-collapse {
-        0% { transform: scaleX(1.05); opacity: 0.55; }
-        100% { transform: scaleX(1.3); opacity: 0.45; }
+      /* ===== Legs (individual transform-origins at 3/5/9/11 px, y=12px) ===== */
+
+      .leg-collapse {
+        animation: leg-col 0.8s ease-in -0.2s forwards;
+        animation-iteration-count: 1;
+      }
+      .leg-ol { transform-origin: 3px 12px; }
+      .leg-il { transform-origin: 5px 12px; }
+      .leg-ir { transform-origin: 9px 12px; }
+      .leg-or { transform-origin: 11px 12px; }
+
+      /* ===== Keyframes ===== */
+
+      /* Shadow: widens from yawn-end to splooted */
+      @keyframes shadow-col {
+        0%   { transform: scaleX(1.05); opacity: 0.55; }
+        8%   { transform: scaleX(1.06); opacity: 0.54; }
+        18%  { transform: scaleX(1.08); opacity: 0.52; }
+        32%  { transform: scaleX(1.12); opacity: 0.49; }
+        50%  { transform: scaleX(1.18); opacity: 0.46; }
+        68%  { transform: scaleX(1.24); opacity: 0.43; }
+        82%  { transform: scaleX(1.28); opacity: 0.41; }
+        92%  { transform: scaleX(1.305); opacity: 0.395; }
+        100% { transform: scaleX(1.30); opacity: 0.40; }
       }
 
-      /* Legs hold still at first, then shrink into short stubs */
-      @keyframes legs-collapse {
-        0%, 40% { transform: translate(0, 0) scaleY(1); }
-        70% { transform: translate(0, -1px) scaleY(0.6); }
-        100% { transform: translate(0, -2px) scaleY(0.33); }
+      /* Body frame normalizes: scale(1.05, 0.95) translate(0,1px) -> scale(1,1) translate(0,0)
+         First continues squashing from momentum, then recovers */
+      @keyframes body-frame-col {
+        0%   { transform: scale(1.05, 0.95) translate(0, 1px); }
+        6%   { transform: scale(1.058, 0.94) translate(0, 1.1px); }
+        15%  { transform: scale(1.072, 0.915) translate(0, 1.32px); }
+        28%  { transform: scale(1.09, 0.875) translate(0, 1.68px); }
+        42%  { transform: scale(1.1, 0.84) translate(0, 1.95px); }       /* max momentum squash */
+        58%  { transform: scale(1.07, 0.88) translate(0, 1.4px); }
+        72%  { transform: scale(1.03, 0.95) translate(0, 0.6px); }
+        86%  { transform: scale(1.01, 0.985) translate(0, 0.15px); }
+        100% { transform: scale(1, 1) translate(0, 0); }
       }
 
-      /* Arms slide straight down, hugging body sides */
-      @keyframes arm-l-collapse {
-        0% { transform: translate(0, 1px) rotate(-15deg); }
-        50% { transform: translate(0, 2px) rotate(-5deg); }
-        100% { transform: translate(0, 3px) rotate(0deg); }
+      /* Torso: standing rect -> splooted flat */
+      @keyframes torso-col {
+        0%   { transform: translate(0, 0) scale(1, 1); }
+        6%   { transform: translate(-0.02px, 0.1px) scale(1.005, 0.996); }
+        15%  { transform: translate(-0.1px, 0.38px) scale(1.02, 0.98); }
+        28%  { transform: translate(-0.28px, 1.1px) scale(1.05, 0.93); }
+        42%  { transform: translate(-0.45px, 1.85px) scale(1.08, 0.88); }
+        58%  { transform: translate(-0.65px, 2.7px) scale(1.12, 0.82); }
+        72%  { transform: translate(-0.85px, 3.4px) scale(1.15, 0.76); }
+        86%  { transform: translate(-0.98px, 3.9px) scale(1.175, 0.72); }
+        100% { transform: translate(-1px, 4px) scale(1.18, 0.71); }       /* END: splooted */
       }
 
-      @keyframes arm-r-collapse {
-        0% { transform: translate(0, 1px) rotate(15deg); }
-        50% { transform: translate(0, 2px) rotate(5deg); }
-        100% { transform: translate(0, 3px) rotate(0deg); }
+      /* Left arm: from yawn-end droopy -> flat on ground */
+      @keyframes arm-l-col {
+        0%   { transform: translate(0, 1px) rotate(-15deg); }
+        8%   { transform: translate(-0.04px, 1.12px) rotate(-14deg); }
+        18%  { transform: translate(-0.14px, 1.4px) rotate(-12deg); }
+        32%  { transform: translate(-0.3px, 2px) rotate(-8deg); }
+        48%  { transform: translate(-0.5px, 2.6px) rotate(-5deg); }
+        64%  { transform: translate(-0.72px, 3.2px) rotate(-2.5deg); }
+        78%  { transform: translate(-0.88px, 3.7px) rotate(-0.8deg); }
+        90%  { transform: translate(-0.97px, 3.95px) rotate(-0.2deg); }
+        100% { transform: translate(-1px, 4px) rotate(0deg); }            /* END: flat */
+      }
+
+      /* Right arm: mirror */
+      @keyframes arm-r-col {
+        0%   { transform: translate(0, 1px) rotate(15deg); }
+        8%   { transform: translate(0.04px, 1.12px) rotate(14deg); }
+        18%  { transform: translate(0.14px, 1.4px) rotate(12deg); }
+        32%  { transform: translate(0.3px, 2px) rotate(8deg); }
+        48%  { transform: translate(0.5px, 2.6px) rotate(5deg); }
+        64%  { transform: translate(0.72px, 3.2px) rotate(2.5deg); }
+        78%  { transform: translate(0.88px, 3.7px) rotate(0.8deg); }
+        90%  { transform: translate(0.97px, 3.95px) rotate(0.2deg); }
+        100% { transform: translate(1px, 4px) rotate(0deg); }
+      }
+
+      /* Left eye: shut -> sleeping dash (wider, lower) */
+      @keyframes eye-l-col {
+        0%   { transform: scale(1, 0.1); }
+        8%   { transform: translate(0, 0.08px) scale(1.02, 0.1); }
+        18%  { transform: translate(0, 0.32px) scale(1.06, 0.1); }
+        32%  { transform: translate(-0.05px, 0.8px) scale(1.15, 0.1); }
+        48%  { transform: translate(-0.12px, 1.8px) scale(1.35, 0.12); }
+        64%  { transform: translate(-0.25px, 2.8px) scale(1.55, 0.14); }
+        78%  { transform: translate(-0.38px, 3.6px) scale(1.75, 0.17); }
+        90%  { transform: translate(-0.46px, 4.2px) scale(1.9, 0.19); }
+        100% { transform: translate(-0.5px, 4.5px) scale(2, 0.2); }       /* END: dash */
+      }
+
+      /* Right eye: mirror */
+      @keyframes eye-r-col {
+        0%   { transform: scale(1, 0.1); }
+        8%   { transform: translate(0, 0.08px) scale(1.02, 0.1); }
+        18%  { transform: translate(0, 0.32px) scale(1.06, 0.1); }
+        32%  { transform: translate(-0.05px, 0.8px) scale(1.15, 0.1); }
+        48%  { transform: translate(-0.12px, 1.8px) scale(1.35, 0.12); }
+        64%  { transform: translate(-0.25px, 2.8px) scale(1.55, 0.14); }
+        78%  { transform: translate(-0.38px, 3.6px) scale(1.75, 0.17); }
+        90%  { transform: translate(-0.46px, 4.2px) scale(1.9, 0.19); }
+        100% { transform: translate(-0.5px, 4.5px) scale(2, 0.2); }
+      }
+
+      /* Legs: shrink into short stubs, individual origins at x,12px */
+      @keyframes leg-col {
+        0%   { transform: translate(0, 0) scale(1, 1); }
+        6%   { transform: translate(0, -0.04px) scale(1, 0.98); }
+        15%  { transform: translate(0, -0.16px) scale(1, 0.92); }
+        28%  { transform: translate(0, -0.45px) scale(1, 0.8); }
+        42%  { transform: translate(0, -0.85px) scale(1, 0.68); }
+        58%  { transform: translate(0, -1.4px) scale(1, 0.55); }
+        72%  { transform: translate(0, -2px) scale(1, 0.44); }
+        84%  { transform: translate(0, -2.6px) scale(1, 0.36); }
+        94%  { transform: translate(0, -2.95px) scale(1, 0.33); }
+        100% { transform: translate(0, -3px) scale(1, 0.33); }            /* END: stubs */
       }
     </style>
   </defs>
 
-  <!-- Ground Shadow -->
-  <rect class="shadow-collapse" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.55"/>
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-collapse" x="-1" y="15" width="17" height="1" fill="#000000" opacity="0.55"/>
 
-  <!-- Legs (shrink upward into short stubs) -->
-  <g class="legs-collapse" fill="#DE886D">
-    <rect x="3" y="12" width="1" height="3"/>
-    <rect x="5" y="12" width="1" height="3"/>
-    <rect x="9" y="12" width="1" height="3"/>
-    <rect x="11" y="12" width="1" height="3"/>
+  <!-- Layer 1: Legs (inside breathe in collapse-sleep, but here just collapse independently) -->
+  <g fill="#DE886D">
+    <rect class="leg-collapse leg-ol" x="3" y="12" width="1" height="3"/>
+    <rect class="leg-collapse leg-il" x="5" y="12" width="1" height="3"/>
+    <rect class="leg-collapse leg-ir" x="9" y="12" width="1" height="3"/>
+    <rect class="leg-collapse leg-or" x="11" y="12" width="1" height="3"/>
   </g>
 
-  <!-- Body (collapses/melts down) -->
-  <g class="body-collapse">
+  <!-- Layer 2: Upper body (two-layer architecture) -->
+  <g class="body-frame">
     <!-- Torso -->
-    <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+    <rect class="torso-collapse" x="2" y="6" width="11" height="7" fill="#DE886D"/>
     <!-- Left Arm -->
     <g class="arm-l-collapse">
       <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
@@ -92,10 +211,10 @@
     <g class="arm-r-collapse">
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
-    <!-- Eyes stay shut -->
-    <g class="eyes-shut" fill="#000000">
-      <rect x="4" y="8" width="1" height="2"/>
-      <rect x="10" y="8" width="1" height="2"/>
+    <!-- Eyes -->
+    <g fill="#000000">
+      <rect class="eye-l-collapse" x="4" y="8" width="1" height="2"/>
+      <rect class="eye-r-collapse" x="10" y="8" width="1" height="2"/>
     </g>
   </g>
 </svg>

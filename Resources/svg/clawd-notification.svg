@@ -1,149 +1,66 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
-  <defs>
-    <style>
-      /* 3.5s loop: startle + 4 decaying jumps */
-
-      .body-anim {
-        transform-origin: 7.5px 15px;
-        animation: body-jump 3.5s infinite ease-in-out;
-      }
-
-      .shadow-anim {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-pulse 3.5s infinite ease-in-out;
-      }
-
-      .eyes-look {
-        transform-origin: 7.5px 9px;
-        animation: eye-track 3.5s infinite ease-in-out;
-      }
-
-      .arm-l {
-        transform-origin: 1px 10px;
-        animation: arm-wave-l 3.5s infinite ease-in-out;
-      }
-      .arm-r {
-        transform-origin: 14px 10px;
-        animation: arm-wave-r 3.5s infinite ease-in-out;
-      }
-
-      .alert-pop {
-        transform-origin: 16px -1px;
-        animation: alert-flash 3.5s infinite ease-in-out;
-        opacity: 0;
-      }
-
-      /* --- Keyframes --- */
-
-      @keyframes body-jump {
-        0%          { transform: translate(0, 0) scale(1, 1); }
-        3%          { transform: translate(-1.5px, -1px) scale(1.03, 0.97); }
-        10%         { transform: translate(-1.5px, -1px) scale(1.03, 0.97); }
-        15%         { transform: translate(0, 1.5px) scale(1.05, 0.96); }
-        20%         { transform: translate(0, -10px) scale(0.96, 1.04); }
-        25%         { transform: translate(0, 1.5px) scale(1.05, 0.96); }
-        30%         { transform: translate(0, -8px) scale(0.97, 1.03); }
-        35%         { transform: translate(0, 1.2px) scale(1.04, 0.97); }
-        40%         { transform: translate(0, -5px) scale(0.98, 1.02); }
-        45%         { transform: translate(0, 1px) scale(1.03, 0.98); }
-        50%         { transform: translate(0, -3px) scale(0.99, 1.01); }
-        55%         { transform: translate(0, 0.5px) scale(1.01, 0.99); }
-        62%, 100%   { transform: translate(0, 0) scale(1, 1); }
-      }
-
-      @keyframes shadow-pulse {
-        0%              { transform: scale(1); opacity: 0.5; }
-        3%, 10%         { transform: translate(-1.5px, 0) scale(1); opacity: 0.5; }
-        15%             { transform: scale(1.1); opacity: 0.55; }
-        20%             { transform: scale(0.5); opacity: 0.12; }
-        25%             { transform: scale(1.12); opacity: 0.55; }
-        30%             { transform: scale(0.55); opacity: 0.15; }
-        35%             { transform: scale(1.1); opacity: 0.52; }
-        40%             { transform: scale(0.65); opacity: 0.2; }
-        45%             { transform: scale(1.06); opacity: 0.5; }
-        50%             { transform: scale(0.75); opacity: 0.3; }
-        55%             { transform: scale(1.03); opacity: 0.5; }
-        62%, 100%       { transform: scale(1); opacity: 0.5; }
-      }
-
-      @keyframes eye-track {
-        0%          { transform: translate(0, 0) scaleY(1); }
-        3%          { transform: translate(4px, 0) scaleY(0.3); }
-        6%          { transform: translate(4px, 0) scaleY(1); }
-        10%         { transform: translate(4px, 0) scaleY(1); }
-        15%, 100%   { transform: translate(0, 0) scaleY(1); }
-      }
-
-      @keyframes arm-wave-l {
-        0%          { transform: rotate(0deg); }
-        3%, 10%     { transform: rotate(25deg); }
-        15%         { transform: rotate(30deg); }
-        20%         { transform: rotate(155deg); }
-        25%         { transform: rotate(115deg); }
-        30%         { transform: rotate(140deg); }
-        35%         { transform: rotate(100deg); }
-        40%         { transform: rotate(115deg); }
-        45%         { transform: rotate(80deg); }
-        50%         { transform: rotate(80deg); }
-        55%         { transform: rotate(40deg); }
-        62%, 100%   { transform: rotate(0deg); }
-      }
-
-      @keyframes arm-wave-r {
-        0%          { transform: rotate(0deg); }
-        3%, 10%     { transform: rotate(-30deg); }
-        15%         { transform: rotate(-30deg); }
-        20%         { transform: rotate(-155deg); }
-        25%         { transform: rotate(-115deg); }
-        30%         { transform: rotate(-140deg); }
-        35%         { transform: rotate(-100deg); }
-        40%         { transform: rotate(-115deg); }
-        45%         { transform: rotate(-80deg); }
-        50%         { transform: rotate(-80deg); }
-        55%         { transform: rotate(-40deg); }
-        62%, 100%   { transform: rotate(0deg); }
-      }
-
-      @keyframes alert-flash {
-        0%          { opacity: 0; transform: scale(0.3); }
-        3%          { opacity: 1; transform: scale(1.3); }
-        10%         { opacity: 1; transform: scale(1); }
-        50%         { opacity: 1; transform: scale(1); }
-        55%         { opacity: 0.7; transform: scale(0.9); }
-        62%         { opacity: 0; transform: scale(0.6); }
-        100%        { opacity: 0; transform: scale(0.6); }
-      }
-    </style>
-  </defs>
-
-  <!-- Mirrored character -->
-  <g transform="translate(15, 0) scale(-1, 1)">
-    <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000"/>
-
-    <g class="body-anim">
-      <g fill="#DE886D">
-        <rect x="3" y="13" width="1" height="2"/>
-        <rect x="5" y="13" width="1" height="2"/>
-        <rect x="9" y="13" width="1" height="2"/>
-        <rect x="11" y="13" width="1" height="2"/>
-        <rect x="2" y="6" width="11" height="7"/>
-        <g class="arm-l">
-          <rect x="0" y="9" width="2" height="2"/>
-        </g>
-        <g class="arm-r">
-          <rect x="13" y="9" width="2" height="2"/>
-        </g>
-      </g>
-      <g class="eyes-look" fill="#000000">
-        <rect x="4" y="8" width="1" height="2"/>
-        <rect x="10" y="8" width="1" height="2"/>
-      </g>
+  <style>
+    .hc-body { animation: hc-double-tap 1.5s infinite; transform-origin: 7.5px 15px; }
+    .hc-r-arm { transform-origin: 13px 10px; animation: hc-wave 1.5s infinite; }
+    .hc-eyes { animation: hc-eyes-wide 1.5s infinite; transform-origin: 7.5px 9px; }
+    .hc-bell { fill: #FFD700; opacity: 0; animation: hc-bell-pop 1.5s infinite; transform-origin: 7.5px 0px; }
+    .hc-ripple { fill: #40C4FF; opacity: 0; animation: hc-ripple-out 1.5s infinite; transform-origin: center; }
+    
+    @keyframes hc-double-tap {
+      0%, 40%, 100% { transform: translateY(0); }
+      5%, 15% { transform: translateY(-3px); }
+      10%, 20% { transform: translateY(0); }
+    }
+    
+    @keyframes hc-wave {
+      0%, 25% { transform: rotate(0); }
+      30%, 40%, 50%, 60% { transform: rotate(-60deg); }
+      35%, 45%, 55% { transform: rotate(-30deg); }
+      70%, 100% { transform: rotate(0); }
+    }
+    
+    @keyframes hc-eyes-wide {
+      0%, 25% { transform: scaleY(1); }
+      30%, 70% { transform: scaleY(1.3); }
+      75%, 100% { transform: scaleY(1); }
+    }
+    
+    @keyframes hc-bell-pop {
+      0%, 25% { opacity: 0; transform: scale(0.5); }
+      30% { opacity: 1; transform: scale(1.2); }
+      35%, 65% { opacity: 1; transform: scale(1) rotate(15deg); }
+      40%, 60% { transform: scale(1) rotate(-15deg); }
+      70%, 100% { opacity: 0; transform: scale(0.5); }
+    }
+    
+    @keyframes hc-ripple-out {
+      30% { opacity: 0; transform: scale(0.5); }
+      50% { opacity: 0.5; }
+      100% { opacity: 0; transform: scale(2.5); }
+    }
+  </style>
+  
+  <g class="hc-body">
+    <rect x="3" y="15" width="9" height="1" fill="rgba(0,0,0,0.15)" />
+    <rect x="3" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="5" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="9" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="11" y="13" width="1" height="2" fill="#DE886D" />
+    <rect x="2" y="6" width="11" height="7" fill="#DE886D" />
+    <rect x="0" y="9" width="2" height="2" fill="#DE886D" />
+    <rect class="hc-r-arm" x="13" y="9" width="2" height="2" fill="#DE886D" />
+    <g class="hc-eyes">
+      <rect x="4" y="8" width="1" height="2" fill="#000000" />
+      <rect x="10" y="8" width="1" height="2" fill="#000000" />
     </g>
   </g>
-
-  <!-- Exclamation mark (screen coords, not mirrored) -->
-  <g class="alert-pop" fill="#FF3D00">
-    <rect x="15" y="-6" width="2" height="5"/>
-    <rect x="15" y="0" width="2" height="2"/>
+  
+  <g class="hc-bell">
+    <rect x="6" y="-2" width="3" height="3" />
+    <rect x="7" y="-3" width="1" height="1" />
   </g>
+  
+  <!-- Pixel ripple rings (rects instead of circles) -->
+  <rect class="hc-ripple" x="1" y="-1" width="13" height="1" style="animation-delay: 0s;"/>
+  <rect class="hc-ripple" x="1" y="-1" width="13" height="1" style="animation-delay: 0.2s;"/>
 </svg>

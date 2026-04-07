@@ -1,115 +1,92 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="500" height="500" viewBox="-15 -25 45 45"
-  shape-rendering="crispEdges">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
     <style>
+      /* ===== Mini Enter: 3.2s one-shot ===== */
+      /*
+        0%-30%   Slide in from right (25px -> overshoot -3px -> settle 0)
+        30%-70%  Arm extends out + waves 3 times
+        65%-92%  Eyes look left then center + single blink
+        88%-100% Settle into idle pose
+      */
+
+      /* Body slide: cubic-bezier overshoot for bouncy entry */
       #body-js {
-        animation: bodyEnter 3.2s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+        animation: body-enter 3.2s cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
       }
 
+      /* Left arm: hidden during slide, extends + waves after arrival */
       #left-arm {
         transform-origin: 2px 9px;
-        animation: armEnterWave 3.2s ease-in-out 1 forwards;
+        animation: arm-enter-wave 3.2s ease-in-out 1 forwards;
       }
 
+      /* Eyes: look left during entry, settle center + blink */
       #eyes-js {
         transform-origin: 7.5px 9px;
-        animation: eyesEnter 3.2s ease-in-out 1 forwards;
+        animation: eyes-enter 3.2s ease-in-out 1 forwards;
       }
 
-      @keyframes bodyEnter {
-        0% {
-          transform: translate(25px, 0px);
-        }
-        18% {
-          transform: translate(-3px, -0.8px);
-        }
-        24% {
-          transform: translate(1.4px, 0.4px);
-        }
-        30% {
-          transform: translate(0px, 0px);
-        }
-        65% {
-          transform: translate(0px, 0px);
-        }
-        76% {
-          transform: translate(0.5px, 0.2px);
-        }
-        88%,
-        100% {
-          transform: translate(0px, 0px);
-        }
+      /* ===== Keyframes ===== */
+      @keyframes body-enter {
+        0%          { transform: translate(25px, 0); }
+        18%         { transform: translate(-3px, -0.8px); }
+        24%         { transform: translate(1.4px, 0.4px); }
+        30%, 65%    { transform: translate(0, 0); }
+        76%         { transform: translate(0.5px, 0.2px); }
+        88%, 100%   { transform: translate(0, 0); }
       }
 
-      @keyframes armEnterWave {
-        0%,
-        30% {
-          transform: scaleX(0.05) rotate(0deg);
-        }
-        38% {
-          transform: scaleX(1.18) rotate(-8deg);
-        }
-        43% {
-          transform: scaleX(0.96) rotate(6deg);
-        }
-        48% {
-          transform: scaleX(1) rotate(-14deg);
-        }
-        53% {
-          transform: scaleX(1) rotate(16deg);
-        }
-        58% {
-          transform: scaleX(1) rotate(-12deg);
-        }
-        63% {
-          transform: scaleX(1) rotate(9deg);
-        }
-        70%,
-        100% {
-          transform: scaleX(1) rotate(0deg);
-        }
+      @keyframes arm-enter-wave {
+        0%, 30%  { transform: scaleX(0.05) rotate(0deg); }
+        38%      { transform: scaleX(1.18) rotate(-8deg); }
+        43%      { transform: scaleX(0.96) rotate(6deg); }
+        48%      { transform: scaleX(1) rotate(-14deg); }
+        53%      { transform: scaleX(1) rotate(16deg); }
+        58%      { transform: scaleX(1) rotate(-12deg); }
+        63%      { transform: scaleX(1) rotate(9deg); }
+        70%, 100% { transform: scaleX(1) rotate(0deg); }
       }
 
-      @keyframes eyesEnter {
-        0%,
-        65% {
-          transform: translateX(-1px) scaleY(1);
-        }
-        74% {
-          transform: translateX(-0.6px) scaleY(1);
-        }
-        80% {
-          transform: translateX(-0.1px) scaleY(1);
-        }
-        84% {
-          transform: translateX(0px) scaleY(0.1);
-        }
-        88% {
-          transform: translateX(0px) scaleY(1.08);
-        }
-        92%,
-        100% {
-          transform: translateX(0px) scaleY(1);
-        }
+      @keyframes eyes-enter {
+        0%, 65%  { transform: translateX(-1px) scaleY(1); }
+        74%      { transform: translateX(-0.6px) scaleY(1); }
+        80%      { transform: translateX(-0.1px) scaleY(1); }
+        84%      { transform: translateX(0) scaleY(0.1); }
+        88%      { transform: translateX(0) scaleY(1.08); }
+        92%, 100% { transform: translateX(0) scaleY(1); }
       }
     </style>
-    <g id="body-js">
-      <g transform="rotate(-12, 7.5, 15)">
-        <rect id="left-arm" x="-1.5" y="9" width="4.5" height="2" fill="#DE886D"/>
+  </defs>
 
-        <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
-        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+  <!-- No shadow (mini mode) -->
 
-        <g id="eyes-js" fill="#000000">
-          <rect x="4" y="8" width="1" height="2"/>
-          <rect x="10" y="8" width="1" height="2"/>
-        </g>
+  <!-- Layer 2: Body (animated slide-in wraps everything) -->
+  <g id="body-js">
+    <!-- Tilt -12deg (mini mode) -->
+    <g transform="rotate(-12, 7.5, 15)">
 
-        <g fill="#DE886D">
-          <rect x="3" y="11" width="1" height="4"/>
-          <rect x="5" y="11" width="1" height="4"/>
-          <rect x="9" y="11" width="1" height="4"/>
-          <rect x="11" y="11" width="1" height="4"/>
-        </g>
+      <!-- Legs (inside tilt but outside breathe) -->
+      <g fill="#DE886D">
+        <rect x="3" y="11" width="1" height="4"/>
+        <rect x="5" y="11" width="1" height="4"/>
+        <rect x="9" y="11" width="1" height="4"/>
+        <rect x="11" y="11" width="1" height="4"/>
+      </g>
+
+      <!-- Left Arm (extended, wave animation) -->
+      <rect id="left-arm" x="-1.5" y="9" width="4.5" height="2" fill="#DE886D"/>
+
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Right Arm -->
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+
+      <!-- Eyes -->
+      <g id="eyes-js" fill="#000000">
+        <rect x="4" y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
       </g>
     </g>
-  </svg>
+  </g>
+</svg>

@@ -1,17 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* ===== Body (KEEP) ===== */
-      .body-bounce {
-        transform-origin: 7.5px 15px;
-        animation: body-bounce 0.35s infinite ease-in-out;
-      }
+      /* ===== 1. Independent sub-animations ===== */
       .breathe {
         transform-origin: 7.5px 13px;
         animation: breathe 3.2s infinite ease-in-out;
       }
 
-      /* ===== Arms (KEEP) ===== */
+      /* ===== 2. Body micro-bounce (separate from breathe) ===== */
+      .body-bounce {
+        transform-origin: 7.5px 15px;
+        animation: body-bounce 0.35s infinite ease-in-out;
+      }
+
+      /* ===== 3. Arms: rapid typing ===== */
       .arm-l-type {
         transform-origin: 2px 10px;
         animation: type-l 0.15s infinite ease-in-out;
@@ -21,42 +23,45 @@
         animation: type-r 0.12s infinite ease-in-out;
       }
 
-      /* ===== Eyes ===== */
+      /* ===== 4. Eyes: squinted + code scanning ===== */
       .eyes-code {
         transform-origin: 7.5px 9px;
         animation: eye-code 10s infinite ease-in-out;
       }
 
-      /* ===== Code lines: each line grows, holds, then slides up + fades ===== */
+      /* ===== 5. Code lines ===== */
       .code-line {
         transform-box: fill-box;
         transform-origin: left center;
       }
-      .cl1 { animation: cl1 6s infinite; }
-      .cl2 { animation: cl2 6s infinite; }
-      .cl3 { animation: cl3 6s infinite; }
-      .cl4 { animation: cl4 6s infinite; }
+      .cl1 { animation: cl1 6s linear infinite; }
+      .cl2 { animation: cl2 6s linear infinite; }
+      .cl3 { animation: cl3 6s linear infinite; }
+      .cl4 { animation: cl4 6s linear infinite; }
 
-      /* Key press flashes — different periods so they look random */
+      /* ===== 6. Cursor blink ===== */
+      .cursor-blink { animation: cursor-blink 0.62s step-end infinite; }
+
+      /* ===== 7. Key flashes: each key different period, negative delays ===== */
       .key-flash { opacity: 0; }
-      .kf1 { animation: kflash 0.6s infinite; }
-      .kf2 { animation: kflash 0.8s infinite; animation-delay: -0.25s; }
-      .kf3 { animation: kflash 0.5s infinite; animation-delay: -0.1s; }
-      .kf4 { animation: kflash 0.7s infinite; animation-delay: -0.45s; }
-      .kf5 { animation: kflash 0.55s infinite; animation-delay: -0.3s; }
-      .kf6 { animation: kflash 0.9s infinite; animation-delay: -0.5s; }
+      .kf1 { animation: kflash 0.6s ease-in-out infinite; }
+      .kf2 { animation: kflash 0.8s ease-in-out infinite; animation-delay: -0.25s; }
+      .kf3 { animation: kflash 0.5s ease-in-out infinite; animation-delay: -0.1s; }
+      .kf4 { animation: kflash 0.7s ease-in-out infinite; animation-delay: -0.45s; }
+      .kf5 { animation: kflash 0.55s ease-in-out infinite; animation-delay: -0.3s; }
+      .kf6 { animation: kflash 0.9s ease-in-out infinite; animation-delay: -0.5s; }
 
-      /* Data particles (float up behind screen) */
-      .data-bit { opacity: 0; animation: float-data 1.5s infinite linear; }
+      /* ===== 8. Data particles ===== */
+      .data-bit { opacity: 0; animation: float-data 1.5s linear infinite; }
       .d1 { animation-delay: 0s; }
       .d2 { animation-delay: -0.4s; }
       .d3 { animation-delay: -0.8s; }
       .d4 { animation-delay: -1.2s; }
 
-      /* Shadow */
+      /* ===== 9. Shadow synced with body bounce ===== */
       .shadow-anim {
         transform-origin: 7.5px 15.5px;
-        animation: shadow-bob 0.4s infinite ease-in-out;
+        animation: shadow-bob 0.35s infinite ease-in-out;
       }
 
       /* ==================== Keyframes ==================== */
@@ -65,15 +70,18 @@
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(0.8px); }
       }
+
       @keyframes breathe {
         0%, 100% { transform: scale(1, 1) translate(0, 0); }
         50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
       }
+
       @keyframes shadow-bob {
         0%, 100% { transform: scaleX(1.02); opacity: 0.5; }
         50% { transform: scaleX(1.05); opacity: 0.55; }
       }
 
+      /* Arms: asymmetric rapid typing with rotation */
       @keyframes type-l {
         0%   { transform: rotate(-5deg); }
         25%  { transform: rotate(-38deg); }
@@ -89,7 +97,7 @@
         100% { transform: rotate(5deg); }
       }
 
-      /* Eyes: long keyboard squint → 2 consecutive scans → keyboard */
+      /* Eyes: long keyboard squint + 2 consecutive scans + keyboard */
       @keyframes eye-code {
         0%   { transform: translate(0, 1px) scaleY(0.6); }
         14%  { transform: translate(0, 1px) scaleY(0.6); }
@@ -112,9 +120,7 @@
         100% { transform: translate(0, 1px) scaleY(0.6); }
       }
 
-      /* Code lines: grow from left → hold → slide up + fade out
-         Each line staggers by ~15%. Slide-up gives "scroll" feel.
-         At 95-100% all invisible → brief blank → cycle restarts */
+      /* Code lines: grow from left, hold, slide up + fade */
       @keyframes cl1 {
         0%        { transform: scaleX(0); opacity: 0; }
         3%        { transform: scaleX(0); opacity: 1; }
@@ -148,12 +154,19 @@
         96%, 100% { transform: scaleX(0) translateY(0); opacity: 0; }
       }
 
-      /* Key flash: brief bright pulse, mostly off */
+      /* Cursor blink */
+      @keyframes cursor-blink {
+        0%, 44% { opacity: 1; }
+        45%, 100% { opacity: 0; }
+      }
+
+      /* Key flash: brief bright pulse */
       @keyframes kflash {
         0%, 70%, 100% { opacity: 0; }
         35% { opacity: 0.8; }
       }
 
+      /* Data particles: float up and fade */
       @keyframes float-data {
         0%   { transform: translateY(0) scale(0.5); opacity: 0; }
         10%  { opacity: 0.8; }
@@ -165,10 +178,10 @@
     </g>
   </defs>
 
-  <!-- Ground Shadow -->
+  <!-- Layer 0: Ground Shadow -->
   <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000" opacity="0.5"/>
 
-  <!-- Data particles (behind screen, float up and disappear behind it) -->
+  <!-- Data particles (behind screen, float up) -->
   <g fill="#40C4FF">
     <use href="#pixel-packet" class="data-bit d1" x="3" y="7"/>
     <use href="#pixel-packet" class="data-bit d2" x="7" y="8"/>
@@ -183,25 +196,32 @@
     <rect x="0.3" y="-5.6" width="0.5" height="0.4" fill="#FF5F56"/>
     <rect x="1.2" y="-5.6" width="0.5" height="0.4" fill="#FFBD2E"/>
     <rect x="2.1" y="-5.6" width="0.5" height="0.4" fill="#27C93F"/>
+    <rect x="-0.5" y="-6" width="13.5" height="10.5" fill="none" stroke="#3C3C5A" stroke-width="0.25"/>
 
     <!-- Code lines (indented, varying lengths = code structure) -->
     <rect class="code-line cl1" x="0.5" y="-3.5" width="5"   height="0.7" fill="#4CAF50" opacity="0.8"/>
     <rect class="code-line cl2" x="2"   y="-1.8" width="8"   height="0.7" fill="#4CAF50" opacity="0.8"/>
     <rect class="code-line cl3" x="2"   y="-0.1" width="4.5" height="0.7" fill="#40C4FF" opacity="0.7"/>
     <rect class="code-line cl4" x="0.5" y="1.6"  width="2"   height="0.7" fill="#FFC107" opacity="0.7"/>
-
+    <!-- Cursor -->
+    <rect class="cursor-blink" x="3.1" y="1.6" width="0.38" height="0.7" fill="#F8F8F2"/>
   </g>
 
-  <!-- Layer 1: Body -->
+  <!-- Layer 1: Legs (independent, not in body group) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body (body-bounce > breathe > torso + eyes) -->
   <g class="body-bounce">
     <g class="breathe">
       <g fill="#DE886D">
-        <rect x="3" y="13" width="1" height="2"/>
-        <rect x="5" y="13" width="1" height="2"/>
-        <rect x="9" y="13" width="1" height="2"/>
-        <rect x="11" y="13" width="1" height="2"/>
         <rect x="2" y="6" width="11" height="7"/>
       </g>
+      <!-- Eyes: squinted, scanning code -->
       <g class="eyes-code" fill="#000">
         <rect x="4" y="8" width="1" height="2"/>
         <rect x="10" y="8" width="1" height="2"/>
@@ -209,9 +229,11 @@
     </g>
   </g>
 
-  <!-- Layer 2: Keyboard -->
+  <!-- Layer 2b: Keyboard -->
   <g id="keyboard" transform="translate(-0.5, 11.8)">
     <rect x="0" y="0" width="16" height="3.2" fill="#455A64" rx="0.3"/>
+    <rect x="0" y="0" width="16" height="0.48" fill="#607D8B" rx="0.3"/>
+    <!-- Top row -->
     <g fill="#78909C">
       <rect x="0.5" y="0.4" width="1" height="0.7"/>
       <rect x="1.8" y="0.4" width="1" height="0.7"/>
@@ -221,6 +243,7 @@
       <rect x="12.8" y="0.4" width="1" height="0.7"/>
       <rect x="14.1" y="0.4" width="1.3" height="0.7"/>
     </g>
+    <!-- Middle row -->
     <g fill="#78909C">
       <rect x="0.8" y="1.3" width="0.9" height="0.7"/>
       <rect x="2.0" y="1.3" width="0.9" height="0.7"/>
@@ -235,6 +258,7 @@
       <rect x="12.8" y="1.3" width="0.9" height="0.7"/>
       <rect x="14.0" y="1.3" width="0.9" height="0.7"/>
     </g>
+    <!-- Bottom row -->
     <g fill="#78909C">
       <rect x="0.5" y="2.2" width="0.9" height="0.7"/>
       <rect x="1.7" y="2.2" width="0.9" height="0.7"/>
@@ -250,7 +274,7 @@
       <rect x="13.7" y="2.2" width="0.9" height="0.7"/>
       <rect x="14.9" y="2.2" width="0.6" height="0.7"/>
     </g>
-    <!-- Key press highlights (overlay on top of keys) -->
+    <!-- Key press highlights (staggered flashes) -->
     <g fill="#B0BEC5">
       <rect class="key-flash kf1" x="4.4" y="1.3" width="0.9" height="0.7"/>
       <rect class="key-flash kf2" x="9.2" y="1.3" width="0.9" height="0.7"/>
@@ -261,7 +285,7 @@
     </g>
   </g>
 
-  <!-- Layer 3: Arms -->
+  <!-- Layer 3: Arms (SEPARATE body-bounce > breathe, at keyboard level) -->
   <g class="body-bounce">
     <g class="breathe">
       <g fill="#DE886D">

@@ -1,29 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* 10-Second Idle Loop — Looking Around + Scratching (no yawn) */
-      .action-body {
-        transform-origin: 7.5px 13px;
-        animation: action-body 10s infinite ease-in-out;
-      }
+      /* ===== 10s Idle Loop: look-right, scratch, look-left, settle ===== */
+
+      /* ===== 1. Independent sub-animations ===== */
 
       .breathe-anim {
         transform-origin: 7.5px 13px;
         animation: breathe 3.2s infinite ease-in-out;
-      }
-
-      .shadow-anim {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-action 10s infinite ease-in-out;
-      }
-
-      .arm-l {
-        transform-origin: 1px 10px;
-        animation: arm-l-idle 10s infinite ease-in-out;
-      }
-
-      .eyes-look {
-        animation: eye-track 10s infinite ease-in-out;
       }
 
       .eyes-blink {
@@ -31,60 +15,143 @@
         animation: eye-blink 10s infinite linear;
       }
 
-      /* --- Keyframes --- */
+      /* ===== 2. Main 10s timeline ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: action-body 10s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-action 10s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 1px 10px;
+        animation: arm-l-idle 10s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 14px 10px;
+        animation: arm-r-idle 10s infinite ease-in-out;
+      }
+
+      .eyes-look {
+        animation: eye-track 10s infinite ease-in-out;
+      }
+
+      /* ===== Keyframes ===== */
 
       @keyframes breathe {
         0%, 100% { transform: scale(1, 1) translate(0, 0); }
-        50% { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
       }
 
+      /*
+       * 10s timeline:
+       *   0%-8%    idle
+       *  10%-22%   look right (body +1px, eyes +3px)
+       *  24%-28%   return center
+       *  30%-40%   left arm scratch (3 rapid up-down)
+       *  42%-44%   settle from scratch
+       *  46%-58%   look left (body -1px, eyes -3px)
+       *  60%-64%   return center
+       *  66%-80%   subtle head tilt right (gentle curiosity)
+       *  82%-90%   return center
+       *  92%-100%  idle (breathe + blink only)
+       */
+
       @keyframes action-body {
-        0%, 8%, 25%, 30%, 40%, 45%, 60%, 100% { transform: scale(1,1) translate(0,0); }
-        /* Look Right */
-        12%, 22% { transform: scale(1,1) translate(1px, 0); }
-        /* Look Left */
-        48%, 57% { transform: scale(1,1) translate(-1px, 0); }
-        /* Scratch Lean */
-        33%, 38% { transform: scale(1,1) translate(0.5px, 0); }
+        0%, 8%          { transform: scale(1, 1) translate(0, 0); }
+        /* look right */
+        12%, 22%        { transform: scale(1, 1) translate(1px, 0); }
+        /* return center */
+        26%, 28%        { transform: scale(1, 1) translate(0, 0); }
+        /* scratch lean */
+        32%, 38%        { transform: scale(1, 1) translate(0.5px, 0); }
+        /* return */
+        42%             { transform: scale(1, 1) translate(0, 0); }
+        /* look left */
+        48%, 56%        { transform: scale(1, 1) translate(-1px, 0); }
+        /* return center */
+        62%             { transform: scale(1, 1) translate(0, 0); }
+        /* subtle curious tilt */
+        68%, 76%        { transform: scale(1, 1) translate(0.5px, -0.3px); }
+        /* settle */
+        82%             { transform: scale(1, 1) translate(0, 0); }
+        /* micro bounce on settle */
+        84%             { transform: scale(1.01, 0.99) translate(0, 0.2px); }
+        86%, 100%       { transform: scale(1, 1) translate(0, 0); }
       }
 
       @keyframes shadow-action {
-        0%, 8%, 25%, 30%, 40%, 45%, 60%, 100% { transform: scaleX(1) translate(0,0); opacity: 0.5; }
-        12%, 22% { transform: scaleX(1) translate(1px, 0); opacity: 0.5; }
-        48%, 57% { transform: scaleX(1) translate(-1px, 0); opacity: 0.5; }
-        33%, 38% { transform: scaleX(1) translate(0.5px, 0); opacity: 0.5; }
+        0%, 8%          { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        12%, 22%        { transform: scaleX(1) translate(1px, 0); opacity: 0.5; }
+        26%, 28%        { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        32%, 38%        { transform: scaleX(1) translate(0.5px, 0); opacity: 0.5; }
+        42%             { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        48%, 56%        { transform: scaleX(1) translate(-1px, 0); opacity: 0.5; }
+        62%             { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        68%, 76%        { transform: scaleX(0.98) translate(0.5px, 0); opacity: 0.48; }
+        82%, 100%       { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
       }
 
       @keyframes eye-track {
-        0%, 10%, 25%, 43%, 60%, 100% { transform: translate(0, 0); }
-        12%, 22% { transform: translate(3px, 0); }  /* Look Right */
-        48%, 57% { transform: translate(-3px, 0); }  /* Look Left */
+        0%, 10%         { transform: translate(0, 0); }
+        /* look right */
+        12%, 22%        { transform: translate(3px, 0); }
+        26%             { transform: translate(0, 0); }
+        /* look left */
+        48%, 56%        { transform: translate(-3px, 0); }
+        62%             { transform: translate(0, 0); }
+        /* curious glance right-up */
+        68%, 76%        { transform: translate(2px, -0.5px); }
+        82%, 100%       { transform: translate(0, 0); }
       }
 
       @keyframes eye-blink {
-        0%, 3%, 7%, 18%, 22%, 47%, 51%, 78%, 82%, 100% { transform: scaleY(1); }
-        5%, 20%, 49%, 80% { transform: scaleY(0.1); }
+        0%, 3%          { transform: scaleY(1); }
+        5%              { transform: scaleY(0.1); }
+        7%, 24%         { transform: scaleY(1); }
+        26%             { transform: scaleY(0.1); }
+        28%, 47%        { transform: scaleY(1); }
+        49%             { transform: scaleY(0.1); }
+        51%, 78%        { transform: scaleY(1); }
+        80%             { transform: scaleY(0.1); }
+        82%, 100%       { transform: scaleY(1); }
       }
 
       @keyframes arm-l-idle {
-        0%, 30% { transform: translate(0,0) rotate(0deg); }
-        /* Scratching Sequence */
-        33% { transform: translate(1px, -3px) rotate(15deg); }
-        34% { transform: translate(1.5px, -4px) rotate(35deg); }
-        35% { transform: translate(0.5px, -2.5px) rotate(0deg); }
-        36% { transform: translate(1.5px, -4px) rotate(35deg); }
-        37% { transform: translate(0.5px, -2.5px) rotate(0deg); }
-        38% { transform: translate(1.5px, -4px) rotate(35deg); }
-        39% { transform: translate(0.5px, -2.5px) rotate(0deg); }
-        42%, 100% { transform: translate(0,0) rotate(0deg); }
+        0%, 28%         { transform: translate(0, 0) rotate(0deg); }
+        /* scratch sequence: 3 rapid up-down cycles */
+        31%             { transform: translate(1px, -3px) rotate(15deg); }
+        32%             { transform: translate(1.5px, -4px) rotate(35deg); }
+        33%             { transform: translate(0.5px, -2.5px) rotate(0deg); }
+        34%             { transform: translate(1.5px, -4px) rotate(35deg); }
+        35%             { transform: translate(0.5px, -2.5px) rotate(0deg); }
+        36%             { transform: translate(1.5px, -4px) rotate(35deg); }
+        37%             { transform: translate(0.5px, -2.5px) rotate(0deg); }
+        40%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      /* Right arm: very subtle fidget, not mirroring left */
+      @keyframes arm-r-idle {
+        0%, 60%         { transform: translate(0, 0) rotate(0deg); }
+        /* small adjust */
+        66%             { transform: translate(0.3px, -0.5px) rotate(-5deg); }
+        72%             { transform: translate(0, 0) rotate(0deg); }
+        100%            { transform: translate(0, 0) rotate(0deg); }
       }
     </style>
   </defs>
 
-  <!-- Ground Shadow -->
-  <rect id="ground-shadow" class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+  <!-- Layer 0: Ground Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
 
-  <!-- Static Legs -->
+  <!-- Layer 1: Static Legs (independent of body transforms) -->
   <g id="legs" fill="#DE886D">
     <rect x="3" y="12" width="1" height="3"/>
     <rect x="5" y="12" width="1" height="3"/>
@@ -92,24 +159,31 @@
     <rect x="11" y="12" width="1" height="3"/>
   </g>
 
-  <!-- Animated Upper Body -->
+  <!-- Layer 2: Animated Upper Body (action > breathe nesting) -->
   <g class="action-body">
     <g class="breathe-anim">
+
       <!-- Torso -->
       <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
       <!-- Left Arm (scratches) -->
       <g class="arm-l">
         <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
       </g>
-      <!-- Right Arm (static) -->
-      <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
-      <!-- Eyes -->
+
+      <!-- Right Arm (subtle fidget, asymmetric) -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Eyes: CSS look position > CSS blink -->
       <g class="eyes-look" fill="#000000">
         <g class="eyes-blink">
           <rect x="4" y="8" width="1" height="2"/>
           <rect x="10" y="8" width="1" height="2"/>
         </g>
       </g>
+
     </g>
   </g>
 </svg>

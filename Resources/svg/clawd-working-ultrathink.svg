@@ -1,142 +1,220 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
   <defs>
     <style>
-      /* Intense body trembling */
-      .body-shake {
-        transform-origin: 7.5px 15px;
-        animation: shake 0.15s infinite alternate ease-in-out;
+      /* ===== Ultrathink: meditative deep-thought with rainbow aura ===== */
+      /*
+        16s main cycle (5 × 3.2s breathe). No JS eye tracking.
+        Body + legs float together (4s). Rainbow orbiting particles.
+        Eyes half-closed with REM flutter. Rainbow halo above head.
+      */
+
+      /* ===== 1. Sub-animations ===== */
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
       }
 
-      /* Shadow vibration */
-      .shadow-shake {
-        transform-origin: 7.5px 15.5px;
-        animation: shadow-vib 0.15s infinite alternate ease-in-out;
-      }
-
-      /* Right arm tapping chin fast */
-      .arm-tap-fast {
-        transform-origin: 14px 10px;
-        animation: tap-fast 0.8s infinite ease-in-out;
-      }
-
-      /* Concentrated squint blink */
-      .eyes-focus {
+      .eyes-rem {
         transform-origin: 7.5px 9px;
-        animation: focus-blink 2s infinite;
+        animation: eye-rem 16s infinite ease-in-out;
       }
 
-      /* Brain sparks rising from head */
-      .spark {
-        opacity: 0;
-        animation: spark-rise 1.2s infinite ease-out;
-      }
-      .sp1 { animation-delay: 0s; }
-      .sp2 { animation-delay: 0.3s; }
-      .sp3 { animation-delay: 0.6s; }
-      .sp4 { animation-delay: 0.9s; }
-
-      /* Loading dots spinning */
-      .load-dot {
-        opacity: 0;
-        animation: dot-pulse 1.6s infinite;
-      }
-      .d1 { animation-delay: 0s; }
-      .d2 { animation-delay: 0.4s; }
-      .d3 { animation-delay: 0.8s; }
-
-      /* Steam puffs */
-      .steam {
-        opacity: 0;
-        animation: steam-rise 2s infinite ease-out;
-      }
-      .st1 { animation-delay: 0s; }
-      .st2 { animation-delay: 0.7s; }
-      .st3 { animation-delay: 1.4s; }
-
-      /* Ultrathink letters individual pulse */
-      .ul { animation: text-pulse 1s infinite ease-in-out; }
-      .ul0 { animation-delay: 0s; }
-      .ul1 { animation-delay: 0.1s; }
-      .ul2 { animation-delay: 0.2s; }
-      .ul3 { animation-delay: 0.3s; }
-      .ul4 { animation-delay: 0.4s; }
-      .ul5 { animation-delay: 0.5s; }
-      .ul6 { animation-delay: 0.6s; }
-      .ul7 { animation-delay: 0.7s; }
-      .ul8 { animation-delay: 0.8s; }
-      .ul9 { animation-delay: 0.9s; }
-
-      @keyframes text-pulse {
-        0%, 100% { opacity: 0.15; }
-        50% { opacity: 1; }
+      /* ===== 2. Main timeline: levitation (wraps entire character) ===== */
+      .levitate {
+        animation: levitate 4s infinite ease-in-out;
       }
 
-      @keyframes shake {
-        0% { transform: translate(-0.3px, 0) rotate(-0.5deg); }
-        100% { transform: translate(0.3px, 0) rotate(0.5deg); }
+      /* ===== 3. Component animations ===== */
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-drift 6.4s infinite ease-in-out;
       }
 
-      @keyframes shadow-vib {
-        0% { transform: scaleX(0.98); }
-        100% { transform: scaleX(1.02); }
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-rest 9.6s infinite ease-in-out;
       }
 
-      @keyframes tap-fast {
-        0%, 100% { transform: rotate(-125deg); }
-        50% { transform: rotate(-145deg); }
+      /* ===== 4. Effect animations ===== */
+
+      /* Ground glow: rainbow color cycle, anti-phase with halo */
+      .ground-glow {
+        transform-origin: 7.5px 15.5px;
+        animation: glow-ground 3s infinite ease-in-out, glow-color 6s infinite linear;
       }
 
-      @keyframes focus-blink {
-        0%, 70%, 78%, 100% { transform: scaleY(1); }
-        74% { transform: scaleY(0.1); }
+      /* Head halo: rainbow color cycling diamond */
+      .halo {
+        transform-origin: 7.5px 2px;
+        animation: halo-pulse 3s infinite ease-in-out;
+      }
+      .halo-color {
+        animation: halo-color-cycle 4s infinite linear;
       }
 
-      @keyframes spark-rise {
-        0% { transform: translate(0, 0) scale(1); opacity: 0; }
-        15% { opacity: 1; }
-        100% { transform: translate(2px, -12px) scale(0.3); opacity: 0; }
+      /* Rainbow orbiting particles — 6 colors cycling */
+      .orb { opacity: 0.8; }
+      .orb1 { animation: orbit1 8s linear infinite; }
+      .orb2 { animation: orbit2 10s linear infinite; animation-delay: -3s; }
+      .orb3 { animation: orbit3 12s linear infinite; animation-delay: -5s; }
+      .orb4 { animation: orbit4 9s linear infinite; animation-delay: -2s; }
+      .orb5 { animation: orbit5 11s linear infinite; animation-delay: -7s; }
+      .orb6 { animation: orbit6 8.5s linear infinite; animation-delay: -4s; }
+
+      /* Inspiration sparks (rainbow flash) */
+      .spark1 { opacity: 0; animation: spark-r 16s infinite step-end; }
+      .spark2 { opacity: 0; animation: spark-l 16s infinite step-end; }
+
+      /* Rainbow shimmer on body — very subtle color wash */
+      .body-shimmer {
+        animation: shimmer 8s infinite linear;
+        mix-blend-mode: overlay;
       }
 
-      @keyframes dot-pulse {
-        0%, 100% { opacity: 0.2; }
-        25%, 75% { opacity: 1; }
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
       }
 
-      @keyframes steam-rise {
-        0% { transform: translate(0, 0) scale(0.8); opacity: 0; }
-        20% { opacity: 0.6; }
-        100% { transform: translate(-2px, -10px) scale(1.5); opacity: 0; }
+      @keyframes levitate {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-2px); }
+      }
+
+      @keyframes eye-rem {
+        0%, 24%   { transform: scaleY(0.3); }
+        27%       { transform: scaleY(0.6); }
+        30%, 59%  { transform: scaleY(0.3); }
+        62%       { transform: scaleY(0.8); }
+        66%, 100% { transform: scaleY(0.3); }
+      }
+
+      @keyframes arm-l-drift {
+        0%, 100% { transform: rotate(0deg); }
+        50%      { transform: rotate(-5deg) translate(0, -0.5px); }
+      }
+
+      @keyframes arm-r-rest {
+        0%, 100% { transform: rotate(0deg); }
+        50%      { transform: rotate(2deg); }
+      }
+
+      /* Ground glow: breathe opacity */
+      @keyframes glow-ground {
+        0%, 100% { opacity: 0.35; transform: scaleX(1.05); }
+        50%      { opacity: 0.15; transform: scaleX(0.95); }
+      }
+
+      /* Ground glow: rainbow color cycle */
+      @keyframes glow-color {
+        0%       { fill: #FF5252; }
+        16.6%    { fill: #FF9800; }
+        33.3%    { fill: #FFC107; }
+        50%      { fill: #4CAF50; }
+        66.6%    { fill: #2196F3; }
+        83.3%    { fill: #9C27B0; }
+        100%     { fill: #FF5252; }
+      }
+
+      /* Halo pulse */
+      @keyframes halo-pulse {
+        0%, 100% { opacity: 0.25; }
+        50%      { opacity: 0.75; }
+      }
+
+      /* Halo color cycle — offset from ground */
+      @keyframes halo-color-cycle {
+        0%       { fill: #2196F3; }
+        16.6%    { fill: #9C27B0; }
+        33.3%    { fill: #FF5252; }
+        50%      { fill: #FF9800; }
+        66.6%    { fill: #FFC107; }
+        83.3%    { fill: #4CAF50; }
+        100%     { fill: #2196F3; }
+      }
+
+      /* Orbiting particles — elliptical paths */
+      @keyframes orbit1 {
+        0%   { transform: translate(10px, 0px); }
+        25%  { transform: translate(0px, -8px); }
+        50%  { transform: translate(-10px, 0px); }
+        75%  { transform: translate(0px, 8px); }
+        100% { transform: translate(10px, 0px); }
+      }
+      @keyframes orbit2 {
+        0%   { transform: translate(-8px, -5px); }
+        25%  { transform: translate(6px, -10px); }
+        50%  { transform: translate(8px, 5px); }
+        75%  { transform: translate(-6px, 10px); }
+        100% { transform: translate(-8px, -5px); }
+      }
+      @keyframes orbit3 {
+        0%   { transform: translate(5px, 9px); }
+        25%  { transform: translate(12px, -2px); }
+        50%  { transform: translate(-5px, -9px); }
+        75%  { transform: translate(-12px, 2px); }
+        100% { transform: translate(5px, 9px); }
+      }
+      @keyframes orbit4 {
+        0%   { transform: translate(-11px, 3px); }
+        25%  { transform: translate(-3px, -9px); }
+        50%  { transform: translate(11px, -3px); }
+        75%  { transform: translate(3px, 9px); }
+        100% { transform: translate(-11px, 3px); }
+      }
+      @keyframes orbit5 {
+        0%   { transform: translate(7px, -7px); }
+        25%  { transform: translate(-9px, -4px); }
+        50%  { transform: translate(-7px, 7px); }
+        75%  { transform: translate(9px, 4px); }
+        100% { transform: translate(7px, -7px); }
+      }
+      @keyframes orbit6 {
+        0%   { transform: translate(-6px, -8px); }
+        25%  { transform: translate(8px, -3px); }
+        50%  { transform: translate(6px, 8px); }
+        75%  { transform: translate(-8px, 3px); }
+        100% { transform: translate(-6px, -8px); }
+      }
+
+      /* Spark flashes */
+      @keyframes spark-r {
+        0%, 40%   { opacity: 0; }
+        41%, 42%  { opacity: 1; }
+        43%, 44%  { opacity: 0; }
+        44%, 45%  { opacity: 0.6; }
+        46%, 100% { opacity: 0; }
+      }
+      @keyframes spark-l {
+        0%, 75%   { opacity: 0; }
+        76%, 77%  { opacity: 1; }
+        78%, 79%  { opacity: 0; }
+        79%, 80%  { opacity: 0.6; }
+        81%, 100% { opacity: 0; }
+      }
+
+      /* Subtle body shimmer overlay */
+      @keyframes shimmer {
+        0%       { fill: #FF5252; opacity: 0.06; }
+        16.6%    { fill: #FF9800; opacity: 0.08; }
+        33.3%    { fill: #FFC107; opacity: 0.06; }
+        50%      { fill: #4CAF50; opacity: 0.08; }
+        66.6%    { fill: #2196F3; opacity: 0.06; }
+        83.3%    { fill: #9C27B0; opacity: 0.08; }
+        100%     { fill: #FF5252; opacity: 0.06; }
       }
     </style>
   </defs>
 
-  <!-- Ground Shadow -->
-  <rect class="shadow-shake" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+  <!-- Layer 0: Ground glow (rainbow cycling energy projection) -->
+  <rect class="ground-glow" x="2" y="15" width="11" height="1" fill="#2196F3" opacity="0.25"/>
 
-  <!-- Brain Sparks (mirrored x positions around center 7.5) -->
-  <g fill="#FFD700">
-    <rect class="spark sp1" x="10" y="2" width="1" height="1"/>
-    <rect class="spark sp2" x="6" y="0" width="1" height="1"/>
-    <rect class="spark sp3" x="3" y="1" width="1" height="1"/>
-    <rect class="spark sp4" x="8" y="-1" width="1" height="1"/>
-  </g>
+  <!-- Levitate wrapper: body + legs float together -->
+  <g class="levitate">
 
-  <!-- Steam Puffs -->
-  <g fill="#AAAAAA" opacity="0.5">
-    <g class="steam st1"><rect x="5" y="3" width="2" height="1" rx="0.5"/><rect x="4" y="2" width="1" height="1" rx="0.5"/></g>
-    <g class="steam st2"><rect x="9" y="2" width="2" height="1" rx="0.5"/><rect x="10" y="1" width="1" height="1" rx="0.5"/></g>
-    <g class="steam st3"><rect x="7" y="3" width="1" height="1" rx="0.5"/><rect x="6" y="2" width="2" height="1" rx="0.5"/></g>
-  </g>
-
-  <!-- Loading Dots above head -->
-  <g fill="#FF6B35">
-    <rect class="load-dot d1" x="4" y="4" width="1" height="1"/>
-    <rect class="load-dot d2" x="7" y="4" width="1" height="1"/>
-    <rect class="load-dot d3" x="10" y="4" width="1" height="1"/>
-  </g>
-
-  <!-- Mirrored: body + legs only -->
-  <g transform="translate(15, 0) scale(-1, 1)">
+    <!-- Layer 1: Legs -->
     <g id="legs" fill="#DE886D">
       <rect x="3" y="13" width="1" height="2"/>
       <rect x="5" y="13" width="1" height="2"/>
@@ -144,23 +222,68 @@
       <rect x="11" y="13" width="1" height="2"/>
     </g>
 
-    <g class="body-shake">
-      <g fill="#DE886D">
-        <rect x="2" y="6" width="11" height="7"/>
-        <rect x="0" y="9" width="3" height="2" transform="rotate(25 1 10)"/>
-        <g class="arm-tap-fast">
-          <rect x="13" y="9" width="2" height="2"/>
-        </g>
+    <!-- Layer 2: Body (breathe > torso + arms + eyes) -->
+    <g class="breathe-anim">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Rainbow shimmer overlay on body -->
+      <rect class="body-shimmer" x="2" y="6" width="11" height="7" fill="#FF5252" opacity="0.06"/>
+
+      <!-- Left arm -->
+      <g class="arm-l">
+        <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
       </g>
-      <g class="eyes-focus" fill="#000000">
-        <rect x="5" y="7" width="1" height="2"/>
-        <rect x="11" y="7" width="1" height="2"/>
+
+      <!-- Right arm -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
       </g>
+
+      <!-- Eyes: half-closed with REM flutter -->
+      <g class="eyes-rem" fill="#000">
+        <rect x="4" y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
+      </g>
+    </g>
+
+  </g>
+
+  <!-- Layer 3: Effects -->
+
+  <!-- Head halo: pixel diamond with rainbow color cycling -->
+  <g class="halo levitate">
+    <g class="halo-color" fill="#2196F3">
+      <rect x="7" y="1" width="1" height="1"/>
+      <rect x="6" y="2" width="1" height="1"/>
+      <rect x="8" y="2" width="1" height="1"/>
+      <rect x="7" y="3" width="1" height="1"/>
     </g>
   </g>
 
-  <!-- Ultrathink rainbow text (top layer, each letter pulses independently) -->
-  <text x="7.5" y="0" text-anchor="middle" font-family="'Söhne', 'Helvetica Neue', Arial, sans-serif" font-size="3.2" font-weight="600" letter-spacing="0.2">
-    <tspan class="ul ul0" fill="#FF5252">u</tspan><tspan class="ul ul1" fill="#FF9800">l</tspan><tspan class="ul ul2" fill="#FFC107">t</tspan><tspan class="ul ul3" fill="#4CAF50">r</tspan><tspan class="ul ul4" fill="#2196F3">a</tspan><tspan class="ul ul5" fill="#9C27B0">t</tspan><tspan class="ul ul6" fill="#FF5252">h</tspan><tspan class="ul ul7" fill="#FF9800">i</tspan><tspan class="ul ul8" fill="#4CAF50">n</tspan><tspan class="ul ul9" fill="#2196F3">k</tspan>
-  </text>
+  <!-- Rainbow orbiting particles (6 colors = full spectrum) -->
+  <rect class="orb orb1" x="7" y="9" width="1" height="1" fill="#FF5252"/>
+  <rect class="orb orb2" x="7" y="9" width="1" height="1" fill="#FF9800"/>
+  <rect class="orb orb3" x="7" y="9" width="1" height="1" fill="#FFC107"/>
+  <rect class="orb orb4" x="7" y="9" width="1" height="1" fill="#4CAF50"/>
+  <rect class="orb orb5" x="7" y="9" width="1" height="1" fill="#2196F3"/>
+  <rect class="orb orb6" x="7" y="9" width="1" height="1" fill="#9C27B0"/>
+
+  <!-- Inspiration spark #1: rainbow cross, right-upper -->
+  <g class="spark1">
+    <rect x="17" y="-2" width="1" height="1" fill="#FF5252"/>
+    <rect x="17" y="-1" width="1" height="1" fill="#FFC107"/>
+    <rect x="17" y="0" width="1" height="1" fill="#4CAF50"/>
+    <rect x="16" y="-1" width="1" height="1" fill="#2196F3"/>
+    <rect x="18" y="-1" width="1" height="1" fill="#9C27B0"/>
+  </g>
+
+  <!-- Inspiration spark #2: rainbow cross, left-upper -->
+  <g class="spark2">
+    <rect x="-4" y="0" width="1" height="1" fill="#9C27B0"/>
+    <rect x="-4" y="1" width="1" height="1" fill="#2196F3"/>
+    <rect x="-4" y="2" width="1" height="1" fill="#4CAF50"/>
+    <rect x="-5" y="1" width="1" height="1" fill="#FF9800"/>
+    <rect x="-3" y="1" width="1" height="1" fill="#FF5252"/>
+  </g>
 </svg>
