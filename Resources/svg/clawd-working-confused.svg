@@ -1,0 +1,185 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink-confused 6s infinite linear;
+      }
+
+      /* ===== 2. Main 6s timeline: look left, look right, confused ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-confused 6s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-confused 6s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-shrug 6s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-scratch 6s infinite ease-in-out;
+      }
+
+      .eyes-look {
+        animation: eyes-look-confused 6s infinite ease-in-out;
+      }
+
+      /* ===== 4. Effect animations ===== */
+
+      .question-l {
+        opacity: 0;
+        animation: q-pop-l 6s infinite ease-in-out;
+      }
+
+      .question-r {
+        opacity: 0;
+        animation: q-pop-r 6s infinite ease-in-out;
+      }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      /* Blink with extra blinks during confused phases */
+      @keyframes eye-blink-confused {
+        0%, 13%, 17%, 48%, 52%, 80%, 84%, 100% { transform: scaleY(1); }
+        15%, 50%, 82% { transform: scaleY(0.1); }
+      }
+
+      /* Body: look left, center, look right, center */
+      @keyframes body-confused {
+        0%, 10%   { transform: translate(0, 0); }
+        15%, 35%  { transform: translate(-2px, 0) rotate(-2deg); }
+        40%, 45%  { transform: translate(0, 0); }
+        50%, 70%  { transform: translate(2px, 0) rotate(2deg); }
+        75%, 100% { transform: translate(0, 0); }
+      }
+
+      /* Shadow follows body sway */
+      @keyframes shadow-confused {
+        0%, 10%   { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        15%, 35%  { transform: scaleX(1) translate(-2px, 0); opacity: 0.5; }
+        40%, 45%  { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        50%, 70%  { transform: scaleX(1) translate(2px, 0); opacity: 0.5; }
+        75%, 100% { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+      }
+
+      /* Eyes look direction */
+      @keyframes eyes-look-confused {
+        0%, 10%   { transform: translate(0, 0); }
+        15%, 35%  { transform: translate(-3px, 0); }
+        40%, 45%  { transform: translate(0, 0); }
+        50%, 70%  { transform: translate(3px, 0); }
+        75%, 100% { transform: translate(0, 0); }
+      }
+
+      /* Left arm shrug */
+      @keyframes arm-l-shrug {
+        0%, 10%   { transform: rotate(15deg) translate(0, 0); }
+        15%, 35%  { transform: rotate(15deg) translate(-1px, 0); }
+        40%, 45%  { transform: rotate(15deg) translate(0, 0); }
+        50%, 70%  { transform: rotate(20deg) translate(0, -1px); }
+        75%, 100% { transform: rotate(15deg) translate(0, 0); }
+      }
+
+      /* Right arm scratch head */
+      @keyframes arm-r-scratch {
+        0%, 10%   { transform: rotate(0deg); }
+        15%, 20%  { transform: rotate(-5deg); }
+        22%, 25%  { transform: rotate(0deg); }
+        27%, 30%  { transform: rotate(-5deg); }
+        32%, 35%  { transform: rotate(0deg); }
+        40%, 100% { transform: rotate(0deg); }
+      }
+
+      /* Left question mark pops during left-look phase */
+      @keyframes q-pop-l {
+        0%, 15%   { opacity: 0; transform: translate(-6px, 6px) scale(0.5); }
+        20%, 30%  { opacity: 1; transform: translate(-8px, -2px) scale(1); }
+        35%, 100% { opacity: 0; transform: translate(-8px, -8px) scale(1.2); }
+      }
+
+      /* Right question mark pops during right-look phase */
+      @keyframes q-pop-r {
+        0%, 50%   { opacity: 0; transform: translate(6px, 6px) scale(0.5); }
+        55%, 65%  { opacity: 1; transform: translate(8px, -2px) scale(1); }
+        70%, 100% { opacity: 0; transform: translate(8px, -8px) scale(1.2); }
+      }
+    </style>
+
+    <!-- Reusable pixel question mark -->
+    <g id="pixel-question">
+      <rect x="1" y="0" width="2" height="1"/>
+      <rect x="0" y="1" width="1" height="1"/>
+      <rect x="3" y="1" width="1" height="2"/>
+      <rect x="2" y="3" width="1" height="1"/>
+      <rect x="1" y="4" width="1" height="1"/>
+      <rect x="1" y="6" width="1" height="1"/>
+    </g>
+  </defs>
+
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, independent) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body group (action > breathe) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left arm (shrug posture) -->
+      <g class="arm-l">
+        <rect x="-1" y="7" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right arm -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Eyes with look direction -->
+      <g class="eyes-look">
+        <g class="eyes-blink" fill="#000000">
+          <rect x="4" y="8" width="1" height="2"/>
+          <rect x="10" y="8" width="1" height="2"/>
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <!-- Layer 3: Question mark effects -->
+  <g class="question-l" fill="#40C4FF">
+    <use href="#pixel-question"/>
+  </g>
+  <g class="question-r" fill="#FFC107" transform="translate(10, 0)">
+    <use href="#pixel-question"/>
+  </g>
+</svg>

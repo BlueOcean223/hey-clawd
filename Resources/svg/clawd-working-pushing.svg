@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink-strain 3s infinite linear;
+      }
+
+      /* ===== 2. Main timeline: straining body lean ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-strain 0.55s infinite alternate ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-push 0.55s infinite alternate ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      /* Legs scramble fast */
+      .leg {
+        transform-box: fill-box;
+        transform-origin: top center;
+      }
+      .leg-a { animation: leg-scramble-a 0.22s infinite linear; }
+      .leg-b { animation: leg-scramble-b 0.22s infinite linear; }
+
+      /* ===== 4. Effect animations ===== */
+
+      /* Block shakes under pressure */
+      .block-shake {
+        animation: block-tremble 0.08s infinite alternate ease-in-out;
+      }
+
+      /* Sweat drops */
+      .sweat {
+        opacity: 0;
+      }
+      .sw1 { animation: sweat-fly 1.5s infinite ease-out; animation-delay: 0s; }
+      .sw2 { animation: sweat-fly 1.5s infinite ease-out; animation-delay: -0.55s; }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      /* Strained blink: one eye squinted, occasional full blink */
+      @keyframes eye-blink-strain {
+        0%, 70%, 78%, 100% { transform: scaleY(1); }
+        74%                { transform: scaleY(0.1); }
+      }
+
+      /* Body alternates between two push stances */
+      @keyframes body-strain {
+        0%   { transform: rotate(10deg) scaleY(0.96); }
+        100% { transform: rotate(13deg) scaleY(0.92); }
+      }
+
+      /* Shadow stretches forward under effort */
+      @keyframes shadow-push {
+        0%   { transform: translateX(1px) scaleX(1.05); opacity: 0.45; }
+        100% { transform: translateX(2.5px) scaleX(1.12); opacity: 0.55; }
+      }
+
+      /* Leg scramble alternating */
+      @keyframes leg-scramble-a {
+        0%, 100% { transform: rotate(0deg) scaleY(1); }
+        50%      { transform: rotate(-28deg) scaleY(0.65); }
+      }
+      @keyframes leg-scramble-b {
+        0%, 100% { transform: rotate(-28deg) scaleY(0.65); }
+        50%      { transform: rotate(0deg) scaleY(1); }
+      }
+
+      /* Block trembles */
+      @keyframes block-tremble {
+        0%   { transform: translate(0, 0); }
+        100% { transform: translate(0.7px, -0.5px); }
+      }
+
+      /* Sweat drops fly upward-left */
+      @keyframes sweat-fly {
+        0%   { opacity: 0; transform: translate(0, 0) scale(1); }
+        10%  { opacity: 1; transform: translate(0, 0) scale(1); }
+        60%  { opacity: 0.7; transform: translate(-7px, -5px) scale(0.8); }
+        100% { opacity: 0; transform: translate(-11px, -8px) scale(0.5); }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Shadow (stretched forward) -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+  <!-- Block shadow -->
+  <rect x="14" y="15" width="10" height="1" fill="#000000" opacity="0.3"/>
+
+  <!-- Layer 1: Legs (scrambling, independent of body rotation) -->
+  <g id="legs" fill="#DE886D">
+    <rect class="leg leg-a" x="3" y="13" width="1" height="2"/>
+    <rect class="leg leg-b" x="5" y="13" width="1" height="2"/>
+    <rect class="leg leg-a" x="9" y="13" width="1" height="2"/>
+    <rect class="leg leg-b" x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body group (action > breathe) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left arm: angled forward to push -->
+      <rect x="0" y="9" width="2" height="2" fill="#DE886D" transform="rotate(-20, 2, 10)"/>
+
+      <!-- Right arm: pressed against the block -->
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D" transform="rotate(-25, 13, 10)"/>
+
+      <!-- Strain eyes: one squinted, one wide -->
+      <g class="eyes-blink" fill="#000000">
+        <!-- Left eye: squinting hard -->
+        <rect x="4" y="9" width="2" height="1"/>
+        <!-- Right eye: wide open, straining -->
+        <rect x="9" y="8" width="2" height="2"/>
+      </g>
+
+      <!-- Sweat drops (fly from head area) -->
+      <g class="sweat sw1" fill="#64B5F6" transform="translate(5, 3)">
+        <rect x="0" y="0" width="1" height="1"/>
+        <rect x="0" y="1" width="2" height="1"/>
+      </g>
+      <g class="sweat sw2" fill="#64B5F6" transform="translate(7, 2)">
+        <rect x="0" y="0" width="1" height="1"/>
+        <rect x="0" y="1" width="2" height="1"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Layer 3: Heavy data block (props) -->
+  <g class="block-shake" transform="translate(14, 5)">
+    <rect x="0" y="0" width="10" height="10" fill="#78909C"/>
+    <rect x="1" y="1" width="8" height="8" fill="#CFD8DC"/>
+    <rect x="2" y="2" width="2" height="2" fill="#0082FC"/>
+    <rect x="6" y="2" width="2" height="2" fill="#FFC107"/>
+    <rect x="2" y="6" width="6" height="2" fill="#B0BEC5"/>
+  </g>
+</svg>

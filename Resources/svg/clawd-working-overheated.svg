@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe-heavy 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink-tired 5s infinite ease-in-out;
+      }
+
+      /* ===== 2. Main timeline: heavy panting body ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-overheat 2.5s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-overheat 2.5s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-hang 3.8s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-fan 0.4s infinite alternate ease-in-out;
+      }
+
+      /* ===== 4. Effect animations ===== */
+
+      /* Smoke puffs */
+      .smoke {
+        opacity: 0;
+        animation: smoke-rise 3s infinite ease-out;
+      }
+      .sm1 { animation-delay: 0s; }
+      .sm2 { animation-delay: -1s; }
+      .sm3 { animation-delay: -2s; }
+
+      /* Heat shimmer lines */
+      .heat {
+        opacity: 0;
+        animation: heat-shimmer 2s infinite ease-in-out;
+      }
+      .h1 { animation-delay: 0s; }
+      .h2 { animation-delay: -0.7s; }
+      .h3 { animation-delay: -1.4s; }
+
+      /* ===== Keyframes ===== */
+
+      /* Heavy breathing with larger amplitude */
+      @keyframes breathe-heavy {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.04, 0.94) translate(0, 1px); }
+      }
+
+      /* Tired blink: slower, heavier */
+      @keyframes eye-blink-tired {
+        0%, 8%, 100% { transform: scaleY(1); }
+        4%           { transform: scaleY(0.1); }
+      }
+
+      /* Body sways heavily, panting */
+      @keyframes body-overheat {
+        0%, 100% { transform: scale(1, 1) translateY(0); }
+        50%      { transform: scale(1.03, 0.95) translateY(1px); }
+      }
+
+      /* Shadow expands when body compresses */
+      @keyframes shadow-overheat {
+        0%, 100% { transform: scaleX(1); opacity: 0.5; }
+        50%      { transform: scaleX(1.05); opacity: 0.55; }
+      }
+
+      /* Left arm hangs limply */
+      @keyframes arm-l-hang {
+        0%, 100% { transform: rotate(5deg); }
+        50%      { transform: rotate(8deg); }
+      }
+
+      /* Right arm fans rapidly */
+      @keyframes arm-r-fan {
+        0%   { transform: rotate(0deg); }
+        100% { transform: rotate(-60deg); }
+      }
+
+      /* Smoke puffs rising from head */
+      @keyframes smoke-rise {
+        0%   { transform: translate(0, 0) scale(0.5); opacity: 0; }
+        20%  { opacity: 0.6; }
+        100% { transform: translate(0, -15px) scale(2); opacity: 0; }
+      }
+
+      /* Heat shimmer lines */
+      @keyframes heat-shimmer {
+        0%   { transform: translate(0, 0); opacity: 0; }
+        20%  { opacity: 0.4; }
+        80%  { opacity: 0.4; }
+        100% { transform: translate(0, -6px); opacity: 0; }
+      }
+    </style>
+
+    <!-- Reusable smoke puff -->
+    <g id="smoke-puff">
+      <rect x="-1" y="-1" width="2" height="2" fill="#B0BEC5" rx="0.5"/>
+      <rect x="0" y="-2" width="2" height="2" fill="#CFD8DC" rx="0.5"/>
+    </g>
+  </defs>
+
+  <!-- Layer 0: Shadow (wider = body pressed down) -->
+  <rect class="shadow-anim" x="2" y="15" width="11" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, spread slightly = exhausted stance) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body group (action > breathe) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left arm (hanging limply) -->
+      <g class="arm-l">
+        <rect x="-1" y="11" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right arm (fanning) -->
+      <g class="arm-r">
+        <rect x="14" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Eyes: tired squint (half-closed) -->
+      <g class="eyes-blink" fill="#000000">
+        <rect x="3.5" y="9" width="2" height="0.8"/>
+        <rect x="9.5" y="9" width="2" height="0.8"/>
+      </g>
+
+      <!-- Red cheeks (overheated) -->
+      <rect x="3" y="10" width="2" height="1" fill="#FF5252" opacity="0.4"/>
+      <rect x="10" y="10" width="2" height="1" fill="#FF5252" opacity="0.4"/>
+    </g>
+  </g>
+
+  <!-- Layer 3: Smoke effects -->
+  <g>
+    <use href="#smoke-puff" class="smoke sm1" transform="translate(5, 4)"/>
+    <use href="#smoke-puff" class="smoke sm2" transform="translate(8, 3)"/>
+    <use href="#smoke-puff" class="smoke sm3" transform="translate(11, 4)"/>
+  </g>
+
+  <!-- Heat shimmer lines above head -->
+  <g stroke="#FF5252" stroke-width="0.3" fill="none">
+    <path class="heat h1" d="M4,3 Q5,1 6,3"/>
+    <path class="heat h2" d="M7,2 Q8,0 9,2"/>
+    <path class="heat h3" d="M10,3 Q11,1 12,3"/>
+  </g>
+</svg>

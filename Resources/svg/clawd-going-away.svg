@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== Going Away: 3s one-shot exit animation ===== */
+      /*
+        0%-25%   Prep: arms flail frantically, digging motion begins
+        25%-50%  Dig down: body sinks below ground line (translateY +18px)
+        50%-55%  Hole closes
+        55%-100% Stay hidden (offscreen)
+        Dirt particles fly out during dig phase.
+        Hole opens at ground line then closes.
+      */
+
+      /* ===== 1. Body dig-down (one-shot) ===== */
+      .body-dig {
+        animation: dig-down 3s forwards linear;
+      }
+
+      /* ===== 3. Limb animations ===== */
+      .arm-l-dig {
+        animation: frantic-dig-l 0.15s infinite ease-in-out;
+      }
+      .arm-r-dig {
+        animation: frantic-dig-r 0.15s infinite ease-in-out;
+      }
+      .legs-kick {
+        animation: frantic-kick 0.15s infinite ease-in-out;
+      }
+
+      /* ===== 4. Effects ===== */
+      .hole-anim {
+        transform-origin: 0px 0.5px;
+        animation: hole-open-close 3s forwards linear;
+      }
+      .dirt-group {
+        animation: show-dirt 3s forwards linear;
+      }
+      .dirt-particle {
+        opacity: 0;
+        animation: fly-dirt 0.5s infinite linear;
+      }
+      .d1 { animation-delay: 0s; }
+      .d2 { animation-delay: -0.1s; }
+      .d3 { animation-delay: -0.2s; }
+      .d4 { animation-delay: -0.3s; }
+      .d5 { animation-delay: -0.05s; }
+      .d6 { animation-delay: -0.15s; }
+      .d7 { animation-delay: -0.25s; }
+      .d8 { animation-delay: -0.35s; }
+
+      /* ===== Keyframes ===== */
+      @keyframes dig-down {
+        0%        { transform: translateY(0); }
+        25%       { transform: translateY(0); }
+        50%, 100% { transform: translateY(18px); }
+      }
+
+      @keyframes frantic-dig-l {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-1px); }
+      }
+
+      @keyframes frantic-dig-r {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(1px); }
+      }
+
+      @keyframes frantic-kick {
+        0%, 100% { transform: translateY(0); }
+        50%      { transform: translateY(-1px); }
+      }
+
+      @keyframes hole-open-close {
+        0%, 5%   { transform: scale(0); opacity: 0; }
+        10%      { transform: scale(2); opacity: 1; }
+        50%      { transform: scale(2); opacity: 1; }
+        55%      { transform: scale(0); opacity: 0; }
+        100%     { transform: scale(0); opacity: 0; }
+      }
+
+      @keyframes show-dirt {
+        0%, 5%  { opacity: 0; }
+        6%      { opacity: 1; }
+        50%     { opacity: 1; }
+        51%     { opacity: 0; }
+        100%    { opacity: 0; }
+      }
+
+      @keyframes fly-dirt {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(calc(var(--tx) * 0.8), calc(var(--ty) * 0.8)); }
+        90%  { opacity: 0; transform: translate(var(--tx), var(--ty)); }
+        100% { opacity: 0; transform: translate(var(--tx), var(--ty)); }
+      }
+    </style>
+
+    <!-- Dirt particle template -->
+    <g id="dirt-bit">
+      <rect x="0" y="0" width="1.5" height="1.5" fill="#5D4037"/>
+    </g>
+
+    <!-- Clip to hide character below ground -->
+    <clipPath id="ground-clip">
+      <rect x="-15" y="-25" width="45" height="40"/>
+    </clipPath>
+  </defs>
+
+  <!-- The hole (ground level) -->
+  <g transform="translate(7.5, 15)">
+    <rect x="-4.5" y="0" width="9" height="1" fill="#000000" class="hole-anim"/>
+  </g>
+
+  <!-- Dirt particles -->
+  <g class="dirt-group" transform="translate(7.5, 15)">
+    <use href="#dirt-bit" class="dirt-particle d1" style="--tx: -12px; --ty: -8px;" x="-2" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d2" style="--tx: 14px; --ty: -10px;" x="2" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d3" style="--tx: -18px; --ty: -4px;" x="-4" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d4" style="--tx: 12px; --ty: -14px;" x="4" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d5" style="--tx: -10px; --ty: -12px;" x="-1" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d6" style="--tx: 16px; --ty: -6px;" x="1" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d7" style="--tx: -15px; --ty: -16px;" x="-3" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle d8" style="--tx: 10px; --ty: -8px;" x="3" y="0"/>
+  </g>
+
+  <!-- Character (clipped by ground line) -->
+  <g clip-path="url(#ground-clip)">
+    <g class="body-dig">
+      <!-- Layer 0: Shadow (sinks with body) -->
+      <!-- Not visible once below ground -->
+
+      <!-- Body + limbs -->
+      <g fill="#DE886D">
+        <!-- Torso -->
+        <rect x="2" y="6" width="11" height="7"/>
+        <!-- Left Arm -->
+        <g class="arm-l-dig"><rect x="0" y="9" width="2" height="2"/></g>
+        <!-- Right Arm -->
+        <g class="arm-r-dig"><rect x="13" y="9" width="2" height="2"/></g>
+        <!-- Legs -->
+        <g class="legs-kick">
+          <rect x="3" y="13" width="1" height="2"/>
+          <rect x="5" y="13" width="1" height="2"/>
+          <rect x="9" y="13" width="1" height="2"/>
+          <rect x="11" y="13" width="1" height="2"/>
+        </g>
+      </g>
+
+      <!-- Eyes -->
+      <g fill="#000000">
+        <rect x="4" y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
+      </g>
+    </g>
+  </g>
+</svg>

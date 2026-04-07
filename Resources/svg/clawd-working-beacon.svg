@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 4s infinite ease-in-out;
+      }
+
+      /* ===== 2. Main timeline: gentle beacon bob ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-beacon 6.4s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-beacon 6.4s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-beacon 4.2s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-beacon 3.8s infinite ease-in-out;
+      }
+
+      /* ===== 4. Effect animations ===== */
+
+      /* Antenna blink */
+      .antenna-blink {
+        animation: ant-blink 0.8s infinite alternate ease-in-out;
+      }
+
+      /* Signal waves expanding outward */
+      .wave {
+        fill: none;
+        stroke-width: 0.6;
+        opacity: 0;
+      }
+      .w1 { stroke: #0082FC; animation: wave-expand 2s infinite linear; animation-delay: 0s; }
+      .w2 { stroke: #FFC107; animation: wave-expand 2s infinite linear; animation-delay: -0.5s; }
+      .w3 { stroke: #FF5252; animation: wave-expand 2s infinite linear; animation-delay: -1s; }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      @keyframes eye-blink {
+        0%, 10%, 100% { transform: scaleY(1); }
+        5%            { transform: scaleY(0.1); }
+      }
+
+      /* Body bobs gently in sync with signal */
+      @keyframes body-beacon {
+        0%, 100%  { transform: translate(0, 0); }
+        25%       { transform: translate(0, 0.5px); }
+        50%       { transform: translate(0, -0.5px); }
+        75%       { transform: translate(0, 0.3px); }
+      }
+
+      /* Shadow follows body movement */
+      @keyframes shadow-beacon {
+        0%, 100%  { transform: scaleX(1); opacity: 0.5; }
+        25%       { transform: scaleX(1.02); opacity: 0.52; }
+        50%       { transform: scaleX(0.98); opacity: 0.48; }
+        75%       { transform: scaleX(1.01); opacity: 0.51; }
+      }
+
+      /* Left arm: slight outward angle */
+      @keyframes arm-l-beacon {
+        0%, 100% { transform: rotate(15deg); }
+        50%      { transform: rotate(10deg); }
+      }
+
+      /* Right arm: slight opposite outward angle */
+      @keyframes arm-r-beacon {
+        0%, 100% { transform: rotate(-15deg); }
+        50%      { transform: rotate(-10deg); }
+      }
+
+      /* Antenna blink */
+      @keyframes ant-blink {
+        0%   { fill: #FF5252; opacity: 0.5; }
+        100% { fill: #FF5252; opacity: 1; }
+      }
+
+      /* Signal wave expansion */
+      @keyframes wave-expand {
+        0%   { r: 3; opacity: 0; stroke-width: 1; }
+        10%  { opacity: 0.7; }
+        100% { r: 18; opacity: 0; stroke-width: 0.2; }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, independent) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body group (action > breathe) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left arm (angled outward) -->
+      <g class="arm-l">
+        <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right arm (angled outward) -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Eyes (slightly larger = looking up at antenna) -->
+      <g class="eyes-blink" fill="#000000">
+        <rect x="4" y="8" width="1.5" height="1.5"/>
+        <rect x="9.5" y="8" width="1.5" height="1.5"/>
+      </g>
+
+      <!-- Antenna on head -->
+      <rect x="7" y="2" width="1" height="4" fill="#78909C"/>
+      <circle class="antenna-blink" cx="7.5" cy="1.5" r="1" fill="#FF5252"/>
+    </g>
+  </g>
+
+  <!-- Layer 3: Signal waves (behind nothing, but visually emanating from antenna) -->
+  <circle class="wave w1" cx="7.5" cy="1.5" r="3"/>
+  <circle class="wave w2" cx="7.5" cy="1.5" r="3"/>
+  <circle class="wave w3" cx="7.5" cy="1.5" r="3"/>
+</svg>

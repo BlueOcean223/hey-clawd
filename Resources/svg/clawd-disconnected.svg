@@ -1,0 +1,189 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== Disconnected state: confused looking around + broken link icon =====
+         Looping 6s cycle: look left -> look right -> snap -> stare at icon -> return
+      */
+
+      /* 1. Eye blink (independent loop) */
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 3s infinite linear;
+      }
+
+      /* 2. Main timeline: body shifts */
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-confused 6s infinite ease-in-out;
+      }
+
+      /* 3. Components */
+      .eyes-look {
+        animation: eyes-confused 6s infinite ease-in-out;
+      }
+
+      /* 4. Effects */
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-confused 6s infinite ease-in-out;
+      }
+      .question-pop {
+        transform-origin: center;
+        animation: question-float 6s infinite ease-in-out;
+        opacity: 0;
+      }
+      .excl-pop {
+        transform-origin: center;
+        animation: excl-float 6s infinite ease-in-out;
+        opacity: 0;
+      }
+      .link-icon {
+        animation: link-float 3s infinite ease-in-out;
+      }
+      .link-glow {
+        animation: link-glow-kf 3s infinite ease-in-out;
+      }
+      .link-shadow {
+        transform-origin: 22px 15.5px;
+        animation: link-shadow-kf 3s infinite ease-in-out;
+      }
+
+      /* ===== Keyframes ===== */
+
+      /* Body: look left, right, snap, stare right, return */
+      @keyframes body-confused {
+        0%, 5%    { transform: translate(0, 0); }
+        12%, 22%  { transform: translate(-1px, 0); }
+        29%, 39%  { transform: translate(1px, 0); }
+        44%       { transform: translate(-1px, 0); }
+        49%       { transform: translate(1px, 0); }
+        56%, 88%  { transform: translate(1px, -1px); }
+        95%, 100% { transform: translate(0, 0); }
+      }
+
+      /* Eyes lead body (larger offset) */
+      @keyframes eyes-confused {
+        0%, 5%    { transform: translate(0, 0); }
+        12%, 22%  { transform: translate(-2px, 0); }
+        29%, 39%  { transform: translate(2px, 0); }
+        44%       { transform: translate(-2px, 0); }
+        49%       { transform: translate(2px, 0); }
+        56%, 88%  { transform: translate(3px, -2px); }
+        95%, 100% { transform: translate(0, 0); }
+      }
+
+      /* Blink with extra blinks */
+      @keyframes eye-blink {
+        0%, 20%, 24%, 60%, 64%, 80%, 84%, 100% { transform: scaleY(1); }
+        22%, 62%, 82% { transform: scaleY(0.1); }
+      }
+
+      /* Question mark: appears early */
+      @keyframes question-float {
+        0%, 5%    { opacity: 0; transform: translate(-4px, 4px) scale(0); }
+        12%       { opacity: 1; transform: translate(-4px, -1px) scale(1.2); }
+        16%, 46%  { opacity: 1; transform: translate(-4px, 0) scale(1); }
+        50%, 100% { opacity: 0; transform: translate(-4px, -4px) scale(1.2); }
+      }
+
+      /* Exclamation: appears when staring at icon */
+      @keyframes excl-float {
+        0%, 50%   { opacity: 0; transform: translate(6px, 0) scale(0); }
+        56%       { opacity: 1; transform: translate(6px, -3px) scale(1.3); }
+        60%, 85%  { opacity: 1; transform: translate(6px, -4px) scale(1); }
+        90%, 100% { opacity: 0; transform: translate(6px, -8px) scale(1.2); }
+      }
+
+      /* Broken link icon floating */
+      @keyframes link-float {
+        0%, 100%  { transform: translate(22px, -3px); }
+        50%       { transform: translate(22px, -6px); }
+      }
+
+      /* Glow pulse */
+      @keyframes link-glow-kf {
+        0%, 100%  { transform: scale(1); opacity: 0.3; }
+        50%       { transform: scale(1.3); opacity: 0.1; }
+      }
+
+      /* Link icon shadow */
+      @keyframes link-shadow-kf {
+        0%, 100%  { transform: scaleX(1); opacity: 0.3; }
+        50%       { transform: scaleX(0.8); opacity: 0.15; }
+      }
+
+      /* Shadow follows body */
+      @keyframes shadow-confused {
+        0%, 5%    { transform: translate(0, 0) scaleX(1); opacity: 0.5; }
+        12%, 22%  { transform: translate(-0.5px, 0) scaleX(0.98); opacity: 0.48; }
+        29%, 39%  { transform: translate(0.5px, 0) scaleX(0.98); opacity: 0.48; }
+        56%, 88%  { transform: translate(0.5px, 0) scaleX(0.96); opacity: 0.46; }
+        95%, 100% { transform: translate(0, 0) scaleX(1); opacity: 0.5; }
+      }
+    </style>
+
+    <!-- Pixel question mark -->
+    <g id="pixel-question">
+      <rect x="1" y="0" width="2" height="1"/>
+      <rect x="0" y="1" width="1" height="1"/>
+      <rect x="3" y="1" width="1" height="2"/>
+      <rect x="2" y="3" width="1" height="1"/>
+      <rect x="1" y="4" width="1" height="1"/>
+      <rect x="1" y="6" width="1" height="1"/>
+    </g>
+  </defs>
+
+  <!-- Broken link icon shadow -->
+  <ellipse class="link-shadow" cx="22" cy="15.5" rx="4" ry="0.6" fill="#000" opacity="0.3"/>
+
+  <!-- Layer 0: Character shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, independent) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Upper Body -->
+  <g class="action-body">
+    <g fill="#DE886D">
+      <rect x="2" y="6" width="11" height="7"/>
+      <rect x="0" y="9" width="2" height="2"/>
+      <rect x="13" y="9" width="2" height="2"/>
+    </g>
+    <g class="eyes-look">
+      <g class="eyes-blink" fill="#000">
+        <rect x="4" y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Layer 3: Effects -->
+  <!-- Confused question mark -->
+  <g class="question-pop" fill="#FFFFFF">
+    <use href="#pixel-question"/>
+  </g>
+
+  <!-- Exclamation mark -->
+  <g class="excl-pop" fill="#0082FC">
+    <rect x="1" y="0" width="1" height="4"/>
+    <rect x="1" y="5" width="1" height="1"/>
+  </g>
+
+  <!-- Floating broken link/disconnect icon -->
+  <g class="link-icon">
+    <!-- Glow -->
+    <circle cx="0" cy="0" r="8" fill="#FF5252" class="link-glow" opacity="0.3"/>
+    <!-- Background circle -->
+    <circle cx="0" cy="0" r="5.5" fill="#FF5252"/>
+    <!-- Broken chain / X symbol (disconnect) -->
+    <g fill="none" stroke="#FFF" stroke-width="1.2" stroke-linecap="round">
+      <line x1="-2.5" y1="-2.5" x2="2.5" y2="2.5"/>
+      <line x1="2.5" y1="-2.5" x2="-2.5" y2="2.5"/>
+    </g>
+  </g>
+</svg>

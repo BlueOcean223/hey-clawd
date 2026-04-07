@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <style>
+    .hc-body     { animation: hc-success-jump 6s infinite; transform-origin: 7.5px 15px; }
+    .hc-l-arm    { transform-origin: 2px 10px;  animation: hc-success-l 6s infinite; }
+    .hc-r-arm    { transform-origin: 13px 10px; animation: hc-success-r 6s infinite; }
+    .hc-eyes     { animation: hc-success-eyes 6s infinite; }
+    .hc-happy-eyes { opacity: 0; animation: hc-happy-vis 6s infinite; }
+    .hc-confetti { opacity: 0; animation: hc-confetti-fall 6s infinite; }
+    .hc-cf1 { animation-delay: 0.05s; }
+    .hc-cf2 { animation-delay: 0.12s; }
+    .hc-cf3 { animation-delay: 0.20s; }
+    .hc-cf4 { animation-delay: 0.28s; }
+    .hc-cf5 { animation-delay: 0.08s; }
+    .hc-cf6 { animation-delay: 0.18s; }
+    .hc-cf7 { animation-delay: 0.24s; }
+    .hc-cf8 { animation-delay: 0.32s; }
+    .hc-cf9 { animation-delay: 0.10s; }
+
+    @keyframes hc-success-jump {
+      0%, 5%    { transform: translateY(0) scaleY(1); }
+      6%        { transform: translateY(-18px) scaleY(1.1); }
+      8%        { transform: translateY(0) scaleY(0.82); }
+      10%       { transform: translateY(-4px) scaleY(1.05); }
+      12%, 100% { transform: translateY(0) scaleY(1); }
+    }
+    @keyframes hc-success-l {
+      0%, 5%    { transform: rotate(0); }
+      6%, 38%   { transform: rotate(-130deg); }
+      43%, 100% { transform: rotate(0); }
+    }
+    @keyframes hc-success-r {
+      0%, 5%    { transform: rotate(0); }
+      6%, 38%   { transform: rotate(130deg); }
+      43%, 100% { transform: rotate(0); }
+    }
+    @keyframes hc-success-eyes {
+      0%, 5%    { opacity: 1; }
+      6%, 38%   { opacity: 0; }
+      43%, 100% { opacity: 1; }
+    }
+    @keyframes hc-happy-vis {
+      0%, 5%    { opacity: 0; }
+      6%, 38%   { opacity: 1; }
+      43%, 100% { opacity: 0; }
+    }
+    @keyframes hc-confetti-fall {
+      0%, 5%    { opacity: 0; transform: translateY(0) rotate(0deg); }
+      7%        { opacity: 1; transform: translateY(-18px) rotate(0deg); }
+      38%       { opacity: 0; transform: translateY(22px) rotate(240deg); }
+      43%, 100% { opacity: 0; }
+    }
+  </style>
+
+  <g class="hc-body">
+    <rect x="3" y="15" width="9" height="1" fill="#000" opacity="0.15"/>
+    <rect x="3"  y="13" width="1" height="2" fill="#DE886D"/>
+    <rect x="5"  y="13" width="1" height="2" fill="#DE886D"/>
+    <rect x="9"  y="13" width="1" height="2" fill="#DE886D"/>
+    <rect x="11" y="13" width="1" height="2" fill="#DE886D"/>
+    <rect x="2"  y="6"  width="11" height="7" fill="#DE886D"/>
+    <rect class="hc-l-arm" x="0"  y="9" width="2" height="2" fill="#DE886D"/>
+    <rect class="hc-r-arm" x="13" y="9" width="2" height="2" fill="#DE886D"/>
+    <g class="hc-eyes">
+      <rect x="4"  y="8" width="1" height="2" fill="#000"/>
+      <rect x="10" y="8" width="1" height="2" fill="#000"/>
+    </g>
+    <g class="hc-happy-eyes">
+      <rect x="4" y="8" width="2" height="1" fill="#000"/>
+      <rect x="9" y="8" width="2" height="1" fill="#000"/>
+    </g>
+  </g>
+
+  <!-- Confetti — delay via classes, no inline style -->
+  <rect class="hc-confetti hc-cf1" x="0"  y="0"   width="1" height="1" fill="#FFD700"/>
+  <rect class="hc-confetti hc-cf2" x="5"  y="-5"  width="1" height="1" fill="#FF5722"/>
+  <rect class="hc-confetti hc-cf3" x="10" y="-3"  width="1" height="1" fill="#4CAF50"/>
+  <rect class="hc-confetti hc-cf4" x="15" y="0"   width="1" height="1" fill="#40C4FF"/>
+  <rect class="hc-confetti hc-cf5" x="3"  y="-9"  width="1" height="1" fill="#FFD700"/>
+  <rect class="hc-confetti hc-cf6" x="12" y="-11" width="1" height="1" fill="#FF5722"/>
+  <rect class="hc-confetti hc-cf7" x="-4" y="-3"  width="1" height="1" fill="#E040FB"/>
+  <rect class="hc-confetti hc-cf8" x="18" y="-5"  width="1" height="1" fill="#FFEB3B"/>
+  <rect class="hc-confetti hc-cf9" x="7"  y="-14" width="1" height="1" fill="#00BCD4"/>
+</svg>

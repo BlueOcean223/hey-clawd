@@ -1,0 +1,224 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== Idle music listening: sway + tap arms + notes float up ===== */
+
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 4s infinite ease-in-out;
+      }
+
+      /* ===== 2. Main 9.6s timeline (3x breathing cycle) ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-sway 9.6s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-sway 9.6s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      /* Arms tap to beat, different timing for asymmetry */
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-tap 1.2s ease-in-out infinite;
+      }
+
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-tap 1.2s ease-in-out infinite;
+        animation-delay: -0.3s;
+      }
+
+      .eyes-vibe {
+        transform-origin: 7.5px 9px;
+        animation: eyes-vibe 9.6s infinite ease-in-out;
+      }
+
+      /* ===== 4. Note particle effects ===== */
+
+      .note-1 { animation: note-float-1 2.4s ease-out infinite; animation-delay: 0s; }
+      .note-2 { animation: note-float-2 2.2s ease-out infinite; animation-delay: -0.8s; }
+      .note-3 { animation: note-float-3 2.6s ease-out infinite; animation-delay: -1.5s; }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      @keyframes eye-blink {
+        0%, 10%, 100% { transform: scaleY(1); }
+        5%            { transform: scaleY(0.1); }
+      }
+
+      /*
+       * 9.6s body sway timeline (3x3.2s breathing):
+       * Gentle side-to-side rocking to the music
+       */
+      @keyframes body-sway {
+        0%, 4%          { transform: translate(0, 0); }
+        /* sway left */
+        12%, 20%        { transform: translate(-1px, 0) rotate(-1.5deg); }
+        /* center */
+        28%, 32%        { transform: translate(0, 0) rotate(0deg); }
+        /* sway right */
+        40%, 48%        { transform: translate(1px, 0) rotate(1.5deg); }
+        /* center */
+        56%, 60%        { transform: translate(0, 0) rotate(0deg); }
+        /* sway left again */
+        68%, 76%        { transform: translate(-0.8px, 0) rotate(-1deg); }
+        /* center */
+        84%, 88%        { transform: translate(0, 0) rotate(0deg); }
+        /* small bounce */
+        92%             { transform: translate(0, -0.3px) rotate(0deg); }
+        96%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes shadow-sway {
+        0%, 4%          { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        12%, 20%        { transform: scaleX(0.98) translate(-1px, 0); opacity: 0.48; }
+        28%, 32%        { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        40%, 48%        { transform: scaleX(0.98) translate(1px, 0); opacity: 0.48; }
+        56%, 60%        { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        68%, 76%        { transform: scaleX(0.99) translate(-0.8px, 0); opacity: 0.49; }
+        84%, 100%       { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+      }
+
+      @keyframes arm-l-tap {
+        0%, 20%         { transform: rotate(0deg); }
+        35%             { transform: rotate(-10deg); }
+        50%             { transform: rotate(0deg); }
+        65%             { transform: rotate(-8deg); }
+        80%, 100%       { transform: rotate(0deg); }
+      }
+
+      @keyframes arm-r-tap {
+        0%, 25%         { transform: rotate(0deg); }
+        40%             { transform: rotate(10deg); }
+        55%             { transform: rotate(0deg); }
+        70%             { transform: rotate(6deg); }
+        85%, 100%       { transform: rotate(0deg); }
+      }
+
+      /* Eyes: happy squint while listening, occasional normal open */
+      @keyframes eyes-vibe {
+        0%, 8%          { transform: scaleY(1); }
+        /* squint happily during sway */
+        14%, 24%        { transform: scaleY(0.6); }
+        28%, 36%        { transform: scaleY(1); }
+        42%, 52%        { transform: scaleY(0.6); }
+        56%, 64%        { transform: scaleY(1); }
+        70%, 80%        { transform: scaleY(0.6); }
+        84%, 100%       { transform: scaleY(1); }
+      }
+
+      /* Notes float up with different trajectories */
+      @keyframes note-float-1 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        8%              { opacity: 0.9; }
+        60%             { opacity: 0.6; }
+        100%            { transform: translate(-5px, -16px); opacity: 0; }
+      }
+
+      @keyframes note-float-2 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        8%              { opacity: 0.9; }
+        60%             { opacity: 0.6; }
+        100%            { transform: translate(5px, -15px); opacity: 0; }
+      }
+
+      @keyframes note-float-3 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        8%              { opacity: 0.9; }
+        60%             { opacity: 0.6; }
+        100%            { transform: translate(-2px, -18px); opacity: 0; }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Ground Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 0.5: Floating music notes (behind body) -->
+  <!-- Note 1: gold eighth note, left side -->
+  <g class="note-1" fill="#FFD700">
+    <rect x="-1" y="6" width="2" height="1"/>
+    <rect x="0"  y="3" width="1" height="3"/>
+    <rect x="1"  y="3" width="2" height="1"/>
+  </g>
+  <!-- Note 2: cyan eighth note, right side -->
+  <g class="note-2" fill="#40C4FF">
+    <rect x="15" y="5" width="2" height="1"/>
+    <rect x="16" y="2" width="1" height="3"/>
+    <rect x="17" y="2" width="2" height="1"/>
+  </g>
+  <!-- Note 3: purple eighth note, center -->
+  <g class="note-3" fill="#CE93D8">
+    <rect x="9"  y="1" width="2" height="1"/>
+    <rect x="10" y="-2" width="1" height="3"/>
+    <rect x="11" y="-2" width="2" height="1"/>
+  </g>
+
+  <!-- Layer 1: Static Legs (independent of body transforms) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Animated Upper Body (sway > breathe nesting) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+
+      <!-- Torso -->
+      <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left Arm (tapping to beat) -->
+      <g class="arm-l">
+        <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right Arm (tapping, offset phase for asymmetry) -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Eyes: happy vibe squint > blink -->
+      <g class="eyes-vibe" fill="#000000">
+        <g class="eyes-blink">
+          <rect x="4" y="8" width="1" height="2"/>
+          <rect x="10" y="8" width="1" height="2"/>
+        </g>
+      </g>
+
+      <!-- Headphones -->
+      <g fill="#2C3E7A">
+        <!-- Band -->
+        <rect x="2" y="2" width="11" height="1"/>
+        <!-- Left stem -->
+        <rect x="2" y="3" width="1" height="3"/>
+        <!-- Right stem -->
+        <rect x="12" y="3" width="1" height="3"/>
+        <!-- Left earcup -->
+        <rect x="1" y="6" width="2" height="3"/>
+        <!-- Right earcup -->
+        <rect x="12" y="6" width="2" height="3"/>
+      </g>
+
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== Crab Walking: full-size sideways walk ===== */
+      /*
+        Full-size character (not mini mode), walking sideways.
+        Body bobs up/down 1s (double-time per step cycle).
+        Legs alternate stepping in pairs (outer-L+inner-R vs inner-L+outer-R).
+        Arms counter-swing opposite to each other.
+        Eyes look in walking direction + occasional blink.
+        Shadow present, follows body.
+      */
+
+      /* ===== 1. Sub-animations ===== */
+      /* Body bob: double-frequency relative to leg cycle */
+      .body-bob {
+        animation: body-bob 1s infinite linear;
+      }
+
+      /* ===== 2. Leg animations (independent from body) ===== */
+      .leg-a {
+        animation: leg-a 1s infinite linear;
+      }
+      .leg-b {
+        animation: leg-b 1s infinite linear;
+      }
+
+      /* ===== 3. Arm animations ===== */
+      .arm-l {
+        animation: arm-l 1s infinite linear;
+      }
+      .arm-r {
+        animation: arm-r 1s infinite linear;
+      }
+
+      /* ===== 4. Eyes ===== */
+      .eyes-walk {
+        transform-origin: 7.5px 9px;
+        animation: eyes-walk-blink 4s infinite linear;
+      }
+
+      /* ===== 5. Shadow ===== */
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+      }
+
+      /* ===== Keyframes ===== */
+      /* Body bobs twice per leg cycle (once per step) */
+      @keyframes body-bob {
+        0%, 100% { transform: translate(0, 1px); }
+        25%      { transform: translate(0, 0); }
+        50%      { transform: translate(0, 1px); }
+        75%      { transform: translate(0, 0); }
+      }
+
+      /* Leg pair A: outer-left + inner-right (step left, lift, step right, down) */
+      @keyframes leg-a {
+        0%, 100% { transform: translate(-2px, 0); }
+        25%      { transform: translate(0, 0); }
+        50%      { transform: translate(2px, 0); }
+        75%      { transform: translate(0, -2px); }
+      }
+
+      /* Leg pair B: inner-left + outer-right (opposite phase) */
+      @keyframes leg-b {
+        0%, 100% { transform: translate(2px, 0); }
+        25%      { transform: translate(0, -2px); }
+        50%      { transform: translate(-2px, 0); }
+        75%      { transform: translate(0, 0); }
+      }
+
+      /* Arms counter-swing (asymmetric) */
+      @keyframes arm-l {
+        0%, 50%, 100% { transform: translate(0, 0); }
+        25%           { transform: translate(0, -1px); }
+        75%           { transform: translate(0, 1px); }
+      }
+
+      @keyframes arm-r {
+        0%, 50%, 100% { transform: translate(0, 0); }
+        25%           { transform: translate(0, 1px); }
+        75%           { transform: translate(0, -1px); }
+      }
+
+      /* Eyes: look in walking direction + periodic blink */
+      @keyframes eyes-walk-blink {
+        0%, 48%, 52%, 100% { transform: translate(-2px, 0) scaleY(1); }
+        50%                { transform: translate(-2px, 0) scaleY(0.1); }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Shadow (static, ground level) -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (independent from body bob) -->
+  <g fill="#DE886D">
+    <g class="leg-a"><rect x="3" y="13" width="1" height="2"/></g>
+    <g class="leg-b"><rect x="5" y="13" width="1" height="2"/></g>
+    <g class="leg-a"><rect x="9" y="13" width="1" height="2"/></g>
+    <g class="leg-b"><rect x="11" y="13" width="1" height="2"/></g>
+  </g>
+
+  <!-- Layer 2: Upper Body (bobs with walking) -->
+  <g class="body-bob">
+    <g fill="#DE886D">
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7"/>
+      <!-- Left Arm -->
+      <g class="arm-l"><rect x="0" y="9" width="2" height="2"/></g>
+      <!-- Right Arm -->
+      <g class="arm-r"><rect x="13" y="9" width="2" height="2"/></g>
+    </g>
+
+    <!-- Eyes: look left + blink -->
+    <g class="eyes-walk" fill="#000000">
+      <rect x="4" y="8" width="1" height="2"/>
+      <rect x="10" y="8" width="1" height="2"/>
+    </g>
+  </g>
+</svg>

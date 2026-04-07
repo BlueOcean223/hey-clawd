@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      .hc-dz-body {
+        transform-origin: 7.5px 15px;
+        animation: hc-dz-dizzy-rot 4s infinite ease-in-out;
+      }
+      .hc-dz-star {
+        animation: hc-dz-star-orbit 3s infinite linear;
+      }
+      .hc-dz-star-1 { animation-delay: 0s; }
+      .hc-dz-star-2 { animation-delay: -1s; }
+      .hc-dz-star-3 { animation-delay: -2s; }
+
+      @keyframes hc-dz-dizzy-rot {
+        0%, 100% { transform: rotate(-6deg); }
+        50%      { transform: rotate(6deg); }
+      }
+
+      @keyframes hc-dz-star-orbit {
+        0%, 100% { transform: translate(-10px, 0px) scale(0.85); opacity: 1; }
+        12.5%    { transform: translate(-7px, 2px) scale(0.97); opacity: 1; }
+        25%      { transform: translate(0px, 3px) scale(1.1); opacity: 1; }
+        37.5%    { transform: translate(7px, 2px) scale(0.97); opacity: 1; }
+        50%      { transform: translate(10px, 0px) scale(0.85); opacity: 1; }
+        62.5%    { transform: translate(7px, -2px) scale(0.72); opacity: 0.8; }
+        75%      { transform: translate(0px, -3px) scale(0.6); opacity: 0.4; }
+        87.5%    { transform: translate(-7px, -2px) scale(0.72); opacity: 0.8; }
+      }
+    </style>
+
+    <g id="hc-dz-pixel-star" fill="#FFC107">
+      <rect x="1" y="0" width="1" height="1"/>
+      <rect x="0" y="1" width="3" height="1"/>
+      <rect x="1" y="2" width="1" height="1"/>
+    </g>
+  </defs>
+
+  <!-- Ground Shadow -->
+  <rect x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Animated Character -->
+  <g class="hc-dz-body">
+    <g fill="#DE886D">
+      <rect x="3" y="13" width="1" height="2"/>
+      <rect x="5" y="13" width="1" height="2"/>
+      <rect x="9" y="13" width="1" height="2"/>
+      <rect x="11" y="13" width="1" height="2"/>
+      <rect x="2" y="6" width="11" height="7"/>
+      <rect x="0" y="9" width="2" height="2"/>
+      <rect x="13" y="9" width="2" height="2"/>
+    </g>
+    <!-- X-eyes: clean vector × -->
+    <g stroke="#000" stroke-width="0.9" stroke-linecap="round">
+      <line x1="3.2" y1="7.2" x2="5.2" y2="9.2"/>
+      <line x1="5.2" y1="7.2" x2="3.2" y2="9.2"/>
+      <line x1="9.2" y1="7.2" x2="11.2" y2="9.2"/>
+      <line x1="11.2" y1="7.2" x2="9.2" y2="9.2"/>
+    </g>
+  </g>
+
+  <!-- Orbiting Stars -->
+  <g transform="translate(7.5, 2)">
+    <g class="hc-dz-star hc-dz-star-1"><use href="#hc-dz-pixel-star" transform="translate(-1.5, -1.5)"/></g>
+    <g class="hc-dz-star hc-dz-star-2"><use href="#hc-dz-pixel-star" transform="translate(-1.5, -1.5)"/></g>
+    <g class="hc-dz-star hc-dz-star-3"><use href="#hc-dz-pixel-star" transform="translate(-1.5, -1.5)"/></g>
+  </g>
+</svg>

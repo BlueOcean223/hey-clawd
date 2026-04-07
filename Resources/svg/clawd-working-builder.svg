@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 1. Independent sub-animations ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink-squint 4s infinite ease-in-out;
+      }
+
+      /* ===== 2. Main timeline: hammer strike cycle ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-strike 0.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-strike 0.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-brace 1.6s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-r-swing 0.8s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      }
+
+      /* ===== 4. Effect animations ===== */
+
+      .dust {
+        opacity: 0;
+        animation: dust-pop 0.8s infinite ease-out;
+      }
+      .d1 { animation-delay: 0s; }
+      .d2 { animation-delay: -0.1s; }
+      .d3 { animation-delay: -0.25s; }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      /* Squinted blink for focused worker */
+      @keyframes eye-blink-squint {
+        0%, 10%, 100% { transform: scaleY(0.6); }
+        5%            { transform: scaleY(0.1); }
+      }
+
+      /* Body recoil on impact */
+      @keyframes body-strike {
+        0%, 40%  { transform: translateY(0); }
+        50%      { transform: translateY(0.5px) scaleY(0.97); }
+        60%      { transform: translateY(0); }
+        100%     { transform: translateY(0); }
+      }
+
+      /* Shadow pulses on impact */
+      @keyframes shadow-strike {
+        0%, 40%  { transform: scaleX(1); opacity: 0.5; }
+        50%      { transform: scaleX(1.05); opacity: 0.55; }
+        60%      { transform: scaleX(1); opacity: 0.5; }
+        100%     { transform: scaleX(1); opacity: 0.5; }
+      }
+
+      /* Left arm braces, slight motion */
+      @keyframes arm-l-brace {
+        0%, 100% { transform: rotate(0deg); }
+        50%      { transform: rotate(-8deg); }
+      }
+
+      /* Right arm swings hammer */
+      @keyframes arm-r-swing {
+        0%   { transform: rotate(-20deg); }
+        40%  { transform: rotate(45deg); }
+        50%  { transform: rotate(40deg); }
+        100% { transform: rotate(-20deg); }
+      }
+
+      /* Dust pops on impact */
+      @keyframes dust-pop {
+        0%, 45%  { opacity: 0; transform: scale(0) translate(0, 0); }
+        50%      { opacity: 0.8; transform: scale(1) translate(0, 0); }
+        80%      { opacity: 0; transform: scale(0.5) translate(2px, -3px); }
+        100%     { opacity: 0; }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, independent) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Body group (action > breathe) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+      <!-- Hard hat -->
+      <rect x="2" y="2" width="11" height="4" fill="#D4A24C"/>
+      <rect x="4" y="0" width="7" height="2" fill="#D4A24C"/>
+      <rect x="6" y="2" width="3" height="1" fill="#B8862D"/>
+
+      <!-- Torso -->
+      <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left arm (bracing) -->
+      <g class="arm-l">
+        <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right arm + hammer -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+        <!-- Handle -->
+        <rect x="14" y="10" width="1" height="4" fill="#8B7355"/>
+        <!-- Hammer head -->
+        <rect x="13" y="13" width="3" height="2" fill="#9E9E9E"/>
+      </g>
+
+      <!-- Squinted eyes -->
+      <g class="eyes-blink" fill="#000000">
+        <rect x="4" y="8" width="1" height="2"/>
+        <rect x="10" y="8" width="1" height="2"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- Layer 3: Dust effects near impact point -->
+  <rect class="dust d1" x="15" y="14" width="1" height="1" fill="#BDBDBD"/>
+  <rect class="dust d2" x="16" y="13" width="1" height="1" fill="#BDBDBD"/>
+  <rect class="dust d3" x="17" y="12" width="1" height="1" fill="#BDBDBD"/>
+</svg>

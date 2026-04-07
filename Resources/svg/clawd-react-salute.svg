@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== 4s one-shot: snap to attention + salute hold + return =====
+         Phase 1 (0-10%):  Prep -- slight slouch (anticipation)
+         Phase 2 (10-20%): Snap -- body straightens tall, right arm flies to salute
+         Phase 3 (20-70%): Hold -- salute pose, occasional blink
+         Phase 4 (70-90%): Return -- arm lowers, body relaxes
+         Phase 5 (90-100%): Settle
+      */
+
+      /* 1. Eye blink (independent loop) */
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 4s infinite ease-in-out;
+      }
+
+      /* 2. Main timeline: body snaps tall */
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: body-salute 4s 1 ease-in-out forwards;
+      }
+
+      /* 3. Components */
+      .arm-r {
+        transform-origin: 13px 10px;
+        animation: arm-salute 4s 1 ease-in-out forwards;
+      }
+
+      /* 4. Effects */
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-salute 4s 1 ease-in-out forwards;
+      }
+      .sparkle-pop {
+        opacity: 0;
+        animation: sparkle-flash 4s 1 step-end forwards;
+      }
+
+      /* ===== Keyframes ===== */
+
+      /* Body: slouch -> snap tall -> hold -> relax */
+      @keyframes body-salute {
+        0%, 6%    { transform: scale(1, 1) translate(0, 0); }
+        /* prep: slight slouch */
+        8%        { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+        /* snap to attention */
+        14%       { transform: scale(0.97, 1.04) translate(0, -0.5px); }
+        18%, 68%  { transform: scale(0.98, 1.03) translate(0, -0.3px); }
+        /* return */
+        80%       { transform: scale(1, 1) translate(0, 0); }
+        100%      { transform: scale(1, 1) translate(0, 0); }
+      }
+
+      /* Right arm: rest -> salute (rotate to head) -> hold -> lower */
+      @keyframes arm-salute {
+        0%, 8%    { transform: rotate(0deg) translate(0, 0); }
+        /* snap up to salute */
+        14%       { transform: rotate(-100deg) translate(-5px, -8px); }
+        18%, 68%  { transform: rotate(-100deg) translate(-5px, -8px); }
+        /* lower */
+        82%       { transform: rotate(-30deg) translate(-1px, -2px); }
+        92%       { transform: rotate(0deg) translate(0, 0); }
+        100%      { transform: rotate(0deg) translate(0, 0); }
+      }
+
+      /* Blink */
+      @keyframes eye-blink {
+        0%, 10%, 100% { transform: scaleY(1); }
+        5%            { transform: scaleY(0.1); }
+      }
+
+      /* Shadow: narrow when tall, normal otherwise */
+      @keyframes shadow-salute {
+        0%, 8%    { transform: scaleX(1); opacity: 0.5; }
+        14%, 68%  { transform: scaleX(0.92); opacity: 0.45; }
+        80%       { transform: scaleX(1); opacity: 0.5; }
+        100%      { transform: scaleX(1); opacity: 0.5; }
+      }
+
+      /* Brief sparkle at salute moment */
+      @keyframes sparkle-flash {
+        0%, 12%   { opacity: 0; }
+        14%       { opacity: 1; }
+        28%       { opacity: 0; }
+        100%      { opacity: 0; }
+      }
+    </style>
+
+    <!-- Pixel star sparkle -->
+    <g id="px-star" fill="#FFD700">
+      <rect x="-0.5" y="-0.5" width="1" height="1"/>
+      <rect x="-0.5" y="-1.5" width="1" height="1"/>
+      <rect x="-0.5" y="0.5" width="1" height="1"/>
+      <rect x="-1.5" y="-0.5" width="1" height="1"/>
+      <rect x="0.5" y="-0.5" width="1" height="1"/>
+    </g>
+  </defs>
+
+  <!-- Layer 0: Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000" opacity="0.5"/>
+
+  <!-- Layer 1: Legs (static, independent) -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="13" width="1" height="2"/>
+    <rect x="5" y="13" width="1" height="2"/>
+    <rect x="9" y="13" width="1" height="2"/>
+    <rect x="11" y="13" width="1" height="2"/>
+  </g>
+
+  <!-- Layer 2: Upper Body -->
+  <g class="action-body">
+    <!-- Torso -->
+    <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
+    <!-- Left arm (static at rest) -->
+    <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+    <!-- Right arm (salute animation) -->
+    <g class="arm-r">
+      <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+    </g>
+    <!-- Eyes -->
+    <g class="eyes-blink" fill="#000">
+      <rect x="4" y="8" width="1" height="2"/>
+      <rect x="10" y="8" width="1" height="2"/>
+    </g>
+  </g>
+
+  <!-- Layer 3: Sparkle at salute point -->
+  <g class="sparkle-pop">
+    <use href="#px-star" x="8" y="-2"/>
+  </g>
+</svg>
