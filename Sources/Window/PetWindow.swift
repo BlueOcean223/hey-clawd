@@ -367,7 +367,8 @@
             let reaction = reactionSVGForClickPosition()
             playTimedReaction(svgFilename: reaction, duration: Self.pokeReactionDuration)
         } else {
-            playTimedReaction(svgFilename: "clawd-react-annoyed.svg", duration: Self.annoyedReactionDuration)
+            let annoyed = Bool.random() ? "clawd-react-annoyed.svg" : "clawd-dizzy.svg"
+            playTimedReaction(svgFilename: annoyed, duration: Self.annoyedReactionDuration)
         }
     }
 
@@ -401,6 +402,11 @@
         let midX = contentView?.bounds.midX ?? frame.width / 2
         guard let lastClickPoint else {
             return "clawd-react-right.svg"
+        }
+
+        // 偶尔敬礼替代方向反应
+        if Int.random(in: 0..<5) == 0 {
+            return "clawd-react-salute.svg"
         }
 
         return lastClickPoint.x < midX ? "clawd-react-left.svg" : "clawd-react-right.svg"

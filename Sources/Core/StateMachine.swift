@@ -167,12 +167,23 @@ final class StateMachine {
         "clawd-idle-look.svg",
         "clawd-working-debugger.svg",
         "clawd-working-thinking.svg",
+        "clawd-working-ultrathink.svg",
+        "clawd-working-beacon.svg",
+        "clawd-working-builder.svg",
+        "clawd-working-confused.svg",
+        "clawd-working-overheated.svg",
+        "clawd-working-pushing.svg",
+        "clawd-working-success.svg",
+        "clawd-working-wizard.svg",
     ]
 
     static let idleAnims: [(svg: String, durationMs: Int)] = [
         ("clawd-idle-look.svg", 6_500),
         ("clawd-working-debugger.svg", 14_000),
         ("clawd-idle-reading.svg", 14_000),
+        ("clawd-idle-living.svg", 16_000),
+        ("clawd-idle-music.svg", 12_000),
+        ("clawd-crab-walking.svg", 8_000),
     ]
 
     private static let maxSessions = 20
