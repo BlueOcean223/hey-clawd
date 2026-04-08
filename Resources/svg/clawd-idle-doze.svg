@@ -111,7 +111,7 @@
       <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
     </g>
     <!-- Eyes shut -->
-    <g class="eyes-shut" fill="#000000">
+    <g id="eyes-doze" class="eyes-shut" fill="#000000">
       <rect x="4" y="8" width="1" height="2"/>
       <rect x="10" y="8" width="1" height="2"/>
     </g>

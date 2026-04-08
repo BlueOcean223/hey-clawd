@@ -193,11 +193,11 @@ final class StateMachine {
     private static let pointerPollInterval: TimeInterval = 0.2
     private static let idleAnimationDelay: TimeInterval = 20
     private static let yawnDelay: TimeInterval = 60
-    private static let dozingDelay: TimeInterval = 3
+    private static let dozingDelay: TimeInterval = 3.8
     private static let deepSleepDelay: TimeInterval = 600
     private static let collapseDelay: TimeInterval = 0.8
-    private static let dndYawningDelay: TimeInterval = 1.2
-    private static let wakingDelay: TimeInterval = 1.5
+    private static let dndCollapseDelay: TimeInterval = 3.6
+    private static let wakingDelay: TimeInterval = 3.5
     private static let pointerMovementThreshold: CGFloat = 0.5
 
     private(set) var currentState: PetState = .idle
@@ -674,11 +674,7 @@ final class StateMachine {
     }
 
     private func beginDoNotDisturbSleepSequence() {
-        sleepMode = .yawning
-        requestDisplayTransition(to: .yawning, svgOverride: svgOverride(for: .yawning))
-        scheduleSleepStageTimer(after: Self.dndYawningDelay) { [weak self] in
-            self?.beginCollapsing()
-        }
+        beginCollapsing()
     }
 
     private func beginDozing() {
@@ -692,7 +688,8 @@ final class StateMachine {
     private func beginCollapsing() {
         sleepMode = .collapsing
         requestDisplayTransition(to: .collapsing, svgOverride: svgOverride(for: .collapsing))
-        scheduleSleepStageTimer(after: Self.collapseDelay) { [weak self] in
+        let delay = doNotDisturbEnabled ? Self.dndCollapseDelay : Self.collapseDelay
+        scheduleSleepStageTimer(after: delay) { [weak self] in
             self?.beginSleeping()
         }
     }
@@ -977,6 +974,8 @@ final class StateMachine {
             return winningDisplaySvg(for: .juggling) ?? jugglingSvg()
         case .thinking:
             return winningDisplaySvg(for: .thinking) ?? Self.stateSVGs[.thinking]
+        case .collapsing:
+            return doNotDisturbEnabled ? Self.stateSVGs[.collapsing] : "clawd-idle-collapse.svg"
         default:
             return Self.stateSVGs[state]
         }
