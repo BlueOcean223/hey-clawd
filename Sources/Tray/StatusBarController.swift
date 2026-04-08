@@ -14,6 +14,7 @@ final class StatusBarController: NSObject {
     var onToggleSoundEffects: @MainActor (Bool) -> Void = { _ in }
     var onSelectLanguage: @MainActor (AppLanguage) -> Void = { _ in }
     var onCheckForUpdates: @MainActor () -> Void = {}
+    var onRegisterHooks: @MainActor () -> Void = {}
     var onQuit: @MainActor () -> Void = {}
     var onFocusSession: @MainActor (SessionMenuSnapshot) -> Void = { _ in }
     var checkForUpdatesMenuTarget: AnyObject?
@@ -141,6 +142,10 @@ final class StatusBarController: NSObject {
 
     @objc func checkForUpdates(_ sender: NSMenuItem) {
         onCheckForUpdates()
+    }
+
+    @objc func registerHooks(_ sender: NSMenuItem) {
+        onRegisterHooks()
     }
 
     @objc func togglePetVisibility(_ sender: NSMenuItem) {

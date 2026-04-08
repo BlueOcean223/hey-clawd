@@ -40,6 +40,7 @@ enum MenuBuilder {
             "english": "English",
             "chinese": "中文",
             "checkForUpdates": "Check for Updates",
+            "registerHooks": "Register Hooks",
             "showPet": "Show Clawd",
             "hidePet": "Hide Clawd",
             "quit": "Quit",
@@ -62,6 +63,7 @@ enum MenuBuilder {
             "english": "English",
             "chinese": "中文",
             "checkForUpdates": "检查更新",
+            "registerHooks": "注册 Hooks",
             "showPet": "显示 Clawd",
             "hidePet": "隐藏 Clawd",
             "quit": "退出",
@@ -125,6 +127,11 @@ enum MenuBuilder {
         if target.shouldShowCheckForUpdatesMenu() {
             menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
         }
+        menu.addItem(actionItem(
+            title: text("registerHooks", lang: state.language),
+            selector: #selector(StatusBarController.registerHooks(_:)),
+            target: target
+        ))
         menu.addItem(.separator())
         menu.addItem(actionItem(
             title: text(state.isPetVisible ? "hidePet" : "showPet", lang: state.language),

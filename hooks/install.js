@@ -258,6 +258,16 @@ function getHookServerPort(explicitPort) {
   return Number.isInteger(explicitPort) ? explicitPort : (readRuntimePort() || DEFAULT_SERVER_PORT);
 }
 
+function parsePortArg(argv) {
+  const index = argv.indexOf("--port");
+  if (index === -1 || index + 1 >= argv.length) {
+    return null;
+  }
+
+  const value = Number(argv[index + 1]);
+  return Number.isInteger(value) ? value : null;
+}
+
 // HTTP hooks: PermissionRequest uses bidirectional HTTP hook for permission decisions.
 // Claude Code fires PermissionRequest for tools needing approval (primarily Bash).
 // Edit/Write permissions are handled by Claude Code's own permission mode — not our hook.
@@ -627,7 +637,8 @@ module.exports = {
 if (require.main === module) {
   try {
     const remote = process.argv.includes("--remote");
-    registerHooks({ remote });
+    const port = parsePortArg(process.argv);
+    registerHooks({ remote, port });
   } catch (err) {
     console.error(err.message);
     process.exit(1);

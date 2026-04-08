@@ -30,6 +30,8 @@
 		B10000000000000000000AA5 /* MenuBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB5 /* MenuBuilder.swift */; };
 		B10000000000000000000FF0 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = B10000000000000000000FF1 /* Sparkle */; };
 		C100000000000000000000A0 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = C100000000000000000000B0 /* AppIcon.icns */; };
+		D100000000000000000000A0 /* hooks in Resources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B0 /* hooks */; };
+		D100000000000000000000A1 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B1 /* HookInstaller.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +59,8 @@
 		B10000000000000000000BB4 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB5 /* MenuBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBuilder.swift; sourceTree = "<group>"; };
 		C100000000000000000000B0 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		D100000000000000000000B0 /* hooks */ = {isa = PBXFileReference; lastKnownFileType = folder; path = hooks; sourceTree = "<group>"; };
+		D100000000000000000000B1 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +87,7 @@
 				B10000000000000000000C04 /* Sources/Update */,
 				B10000000000000000000C05 /* Sources/Tray */,
 				A1B2C3D4E5F6000000000016 /* Resources */,
+				D100000000000000000000B0 /* hooks */,
 				C100000000000000000000B0 /* AppIcon.icns */,
 				A1B2C3D4E5F6000000000012 /* Info.plist */,
 				A1B2C3D4E5F6000000000032 /* Products */,
@@ -126,6 +131,7 @@
 				B100000000000000000000B4 /* Session.swift */,
 				B100000000000000000000B5 /* SoundPlayer.swift */,
 				B100000000000000000000B6 /* StateMachine.swift */,
+				D100000000000000000000B1 /* HookInstaller.swift */,
 			);
 			path = Sources/Core;
 			sourceTree = "<group>";
@@ -239,6 +245,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1B2C3D4E5F6000000000005 /* Resources in Resources */,
+				D100000000000000000000A0 /* hooks in Resources */,
 				C100000000000000000000A0 /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -270,6 +277,7 @@
 				B10000000000000000000AA3 /* SparkleUpdater.swift in Sources */,
 				B10000000000000000000AA4 /* StatusBarController.swift in Sources */,
 				B10000000000000000000AA5 /* MenuBuilder.swift in Sources */,
+				D100000000000000000000A1 /* HookInstaller.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

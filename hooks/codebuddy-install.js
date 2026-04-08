@@ -9,6 +9,16 @@ const { resolveNodeBin, buildPermissionUrl, DEFAULT_SERVER_PORT, readRuntimePort
 const MARKER = "codebuddy-hook.js";
 const HTTP_MARKER = "/permission";
 
+function parsePortArg(argv) {
+  const index = argv.indexOf("--port");
+  if (index === -1 || index + 1 >= argv.length) {
+    return null;
+  }
+
+  const value = Number(argv[index + 1]);
+  return Number.isInteger(value) ? value : null;
+}
+
 /** Extract the existing absolute node path from hook commands containing marker. */
 function extractExistingNodeBin(settings, marker) {
   if (!settings || !settings.hooks) return null;
@@ -172,7 +182,9 @@ function registerCodeBuddyHooks(options = {}) {
   }
 
   // Register PermissionRequest HTTP hook (blocking, for permission bubble)
-  const hookPort = readRuntimePort() || DEFAULT_SERVER_PORT;
+  const hookPort = Number.isInteger(options.port)
+    ? options.port
+    : (readRuntimePort() || DEFAULT_SERVER_PORT);
   const permissionUrl = buildPermissionUrl(hookPort);
   const permEvent = "PermissionRequest";
   if (!Array.isArray(settings.hooks[permEvent])) {
@@ -223,7 +235,8 @@ module.exports = { registerCodeBuddyHooks, CODEBUDDY_HOOK_EVENTS };
 
 if (require.main === module) {
   try {
-    registerCodeBuddyHooks({});
+    const port = parsePortArg(process.argv);
+    registerCodeBuddyHooks({ port });
   } catch (err) {
     console.error(err.message);
     process.exit(1);

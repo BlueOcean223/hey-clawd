@@ -136,7 +136,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         httpServer = server
         httpServerTask = Task { [server] in
-            _ = await server.start()
+            guard let activePort = await server.start() else {
+                return
+            }
+
+            registerHooksOnLaunch(serverPort: activePort)
         }
     }
 
@@ -247,6 +251,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         controller.onCheckForUpdates = { [weak self] in
             self?.checkForUpdates()
+        }
+        controller.onRegisterHooks = { [weak self] in
+            self?.registerHooksManually()
         }
         controller.onQuit = {
             NSApp.terminate(nil)
@@ -523,6 +530,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func checkForUpdates() {
         sparkleUpdater?.checkForUpdates()
+    }
+
+    /// 启动时静默注册一次 hooks，不弹窗。
+    private func registerHooksOnLaunch(serverPort: Int) {
+        Task.detached(priority: .utility) {
+            _ = HookInstaller.register(serverPort: serverPort)
+        }
+    }
+
+    /// 菜单栏手动注册，完成后弹窗显示结果。
+    private func registerHooksManually() {
+        Task.detached(priority: .userInitiated) {
+            let result = HookInstaller.register()
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.alertStyle = result.success ? .informational : .warning
+                alert.messageText = result.success ? "Hooks Registered" : "Registration Failed"
+                alert.informativeText = result.output
+                alert.runModal()
+            }
+        }
     }
 
     private var isSparkleUpdaterEnabled: Bool {
