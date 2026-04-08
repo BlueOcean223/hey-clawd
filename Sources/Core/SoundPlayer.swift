@@ -1,4 +1,4 @@
-import AppKit
+import AVFoundation
 import Foundation
 
 @MainActor
@@ -7,13 +7,12 @@ final class SoundPlayer {
 
     private static let cooldown: TimeInterval = 10
 
-    private var cache: [String: NSSound] = [:]
+    private var cache: [String: AVAudioPlayer] = [:]
     private var lastPlayTime: Date = .distantPast
 
     private init() {}
 
     func play(_ name: String) {
-        // 音效和 DND 都是全局偏好，入口统一在这里拦，调用方只关心“现在该播什么”。
         guard !Preferences.shared.soundMuted else {
             return
         }
@@ -22,34 +21,35 @@ final class SoundPlayer {
             return
         }
 
-        // 统一 cooldown，避免 attention / notification 高频来回切换时刷屏。
         guard Date().timeIntervalSince(lastPlayTime) > Self.cooldown else {
             return
         }
 
-        guard let sound = cachedSound(named: name) else {
+        guard let player = cachedPlayer(named: name) else {
             return
         }
 
-        if sound.play() {
+        player.currentTime = 0
+        if player.play() {
             lastPlayTime = Date()
         }
     }
 
-    private func cachedSound(named name: String) -> NSSound? {
-        if let sound = cache[name] {
-            return sound
+    private func cachedPlayer(named name: String) -> AVAudioPlayer? {
+        if let player = cache[name] {
+            return player
         }
 
-        guard let sound = loadSound(named: name) else {
+        guard let player = loadPlayer(named: name) else {
             return nil
         }
 
-        cache[name] = sound
-        return sound
+        player.prepareToPlay()
+        cache[name] = player
+        return player
     }
 
-    private func loadSound(named name: String) -> NSSound? {
+    private func loadPlayer(named name: String) -> AVAudioPlayer? {
         guard let resourcesURL = bundledResourcesURL() else {
             return nil
         }
@@ -62,7 +62,7 @@ final class SoundPlayer {
             return nil
         }
 
-        return NSSound(contentsOf: soundURL, byReference: false)
+        return try? AVAudioPlayer(contentsOf: soundURL)
     }
 
     /// 资源查找规则和 SVG/Web 资源保持一致，兼容 Xcode app bundle 与 SPM build 两种布局。
