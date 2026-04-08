@@ -5,9 +5,14 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { resolveNodeBin, buildPermissionUrl, DEFAULT_SERVER_PORT, readRuntimePort } = require("./server-config");
+const { resolveNodeBin, buildPermissionUrl, DEFAULT_SERVER_PORT, readRuntimePort, SERVER_PORTS } = require("./server-config");
+const { loadJsonFile, removeMatchingCommandHooks, removeMatchingHttpHooks } = require("./hook-utils");
 const MARKER = "codebuddy-hook.js";
-const HTTP_MARKER = "/permission";
+const CLAWD_PERMISSION_URLS = new Set(SERVER_PORTS.map((port) => buildPermissionUrl(port)));
+
+function isClawdPermissionUrl(url) {
+  return typeof url === "string" && CLAWD_PERMISSION_URLS.has(url);
+}
 
 function parsePortArg(argv) {
   const index = argv.indexOf("--port");
@@ -198,13 +203,13 @@ function registerCodeBuddyHooks(options = {}) {
     if (Array.isArray(innerHooks)) {
       for (const h of innerHooks) {
         if (!h || h.type !== "http" || typeof h.url !== "string") continue;
-        if (!h.url.includes(HTTP_MARKER)) continue;
+        if (!isClawdPermissionUrl(h.url)) continue;
         permFound = true;
         if (h.url !== permissionUrl) { h.url = permissionUrl; updated++; changed = true; }
         break;
       }
     }
-    if (!permFound && entry.type === "http" && typeof entry.url === "string" && entry.url.includes(HTTP_MARKER)) {
+    if (!permFound && entry.type === "http" && isClawdPermissionUrl(entry.url)) {
       permFound = true;
       if (entry.url !== permissionUrl) { entry.url = permissionUrl; updated++; changed = true; }
     }
@@ -231,12 +236,74 @@ function registerCodeBuddyHooks(options = {}) {
   return { added, skipped, updated };
 }
 
-module.exports = { registerCodeBuddyHooks, CODEBUDDY_HOOK_EVENTS };
+/**
+ * Remove all Clawd hooks from ~/.codebuddy/settings.json.
+ * @param {object} [options]
+ * @param {boolean} [options.silent]
+ * @param {string} [options.settingsPath]
+ * @returns {{ removed: number }}
+ */
+function unregisterCodeBuddyHooks(options = {}) {
+  const settingsPath = options.settingsPath || path.join(os.homedir(), ".codebuddy", "settings.json");
+  const loaded = loadJsonFile(settingsPath);
+  if (!loaded.exists) {
+    if (!options.silent) console.log("No ~/.codebuddy/settings.json found — nothing to clean.");
+    return { removed: 0 };
+  }
+  const settings = loaded.data;
+
+  if (!settings.hooks) {
+    if (!options.silent) console.log("No hooks in settings.json — nothing to clean.");
+    return { removed: 0 };
+  }
+
+  let totalRemoved = 0;
+  let changed = false;
+
+  for (const event of Object.keys(settings.hooks)) {
+    if (!Array.isArray(settings.hooks[event])) continue;
+    const commandResult = removeMatchingCommandHooks(
+      settings.hooks[event],
+      (command) => command.includes(MARKER)
+    );
+    if (commandResult.changed) {
+      settings.hooks[event] = commandResult.entries;
+      totalRemoved += commandResult.removed;
+      changed = true;
+    }
+
+    const httpResult = removeMatchingHttpHooks(
+      settings.hooks[event],
+      (url) => isClawdPermissionUrl(url)
+    );
+    if (httpResult.changed) {
+      settings.hooks[event] = httpResult.entries;
+      totalRemoved += httpResult.removed;
+      changed = true;
+    }
+    if (settings.hooks[event].length === 0) delete settings.hooks[event];
+  }
+
+  if (changed) writeJsonAtomic(settingsPath, settings);
+
+  if (!options.silent) {
+    console.log(`Clawd CodeBuddy hooks cleaned from ${settingsPath}`);
+    console.log(`  Removed: ${totalRemoved} hooks`);
+  }
+
+  return { removed: totalRemoved };
+}
+
+module.exports = { registerCodeBuddyHooks, unregisterCodeBuddyHooks, CODEBUDDY_HOOK_EVENTS };
 
 if (require.main === module) {
   try {
-    const port = parsePortArg(process.argv);
-    registerCodeBuddyHooks({ port });
+    if (process.argv.includes("--uninstall")) {
+      unregisterCodeBuddyHooks({});
+    } else {
+      const port = parsePortArg(process.argv);
+      registerCodeBuddyHooks({ port });
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

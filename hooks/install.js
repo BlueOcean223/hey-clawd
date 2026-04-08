@@ -6,7 +6,8 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const { buildPermissionUrl, DEFAULT_SERVER_PORT, PERMISSION_PATH, readRuntimePort, resolveNodeBin } = require("./server-config");
+const { buildPermissionUrl, DEFAULT_SERVER_PORT, readRuntimePort, resolveNodeBin, SERVER_PORTS } = require("./server-config");
+const { loadJsonFile, normalizeHookEntries, removeMatchingCommandHooks, removeMatchingHttpHooks } = require("./hook-utils");
 
 // Hooks supported by all Claude Code versions
 const CORE_HOOKS = [
@@ -98,7 +99,11 @@ function getClaudeVersion(options = {}) {
 const MARKER = "clawd-hook.js";
 const AUTO_START_MARKER = "auto-start.js";
 const LEGACY_AUTO_START_MARKER = "auto-start.sh";
-const HTTP_MARKER = PERMISSION_PATH;
+const CLAWD_PERMISSION_URLS = new Set(SERVER_PORTS.map((port) => buildPermissionUrl(port)));
+
+function isClawdPermissionUrl(url) {
+  return typeof url === "string" && CLAWD_PERMISSION_URLS.has(url);
+}
 
 /**
  * Extract the node binary path from existing hook commands in settings.
@@ -166,53 +171,6 @@ function syncCommandHook(entries, marker, expectedCommand) {
   return { found, changed };
 }
 
-function removeMatchingCommandHooks(entries, predicate) {
-  if (!Array.isArray(entries)) return { entries, removed: 0, changed: false };
-
-  let removed = 0;
-  let changed = false;
-  const nextEntries = [];
-
-  for (const entry of entries) {
-    if (!entry || typeof entry !== "object") {
-      nextEntries.push(entry);
-      continue;
-    }
-
-    if (typeof entry.command === "string" && predicate(entry.command)) {
-      removed++;
-      changed = true;
-      continue;
-    }
-
-    if (!Array.isArray(entry.hooks)) {
-      nextEntries.push(entry);
-      continue;
-    }
-
-    const nextHooks = entry.hooks.filter((hook) => {
-      if (!hook || typeof hook !== "object" || typeof hook.command !== "string") return true;
-      if (!predicate(hook.command)) return true;
-      removed++;
-      changed = true;
-      return false;
-    });
-
-    if (nextHooks.length === entry.hooks.length) {
-      nextEntries.push(entry);
-      continue;
-    }
-
-    if (nextHooks.length === 0 && typeof entry.command !== "string") {
-      continue;
-    }
-
-    nextEntries.push({ ...entry, hooks: nextHooks });
-  }
-
-  return { entries: nextEntries, removed, changed };
-}
-
 function writeJsonAtomic(filePath, data) {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath);
@@ -233,7 +191,7 @@ function syncHttpHook(entries, expectedUrl) {
   if (!Array.isArray(entries)) return { found, changed };
   for (const entry of entries) {
     if (!entry || typeof entry !== "object") continue;
-    if (entry.type === "http" && typeof entry.url === "string" && entry.url.includes(HTTP_MARKER)) {
+    if (entry.type === "http" && isClawdPermissionUrl(entry.url)) {
       found = true;
       if (entry.url !== expectedUrl) {
         entry.url = expectedUrl;
@@ -243,7 +201,7 @@ function syncHttpHook(entries, expectedUrl) {
     if (!Array.isArray(entry.hooks)) continue;
     for (const hook of entry.hooks) {
       if (!hook || typeof hook !== "object" || hook.type !== "http" || typeof hook.url !== "string") continue;
-      if (!hook.url.includes(HTTP_MARKER)) continue;
+      if (!isClawdPermissionUrl(hook.url)) continue;
       found = true;
       if (hook.url !== expectedUrl) {
         hook.url = expectedUrl;
@@ -461,16 +419,14 @@ function registerHooks(options = {}) {
     }
 
     // Remove all legacy auto-start.sh entries if present
-    const beforeLen = settings.hooks.SessionStart.length;
-    settings.hooks.SessionStart = settings.hooks.SessionStart.filter((entry) => {
-      if (!entry || typeof entry !== "object") return true;
-      if (typeof entry.command === "string" && entry.command.includes(LEGACY_AUTO_START_MARKER)) return false;
-      if (Array.isArray(entry.hooks)) {
-        if (entry.hooks.some((h) => h && typeof h.command === "string" && h.command.includes(LEGACY_AUTO_START_MARKER))) return false;
-      }
-      return true;
-    });
-    if (settings.hooks.SessionStart.length < beforeLen) changed = true;
+    const legacyAutoStartResult = removeMatchingCommandHooks(
+      settings.hooks.SessionStart,
+      (command) => command.includes(LEGACY_AUTO_START_MARKER)
+    );
+    if (legacyAutoStartResult.changed) {
+      settings.hooks.SessionStart = legacyAutoStartResult.entries;
+      changed = true;
+    }
   }
 
   // Clean up stale command hooks for HTTP-only events (e.g. PermissionRequest).
@@ -561,8 +517,8 @@ function registerHooks(options = {}) {
  * Also removes legacy auto-start.sh entries.
  * @returns {boolean} true if a hook was removed
  */
-function unregisterAutoStart() {
-  const settingsPath = path.join(os.homedir(), ".claude", "settings.json");
+function unregisterAutoStart(options = {}) {
+  const settingsPath = options.settingsPath || path.join(os.homedir(), ".claude", "settings.json");
   let settings;
   try {
     settings = JSON.parse(fs.readFileSync(settingsPath, "utf-8"));
@@ -570,26 +526,22 @@ function unregisterAutoStart() {
     return false;
   }
 
-  const arr = settings.hooks && settings.hooks.SessionStart;
-  if (!Array.isArray(arr)) return false;
+  const normalized = normalizeHookEntries(settings.hooks && settings.hooks.SessionStart);
+  if (!normalized.entries) return false;
+  if (normalized.changed) {
+    settings.hooks.SessionStart = normalized.entries;
+  }
 
-  const before = arr.length;
-  settings.hooks.SessionStart = arr.filter((entry) => {
-    if (!entry || typeof entry !== "object") return true;
-    // Remove auto-start.js entries
-    if (typeof entry.command === "string" && entry.command.includes(AUTO_START_MARKER)) return false;
-    if (Array.isArray(entry.hooks)) {
-      if (entry.hooks.some((h) => h && typeof h.command === "string" && h.command.includes(AUTO_START_MARKER))) return false;
-    }
-    // Remove legacy auto-start.sh entries
-    if (typeof entry.command === "string" && entry.command.includes(LEGACY_AUTO_START_MARKER)) return false;
-    if (Array.isArray(entry.hooks)) {
-      if (entry.hooks.some((h) => h && typeof h.command === "string" && h.command.includes(LEGACY_AUTO_START_MARKER))) return false;
-    }
-    return true;
-  });
+  const result = removeMatchingCommandHooks(
+    settings.hooks.SessionStart,
+    (command) => command.includes(AUTO_START_MARKER) || command.includes(LEGACY_AUTO_START_MARKER)
+  );
 
-  if (settings.hooks.SessionStart.length < before) {
+  if (result.changed) {
+    settings.hooks.SessionStart = result.entries;
+    if (settings.hooks.SessionStart.length === 0) {
+      delete settings.hooks.SessionStart;
+    }
     writeJsonAtomic(settingsPath, settings);
     return true;
   }
@@ -619,26 +571,113 @@ function isAutoStartRegistered() {
   }
 }
 
+/**
+ * Remove all Clawd hooks from ~/.claude/settings.json.
+ * @param {object} [options]
+ * @param {boolean} [options.silent]
+ * @param {string} [options.settingsPath]
+ * @returns {{ removed: number }}
+ */
+function unregisterHooks(options = {}) {
+  const settingsPath = options.settingsPath || path.join(os.homedir(), ".claude", "settings.json");
+  const loaded = loadJsonFile(settingsPath);
+  if (!loaded.exists) {
+    if (!options.silent) console.log("No settings.json found — nothing to clean.");
+    return { removed: 0 };
+  }
+  const settings = loaded.data;
+
+  if (!settings.hooks) {
+    if (!options.silent) console.log("No hooks in settings.json — nothing to clean.");
+    return { removed: 0 };
+  }
+
+  let totalRemoved = 0;
+  let changed = false;
+
+  for (const event of Object.keys(settings.hooks)) {
+    const normalized = normalizeHookEntries(settings.hooks[event]);
+    if (!normalized.entries) continue;
+    if (normalized.changed) {
+      settings.hooks[event] = normalized.entries;
+      changed = true;
+    }
+
+    // Remove command hooks containing our marker
+    const cmdResult = removeMatchingCommandHooks(
+      settings.hooks[event],
+      (command) => command.includes(MARKER)
+    );
+    if (cmdResult.changed) {
+      settings.hooks[event] = cmdResult.entries;
+      totalRemoved += cmdResult.removed;
+      changed = true;
+    }
+
+    // Remove HTTP hooks containing permission marker
+    const httpResult = removeMatchingHttpHooks(
+      settings.hooks[event],
+      (url) => isClawdPermissionUrl(url)
+    );
+    if (httpResult.changed) {
+      settings.hooks[event] = httpResult.entries;
+      totalRemoved += httpResult.removed;
+      changed = true;
+    }
+
+    // Remove auto-start hooks
+    const autoStartResult = removeMatchingCommandHooks(
+      settings.hooks[event],
+      (command) => command.includes(AUTO_START_MARKER) || command.includes(LEGACY_AUTO_START_MARKER)
+    );
+    if (autoStartResult.changed) {
+      settings.hooks[event] = autoStartResult.entries;
+      totalRemoved += autoStartResult.removed;
+      changed = true;
+    }
+
+    // Clean up empty arrays
+    if (settings.hooks[event].length === 0) {
+      delete settings.hooks[event];
+    }
+  }
+
+  if (changed) {
+    writeJsonAtomic(settingsPath, settings);
+  }
+
+  if (!options.silent) {
+    console.log(`Clawd hooks cleaned from ${settingsPath}`);
+    console.log(`  Removed: ${totalRemoved} hooks`);
+  }
+
+  return { removed: totalRemoved };
+}
+
 // Export for use by main.js
 module.exports = {
   registerHooks,
+  unregisterHooks,
   unregisterAutoStart,
   isAutoStartRegistered,
   __test: {
     getClaudeVersion,
     versionLessThan,
-    removeMatchingCommandHooks,
     reconcileVersionedHooks,
     shouldReconcileVersionedHooks,
   },
 };
 
-// CLI: run directly with `node hooks/install.js [--remote]`
+// CLI: run directly with `node hooks/install.js [--remote] [--uninstall]`
 if (require.main === module) {
   try {
-    const remote = process.argv.includes("--remote");
-    const port = parsePortArg(process.argv);
-    registerHooks({ remote, port });
+    if (process.argv.includes("--uninstall")) {
+      unregisterHooks();
+    } else {
+      const remote = process.argv.includes("--remote");
+      const port = parsePortArg(process.argv);
+      registerHooks({ remote, port });
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);

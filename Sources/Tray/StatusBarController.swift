@@ -14,7 +14,8 @@ final class StatusBarController: NSObject {
     var onToggleSoundEffects: @MainActor (Bool) -> Void = { _ in }
     var onSelectLanguage: @MainActor (AppLanguage) -> Void = { _ in }
     var onCheckForUpdates: @MainActor () -> Void = {}
-    var onRegisterHooks: @MainActor () -> Void = {}
+    var onRegisterHooks: @MainActor (HookInstaller.HookTarget?) -> Void = { _ in }
+    var onUnregisterHooks: @MainActor (HookInstaller.HookTarget?) -> Void = { _ in }
     var onQuit: @MainActor () -> Void = {}
     var onFocusSession: @MainActor (SessionMenuSnapshot) -> Void = { _ in }
     var checkForUpdatesMenuTarget: AnyObject?
@@ -145,7 +146,11 @@ final class StatusBarController: NSObject {
     }
 
     @objc func registerHooks(_ sender: NSMenuItem) {
-        onRegisterHooks()
+        onRegisterHooks(sender.representedObject as? HookInstaller.HookTarget)
+    }
+
+    @objc func unregisterHooks(_ sender: NSMenuItem) {
+        onUnregisterHooks(sender.representedObject as? HookInstaller.HookTarget)
     }
 
     @objc func togglePetVisibility(_ sender: NSMenuItem) {

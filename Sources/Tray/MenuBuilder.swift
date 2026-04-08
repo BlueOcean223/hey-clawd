@@ -41,6 +41,9 @@ enum MenuBuilder {
             "chinese": "中文",
             "checkForUpdates": "Check for Updates",
             "registerHooks": "Register Hooks",
+            "registerAll": "Register All",
+            "unregisterHooks": "Clean Hooks",
+            "unregisterAll": "Clean All",
             "showPet": "Show Clawd",
             "hidePet": "Hide Clawd",
             "quit": "Quit",
@@ -64,6 +67,9 @@ enum MenuBuilder {
             "chinese": "中文",
             "checkForUpdates": "检查更新",
             "registerHooks": "注册 Hooks",
+            "registerAll": "全部注册",
+            "unregisterHooks": "清理 Hooks",
+            "unregisterAll": "全部清理",
             "showPet": "显示 Clawd",
             "hidePet": "隐藏 Clawd",
             "quit": "退出",
@@ -127,11 +133,8 @@ enum MenuBuilder {
         if target.shouldShowCheckForUpdatesMenu() {
             menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
         }
-        menu.addItem(actionItem(
-            title: text("registerHooks", lang: state.language),
-            selector: #selector(StatusBarController.registerHooks(_:)),
-            target: target
-        ))
+        menu.addItem(registerHooksMenuItem(state: state, target: target))
+        menu.addItem(unregisterHooksMenuItem(state: state, target: target))
         menu.addItem(.separator())
         menu.addItem(actionItem(
             title: text(state.isPetVisible ? "hidePet" : "showPet", lang: state.language),
@@ -222,6 +225,58 @@ enum MenuBuilder {
         chinese.representedObject = AppLanguage.zh
         chinese.state = state.language == .zh ? .on : .off
         submenu.addItem(chinese)
+
+        item.submenu = submenu
+        return item
+    }
+
+    private static func registerHooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
+        let item = NSMenuItem(title: text("registerHooks", lang: state.language), action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+
+        for hookTarget in HookInstaller.HookTarget.allCases {
+            let entry = actionItem(
+                title: hookTarget.displayName,
+                selector: #selector(StatusBarController.registerHooks(_:)),
+                target: target
+            )
+            entry.representedObject = hookTarget
+            submenu.addItem(entry)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(actionItem(
+            title: text("registerAll", lang: state.language),
+            selector: #selector(StatusBarController.registerHooks(_:)),
+            target: target
+        ))
+
+        item.submenu = submenu
+        return item
+    }
+
+    private static func unregisterHooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
+        let item = NSMenuItem(title: text("unregisterHooks", lang: state.language), action: nil, keyEquivalent: "")
+        let submenu = NSMenu()
+        submenu.autoenablesItems = false
+
+        for hookTarget in HookInstaller.HookTarget.allCases {
+            let entry = actionItem(
+                title: hookTarget.displayName,
+                selector: #selector(StatusBarController.unregisterHooks(_:)),
+                target: target
+            )
+            entry.representedObject = hookTarget
+            submenu.addItem(entry)
+        }
+
+        submenu.addItem(.separator())
+        submenu.addItem(actionItem(
+            title: text("unregisterAll", lang: state.language),
+            selector: #selector(StatusBarController.unregisterHooks(_:)),
+            target: target
+        ))
 
         item.submenu = submenu
         return item

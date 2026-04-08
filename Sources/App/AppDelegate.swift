@@ -252,8 +252,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onCheckForUpdates = { [weak self] in
             self?.checkForUpdates()
         }
-        controller.onRegisterHooks = { [weak self] in
-            self?.registerHooksManually()
+        controller.onRegisterHooks = { [weak self] target in
+            self?.registerHooksManually(target: target)
+        }
+        controller.onUnregisterHooks = { [weak self] target in
+            self?.unregisterHooksManually(target: target)
         }
         controller.onQuit = {
             NSApp.terminate(nil)
@@ -540,13 +543,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 菜单栏手动注册，完成后弹窗显示结果。
-    private func registerHooksManually() {
+    private func registerHooksManually(target: HookInstaller.HookTarget?) {
         Task.detached(priority: .userInitiated) {
-            let result = HookInstaller.register()
+            let result: (success: Bool, output: String)
+            if let target {
+                result = HookInstaller.register(target: target)
+            } else {
+                result = HookInstaller.register()
+            }
             await MainActor.run {
                 let alert = NSAlert()
                 alert.alertStyle = result.success ? .informational : .warning
                 alert.messageText = result.success ? "Hooks Registered" : "Registration Failed"
+                alert.informativeText = result.output
+                alert.runModal()
+            }
+        }
+    }
+
+    /// 菜单栏手动清理钩子，完成后弹窗显示结果。
+    private func unregisterHooksManually(target: HookInstaller.HookTarget?) {
+        Task.detached(priority: .userInitiated) {
+            let result: (success: Bool, output: String)
+            if let target {
+                result = HookInstaller.unregister(target: target)
+            } else {
+                result = HookInstaller.unregister()
+            }
+            await MainActor.run {
+                let alert = NSAlert()
+                alert.alertStyle = result.success ? .informational : .warning
+                alert.messageText = result.success ? "Hooks Cleaned" : "Clean Failed"
                 alert.informativeText = result.output
                 alert.runModal()
             }

@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const os = require("os");
 const { resolveNodeBin } = require("./server-config");
+const { loadJsonFile, removeMatchingCommandHooks } = require("./hook-utils");
 const MARKER = "gemini-hook.js";
 
 /** Extract the existing absolute node path from hook commands containing marker. */
@@ -142,11 +143,63 @@ function registerGeminiHooks(options = {}) {
   return { added, skipped, updated };
 }
 
-module.exports = { registerGeminiHooks, GEMINI_HOOK_EVENTS };
+/**
+ * Remove all Clawd hooks from ~/.gemini/settings.json.
+ * @param {object} [options]
+ * @param {boolean} [options.silent]
+ * @param {string} [options.settingsPath]
+ * @returns {{ removed: number }}
+ */
+function unregisterGeminiHooks(options = {}) {
+  const settingsPath = options.settingsPath || path.join(os.homedir(), ".gemini", "settings.json");
+  const loaded = loadJsonFile(settingsPath);
+  if (!loaded.exists) {
+    if (!options.silent) console.log("No ~/.gemini/settings.json found — nothing to clean.");
+    return { removed: 0 };
+  }
+  const settings = loaded.data;
+
+  if (!settings.hooks) {
+    if (!options.silent) console.log("No hooks in settings.json — nothing to clean.");
+    return { removed: 0 };
+  }
+
+  let totalRemoved = 0;
+  let changed = false;
+
+  for (const event of Object.keys(settings.hooks)) {
+    if (!Array.isArray(settings.hooks[event])) continue;
+    const result = removeMatchingCommandHooks(
+      settings.hooks[event],
+      (command) => command.includes(MARKER)
+    );
+    if (result.changed) {
+      settings.hooks[event] = result.entries;
+      totalRemoved += result.removed;
+      changed = true;
+    }
+    if (settings.hooks[event].length === 0) delete settings.hooks[event];
+  }
+
+  if (changed) writeJsonAtomic(settingsPath, settings);
+
+  if (!options.silent) {
+    console.log(`Clawd Gemini hooks cleaned from ${settingsPath}`);
+    console.log(`  Removed: ${totalRemoved} hooks`);
+  }
+
+  return { removed: totalRemoved };
+}
+
+module.exports = { registerGeminiHooks, unregisterGeminiHooks, GEMINI_HOOK_EVENTS };
 
 if (require.main === module) {
   try {
-    registerGeminiHooks({});
+    if (process.argv.includes("--uninstall")) {
+      unregisterGeminiHooks({});
+    } else {
+      registerGeminiHooks({});
+    }
   } catch (err) {
     console.error(err.message);
     process.exit(1);
