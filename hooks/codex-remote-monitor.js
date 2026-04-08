@@ -30,11 +30,11 @@ const LOG_EVENT_MAP = {
   "session_meta": "idle",
   "event_msg:task_started": "thinking",
   "event_msg:user_message": "thinking",
-  "event_msg:agent_message": "working",
+  "event_msg:agent_message": null, // text output only — working is reserved for function_call
   "response_item:function_call": "working",
   "response_item:custom_tool_call": "working",
   "response_item:web_search_call": "working",
-  "event_msg:task_complete": "attention",
+  "event_msg:task_complete": "codex-turn-end", // resolved below: attention if tools were used, idle otherwise
   "event_msg:context_compacted": "sweeping",
   "event_msg:turn_aborted": "idle",
 };
@@ -52,6 +52,18 @@ const hostPrefix = readHostPrefix();
 
 // Map<filePath, { offset, sessionId, cwd, lastEventTime, lastState, partial }>
 const tracked = new Map();
+
+function createTrackedEntry(sessionId) {
+  return {
+    offset: 0,
+    sessionId,
+    cwd: "",
+    lastEventTime: Date.now(),
+    lastState: null,
+    partial: "",
+    hadToolUse: false,
+  };
+}
 
 // ── Core polling logic (mirrors agents/codex-log-monitor.js) ──
 
@@ -93,7 +105,7 @@ function postState(sessionId, state, event, cwd) {
   );
 }
 
-function processLine(line, entry) {
+function processLine(line, entry, emitState = postState) {
   let obj;
   try {
     obj = JSON.parse(line);
@@ -112,15 +124,39 @@ function processLine(line, entry) {
     entry.cwd = payload.cwd || "";
   }
 
-  const state = LOG_EVENT_MAP[key];
-  if (state === undefined || state === null) return;
+  const mapped = LOG_EVENT_MAP[key];
+  if (mapped === undefined) return;
+  if (mapped === null) {
+    if (key === "event_msg:agent_message") {
+      entry.lastEventTime = Date.now();
+    }
+    return;
+  }
+
+  // Track tool usage within a turn (mirrors CodexMonitor.swift hadToolUse logic)
+  if (key === "event_msg:task_started") {
+    entry.hadToolUse = false;
+  } else if (
+    key === "response_item:function_call" ||
+    key === "response_item:custom_tool_call" ||
+    key === "response_item:web_search_call"
+  ) {
+    entry.hadToolUse = true;
+  }
+
+  // Resolve codex-turn-end: happy if tools were used, idle otherwise
+  let state = mapped;
+  if (mapped === "codex-turn-end") {
+    state = entry.hadToolUse ? "attention" : "idle";
+    entry.hadToolUse = false;
+  }
 
   // Avoid spamming same state
   if (state === entry.lastState && state === "working") return;
   entry.lastState = state;
   entry.lastEventTime = Date.now();
 
-  postState(entry.sessionId, state, key, entry.cwd);
+  emitState(entry.sessionId, state, key, entry.cwd);
 }
 
 function pollFile(filePath, fileName) {
@@ -135,14 +171,7 @@ function pollFile(filePath, fileName) {
   if (!entry) {
     const sessionId = extractSessionId(fileName);
     if (!sessionId) return;
-    entry = {
-      offset: 0,
-      sessionId: "codex:" + sessionId,
-      cwd: "",
-      lastEventTime: Date.now(),
-      lastState: null,
-      partial: "",
-    };
+    entry = createTrackedEntry("codex:" + sessionId);
     tracked.set(filePath, entry);
   }
 
@@ -170,12 +199,12 @@ function pollFile(filePath, fileName) {
   }
 }
 
-function cleanStaleFiles() {
+function cleanStaleFiles(entries = tracked, emitState = postState) {
   const now = Date.now();
-  for (const [filePath, entry] of tracked) {
+  for (const [filePath, entry] of entries) {
     if (now - entry.lastEventTime > 300000) {
-      postState(entry.sessionId, "sleeping", "stale-cleanup", entry.cwd);
-      tracked.delete(filePath);
+      emitState(entry.sessionId, "sleeping", "stale-cleanup", entry.cwd);
+      entries.delete(filePath);
     }
   }
 }
@@ -205,26 +234,43 @@ function poll() {
   cleanStaleFiles();
 }
 
-// ── Main ──
+function main() {
+  console.log(`Clawd Codex remote monitor started`);
+  console.log(`  Session dir: ${SESSION_DIR}`);
+  console.log(`  Poll interval: ${POLL_INTERVAL_MS}ms`);
+  if (preferredPort) console.log(`  Preferred port: ${preferredPort}`);
+  console.log(`  Press Ctrl+C to stop\n`);
 
-console.log(`Clawd Codex remote monitor started`);
-console.log(`  Session dir: ${SESSION_DIR}`);
-console.log(`  Poll interval: ${POLL_INTERVAL_MS}ms`);
-if (preferredPort) console.log(`  Preferred port: ${preferredPort}`);
-console.log(`  Press Ctrl+C to stop\n`);
+  poll();
 
-poll();
+  if (!onceMode) {
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
 
-if (!onceMode) {
-  const interval = setInterval(poll, POLL_INTERVAL_MS);
-
-  process.on("SIGINT", () => {
-    clearInterval(interval);
-    console.log("\nStopped.");
-    process.exit(0);
-  });
-  process.on("SIGTERM", () => {
-    clearInterval(interval);
-    process.exit(0);
-  });
+    process.on("SIGINT", () => {
+      clearInterval(interval);
+      console.log("\nStopped.");
+      process.exit(0);
+    });
+    process.on("SIGTERM", () => {
+      clearInterval(interval);
+      process.exit(0);
+    });
+  }
 }
+
+if (require.main === module) {
+  main();
+}
+
+module.exports = {
+  LOG_EVENT_MAP,
+  createTrackedEntry,
+  cleanStaleFiles,
+  extractSessionId,
+  main,
+  poll,
+  pollFile,
+  postState,
+  processLine,
+  tracked,
+};
