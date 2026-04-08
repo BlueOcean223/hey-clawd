@@ -1,9 +1,18 @@
 import AppKit
 import SwiftUI
 
+/// NSHostingView 默认 acceptsFirstMouse 返回 false，
+/// 导致非 key window 上的首次点击被消耗为"选中窗口"而非按钮点击。
+/// 对于 nonactivatingPanel 浮窗，必须返回 true 才能一击即中。
+private final class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+}
+
 @MainActor
 final class BubbleWindow: NSPanel {
-    private let hostingView: NSHostingView<BubbleView>
+    private let hostingView: ClickThroughHostingView<BubbleView>
     private let minimumHeight: CGFloat
     var onHeightDidChange: (() -> Void)?
 
@@ -22,7 +31,7 @@ final class BubbleWindow: NSPanel {
             suggestions: content.suggestions,
             onDecide: onDecide
         )
-        hostingView = NSHostingView(rootView: view)
+        hostingView = ClickThroughHostingView(rootView: view)
         minimumHeight = content.estimatedHeight
 
         // 用宽裕高度预测量，让 fixedSize 的 VStack 计算出真实理想高度。

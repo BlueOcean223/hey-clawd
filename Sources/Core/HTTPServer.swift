@@ -6,6 +6,17 @@ enum PermissionBehavior: String, Sendable {
     case deny
 }
 
+/// bubble 或快捷键做出的权限决策，附带可选的 suggestion 数据。
+struct PermissionDecisionResult: Sendable {
+    let behavior: PermissionBehavior
+    /// 选中 suggestion 时序列化的 updatedPermissions JSON entries。
+    let suggestionPayloads: [Data]
+
+    static func simple(_ behavior: PermissionBehavior) -> PermissionDecisionResult {
+        PermissionDecisionResult(behavior: behavior, suggestionPayloads: [])
+    }
+}
+
 /// POST /permission 产生的挂起请求。
 /// 连接保持打开，直到上层调用 respond(with:) 发送许可结果。
 /// lock 保证 continuation 最多只被 resume 一次。
@@ -13,7 +24,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
     let body: Data
 
     private let lock = NSLock()
-    private var continuation: CheckedContinuation<PermissionBehavior, Never>?
+    private var continuation: CheckedContinuation<PermissionDecisionResult, Never>?
     private var disconnectHandler: (@Sendable () -> Void)?
     private var status: RequestStatus = .pending
 
@@ -23,7 +34,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
         case disconnected
     }
 
-    init(body: Data, continuation: CheckedContinuation<PermissionBehavior, Never>) {
+    init(body: Data, continuation: CheckedContinuation<PermissionDecisionResult, Never>) {
         self.body = body
         self.continuation = continuation
     }
@@ -32,8 +43,8 @@ final class PendingPermissionRequest: @unchecked Sendable {
         lock.withLock { status == .pending }
     }
 
-    func respond(with behavior: PermissionBehavior) {
-        let continuation = lock.withLock { () -> CheckedContinuation<PermissionBehavior, Never>? in
+    func respond(with result: PermissionDecisionResult) {
+        let continuation = lock.withLock { () -> CheckedContinuation<PermissionDecisionResult, Never>? in
             guard status == .pending else {
                 return nil
             }
@@ -46,7 +57,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
             return self.continuation
         }
 
-        continuation?.resume(returning: behavior)
+        continuation?.resume(returning: result)
     }
 
     func setDisconnectHandler(_ handler: @escaping @Sendable () -> Void) {
@@ -75,7 +86,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
     }
 
     func cancelDueToDisconnect() {
-        let result = lock.withLock { () -> (CheckedContinuation<PermissionBehavior, Never>?, (@Sendable () -> Void)?) in
+        let result = lock.withLock { () -> (CheckedContinuation<PermissionDecisionResult, Never>?, (@Sendable () -> Void)?) in
             guard status == .pending else {
                 return (nil, nil)
             }
@@ -88,7 +99,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
             return (continuation, disconnectHandler)
         }
 
-        result.0?.resume(returning: .deny)
+        result.0?.resume(returning: .simple(.deny))
         result.1?()
     }
 }
@@ -133,9 +144,7 @@ private final class ConnectionPermissionTracker: @unchecked Sendable {
 
     func cancelPendingPermission() {
         let request = lock.withLock { () -> PendingPermissionRequest? in
-            defer {
-                pendingPermission = nil
-            }
+            defer { pendingPermission = nil }
             return pendingPermission
         }
 
@@ -310,11 +319,11 @@ final class HTTPServer: @unchecked Sendable {
         do {
             while true {
                 if let request = HTTPParser.parseRequest(buffer) {
-                    // 请求已完整解析，开始路由处理。
-                    // 对 /permission 这类挂起请求，客户端可能在等待期间断连。
-                    // TCP 半关闭不会触发 NWConnection 的 .failed 状态，
-                    // 所以主动启动一次读取来检测 EOF/RST。
-                    monitorDisconnect(connection: connection, tracker: permissionTracker)
+                    // 只对 /permission 启动断连监听——/state 等短连接不需要。
+                    let path = normalizedPath(from: request.path)
+                    if request.method.uppercased() == "POST" && path == "/permission" {
+                        monitorDisconnect(connection: connection, tracker: permissionTracker)
+                    }
                     let response = await route(request, permissionTracker: permissionTracker)
                     try await send(response.serialize(), on: connection)
                     return
@@ -387,8 +396,8 @@ final class HTTPServer: @unchecked Sendable {
             }
 
             // 挂起当前连接，直到上层通过 PendingPermissionRequest.respond() 返回结果
-            let behavior = await resolvePermission(body: request.body, permissionTracker: permissionTracker)
-            return jsonResponse(["behavior": behavior.rawValue])
+            let result = await resolvePermission(body: request.body, permissionTracker: permissionTracker)
+            return permissionResponse(result)
 
         default:
             return errorResponse(statusCode: 404, message: "not found")
@@ -424,6 +433,28 @@ final class HTTPServer: @unchecked Sendable {
         jsonResponse(["error": message], statusCode: statusCode)
     }
 
+    /// Claude Code HTTP hook 要求 PermissionRequest 的响应遵循 JSON output schema：
+    /// `{ hookSpecificOutput: { hookEventName, decision: { behavior, updatedPermissions? } } }`
+    private func permissionResponse(_ result: PermissionDecisionResult) -> HTTPResponse {
+        var decision: [String: Any] = ["behavior": result.behavior.rawValue]
+
+        if result.behavior == .allow {
+            let updatedPermissions = result.suggestionPayloads.compactMap { payload in
+                try? JSONSerialization.jsonObject(with: payload) as? [String: Any]
+            }
+            if !updatedPermissions.isEmpty {
+                decision["updatedPermissions"] = updatedPermissions
+            }
+        }
+
+        return jsonResponse([
+            "hookSpecificOutput": [
+                "hookEventName": "PermissionRequest",
+                "decision": decision,
+            ] as [String: Any],
+        ])
+    }
+
     private func defaultHeaders(contentType: String) -> [String: String] {
         [
             "Content-Type": contentType,
@@ -431,22 +462,22 @@ final class HTTPServer: @unchecked Sendable {
         ]
     }
 
-    private func resolvePermission(body: Data, permissionTracker: ConnectionPermissionTracker) async -> PermissionBehavior {
+    private func resolvePermission(body: Data, permissionTracker: ConnectionPermissionTracker) async -> PermissionDecisionResult {
         let handler = lock.withLock { permissionRequestHandler }
 
-        let behavior = await withCheckedContinuation { continuation in
+        let result = await withCheckedContinuation { continuation in
             let request = PendingPermissionRequest(body: body, continuation: continuation)
             permissionTracker.attach(request)
 
             if let handler {
                 handler(request)
             } else {
-                request.respond(with: .deny)
+                request.respond(with: .simple(.deny))
             }
         }
 
         permissionTracker.clear()
-        return behavior
+        return result
     }
 
     private func receiveChunk(on connection: NWConnection) async throws -> Data? {

@@ -40,7 +40,7 @@ final class BubbleStack {
 
         let id = UUID()
         let window = BubbleWindow(content: content) { [weak self] decision in
-            self?.resolveBubble(id: id, behavior: decision.behavior)
+            self?.resolveBubble(id: id, decision: decision)
         }
         window.onHeightDidChange = { [weak self] in
             self?.repositionBubbles()
@@ -132,7 +132,7 @@ final class BubbleStack {
     func dismissAll(respondingWith behavior: PermissionBehavior) {
         let ids = pendingPermissions.map(\.id)
         for id in ids {
-            removeBubble(id: id, respondingWith: behavior)
+            removeBubble(id: id, respondingWith: .simple(behavior))
         }
     }
 
@@ -146,7 +146,7 @@ final class BubbleStack {
             return
         }
 
-        resolveBubble(id: latestBubble.id, behavior: .allow)
+        resolveBubble(id: latestBubble.id, decision: .allow)
     }
 
     func denyLatestBubble() {
@@ -154,14 +154,41 @@ final class BubbleStack {
             return
         }
 
-        resolveBubble(id: latestBubble.id, behavior: .deny)
+        resolveBubble(id: latestBubble.id, decision: .deny)
     }
 
-    private func resolveBubble(id: UUID, behavior: PermissionBehavior) {
-        removeBubble(id: id, respondingWith: behavior)
+    func dismissPendingBubbles(
+        forSessionId sessionId: String,
+        preservingRequest: Bool = true,
+        reason: String? = nil
+    ) {
+        let normalizedSessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedSessionId.isEmpty else {
+            return
+        }
+
+        let ids = pendingPermissions
+            .filter { $0.content.sessionId == normalizedSessionId }
+            .map(\.id)
+
+        guard !ids.isEmpty else {
+            return
+        }
+
+        for id in ids {
+            removeBubble(id: id, respondingWith: preservingRequest ? nil : .simple(.deny))
+        }
     }
 
-    private func removeBubble(id: UUID, respondingWith behavior: PermissionBehavior?) {
+    private func resolveBubble(id: UUID, decision: PermissionDecision) {
+        let result = PermissionDecisionResult(
+            behavior: decision.behavior,
+            suggestionPayloads: decision.suggestionPayloads
+        )
+        removeBubble(id: id, respondingWith: result)
+    }
+
+    private func removeBubble(id: UUID, respondingWith result: PermissionDecisionResult?) {
         guard let index = pendingPermissions.firstIndex(where: { $0.id == id }) else {
             return
         }
@@ -170,8 +197,8 @@ final class BubbleStack {
         bubble.window.close()
         bubble.request.clearDisconnectHandler()
 
-        if let behavior {
-            bubble.request.respond(with: behavior)
+        if let result {
+            bubble.request.respond(with: result)
         }
 
         onBubblesChanged?()

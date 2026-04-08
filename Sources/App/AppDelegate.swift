@@ -4,6 +4,14 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let sparkleUpdaterEnabledKey = "ClawdEnableSparkleUpdater"
+    private static let permissionResolutionEvents: Set<String> = [
+        "PostToolUse",
+        "PostToolUseFailure",
+        "Stop",
+        "StopFailure",
+        "SessionEnd",
+        "PermissionDenied",
+    ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
@@ -121,13 +129,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.stateMachine = stateMachine
 
         let server = HTTPServer()
-        server.setStateRequestHandler { body in
-            Self.handleStateRequest(body, using: stateMachine)
+        server.setStateRequestHandler { [weak self, weak stateMachine] body in
+            guard let self, let stateMachine else {
+                return Self.errorResponse(statusCode: 503, message: "state handler unavailable")
+            }
+
+            return self.handleStateRequest(body, using: stateMachine)
         }
         server.setPermissionRequestHandler { [weak self] request in
             Task { @MainActor [weak self] in
                 guard let self else {
-                    request.respond(with: .deny)
+                    request.respond(with: .simple(.deny))
                     return
                 }
 
@@ -352,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentPermissionBubble(for request: PendingPermissionRequest) {
         guard let content = PermissionBubbleContent.decode(from: request.body) else {
-            request.respond(with: .deny)
+            request.respond(with: .simple(.deny))
             return
         }
 
@@ -361,17 +373,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if stateMachine?.doNotDisturbEnabled == true {
-            request.respond(with: .deny)
+            request.respond(with: .simple(.deny))
             return
         }
 
         if BubbleStack.passthroughTools.contains(content.toolName) {
-            request.respond(with: .allow)
+            request.respond(with: .simple(.allow))
             return
         }
 
         if isHideBubblesEnabled {
-            request.respond(with: .deny)
+            request.respond(with: .simple(.deny))
             return
         }
 
@@ -446,29 +458,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// /state 只接受轻量 JSON，先在这里做字段清洗，再交给 StateMachine 聚合。
     @MainActor
-    private static func handleStateRequest(_ body: Data, using stateMachine: StateMachine) -> HTTPResponse {
+    private func handleStateRequest(_ body: Data, using stateMachine: StateMachine) -> HTTPResponse {
         guard
             let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
             let rawState = payload["state"] as? String,
             let state = PetState(rawValue: rawState)
         else {
-            return errorResponse(statusCode: 400, message: "unknown state")
+            return Self.errorResponse(statusCode: 400, message: "unknown state")
         }
 
         let sessionId = (payload["session_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
         let event = payload["event"] as? String
-        let svgUpdate = extractSVGUpdate(from: payload)
-        let sourcePid = normalizedPID(payload["source_pid"])
-        let cwd = normalizedString(payload["cwd"] as? String)
-        let editor = normalizedEditor(payload["editor"] as? String)
-        let agentId = normalizedString(payload["agent_id"] as? String)
+        let svgUpdate = Self.extractSVGUpdate(from: payload)
+        let sourcePid = Self.normalizedPID(payload["source_pid"])
+        let cwd = Self.normalizedString(payload["cwd"] as? String)
+        let editor = Self.normalizedEditor(payload["editor"] as? String)
+        let agentId = Self.normalizedString(payload["agent_id"] as? String)
         let headless: Bool? = payload.keys.contains("headless") ? (payload["headless"] as? Bool ?? false) : nil
+        let normalizedSessionId = sessionId ?? "default"
 
         switch svgUpdate {
         case .unspecified:
             stateMachine.setState(
                 state,
-                sessionId: sessionId ?? "default",
+                sessionId: normalizedSessionId,
                 event: event,
                 svg: nil,
                 svgWasProvided: false,
@@ -481,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .explicit(let svg):
             stateMachine.setState(
                 state,
-                sessionId: sessionId ?? "default",
+                sessionId: normalizedSessionId,
                 event: event,
                 svg: svg,
                 svgWasProvided: true,
@@ -492,10 +505,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 headless: headless
             )
         case .invalid:
-            return errorResponse(statusCode: 400, message: "invalid svg payload")
+            return Self.errorResponse(statusCode: 400, message: "invalid svg payload")
         }
 
-        return okResponse(["ok": true])
+        if Self.permissionResolutionEvents.contains(event ?? "") {
+            bubbleStack.dismissPendingBubbles(
+                forSessionId: normalizedSessionId,
+                reason: event ?? "unknown"
+            )
+        }
+
+        return Self.okResponse(["ok": true])
     }
 
     private static func normalizedPID(_ value: Any?) -> pid_t? {

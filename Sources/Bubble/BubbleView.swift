@@ -16,6 +16,16 @@ enum PermissionDecision {
             return suggestion.behavior
         }
     }
+
+    /// 选中 suggestion 时需要把原始 payload 透传回 Claude Code 作为 updatedPermissions。
+    var suggestionPayloads: [Data] {
+        switch self {
+        case .suggestion(let suggestion):
+            return suggestion.resolvedPayloads
+        default:
+            return []
+        }
+    }
 }
 
 struct PermissionSuggestion: Identifiable, Equatable {
@@ -28,9 +38,16 @@ struct PermissionSuggestion: Identifiable, Equatable {
     let kind: Kind
     let behavior: PermissionBehavior
     let label: String
+    /// 按照 Claude Code 要求格式化的 suggestion 数据，序列化为 JSON Data。
+    let resolvedPayloads: [Data]
+
+    static func == (lhs: PermissionSuggestion, rhs: PermissionSuggestion) -> Bool {
+        lhs.id == rhs.id
+    }
 }
 
 struct PermissionBubbleContent {
+    let sessionId: String
     let toolName: String
     let toolInput: String
     let suggestions: [PermissionSuggestion]
@@ -43,11 +60,13 @@ struct PermissionBubbleContent {
             return nil
         }
 
+        let sessionId = normalizedString(payload["session_id"] as? String) ?? "default"
         let toolName = normalizedString(rawToolName) ?? "Unknown"
         let toolInput = previewJSONString(payload["tool_input"])
         let suggestions = decodeSuggestions(from: payload["permission_suggestions"])
 
         return PermissionBubbleContent(
+            sessionId: sessionId,
             toolName: toolName,
             toolInput: toolInput,
             suggestions: suggestions
@@ -68,38 +87,81 @@ struct PermissionBubbleContent {
             return []
         }
 
+        var seenPayloads = Set<Data>()
         var suggestions: [PermissionSuggestion] = []
-        var mergedAddRules = Set<String>()
 
         for rawSuggestion in rawSuggestions {
             guard
                 let type = rawSuggestion["type"] as? String,
                 let kind = PermissionSuggestion.Kind(rawValue: type),
                 let rawBehavior = rawSuggestion["behavior"] as? String,
-                let behavior = PermissionBehavior(rawValue: rawBehavior)
+                let behavior = PermissionBehavior(rawValue: rawBehavior),
+                behavior == .allow
             else {
                 continue
             }
 
-            // Claude 可能返回多条 addRules 建议；4.1 只先合成一个按钮，避免 UI 被规则列表撑爆。
-            if kind == .addRules {
-                let mergeKey = "\(kind.rawValue):\(behavior.rawValue)"
-                guard !mergedAddRules.contains(mergeKey) else {
-                    continue
-                }
-                mergedAddRules.insert(mergeKey)
+            guard let resolvedPayload = resolveSuggestionEntry(kind: kind, behavior: behavior, raw: rawSuggestion) else {
+                continue
+            }
+
+            guard let payloadData = try? JSONSerialization.data(withJSONObject: resolvedPayload) else {
+                continue
+            }
+            guard seenPayloads.insert(payloadData).inserted else {
+                continue
             }
 
             suggestions.append(
                 PermissionSuggestion(
                     kind: kind,
                     behavior: behavior,
-                    label: suggestionLabel(for: kind, behavior: behavior, payload: rawSuggestion)
+                    label: suggestionLabel(for: kind, behavior: behavior, payload: resolvedPayload),
+                    resolvedPayloads: [payloadData]
                 )
             )
         }
 
         return suggestions
+    }
+
+    /// 按照 Claude Code 要求的 updatedPermissions 格式规范化 suggestion 原始数据。
+    private static func resolveSuggestionEntry(
+        kind: PermissionSuggestion.Kind,
+        behavior: PermissionBehavior,
+        raw: [String: Any]
+    ) -> [String: Any]? {
+        var resolved: [String: Any]
+
+        switch kind {
+        case .addRules:
+            let rules: [[String: Any]]
+            if let rawRules = raw["rules"] as? [[String: Any]] {
+                rules = rawRules
+            } else if let toolName = raw["toolName"] as? String {
+                rules = [["toolName": toolName, "ruleContent": raw["ruleContent"] ?? ""]]
+            } else {
+                rules = []
+            }
+
+            resolved = [
+                "type": "addRules",
+                "destination": (raw["destination"] as? String) ?? "localSettings",
+                "behavior": behavior.rawValue,
+                "rules": rules,
+            ]
+
+        case .setMode:
+            resolved = [
+                "type": "setMode",
+                "destination": (raw["destination"] as? String) ?? "localSettings",
+            ]
+            if let mode = raw["mode"] {
+                resolved["mode"] = mode
+            }
+        }
+
+        return resolved
     }
 
     private static func suggestionLabel(
@@ -109,12 +171,72 @@ struct PermissionBubbleContent {
     ) -> String {
         switch kind {
         case .addRules:
-            return behavior == .allow ? "Always Allow" : "Always Deny"
+            let rules = (payload["rules"] as? [[String: Any]]) ?? []
+            let baseLabel = addRulesLabel(for: rules)
+            return decorateLabel(baseLabel, destination: payload["destination"] as? String)
         case .setMode:
             if let mode = normalizedString(payload["mode"] as? String) {
-                return "Mode: \(mode)"
+                return decorateLabel("Mode: \(mode)", destination: payload["destination"] as? String)
             }
-            return behavior == .allow ? "Allow in Mode" : "Deny in Mode"
+            return decorateLabel("Allow in Mode", destination: payload["destination"] as? String)
+        }
+    }
+
+    private static func addRulesLabel(for rules: [[String: Any]]) -> String {
+        guard let firstRule = rules.first else {
+            return "Always Allow"
+        }
+
+        let toolName = normalizedString(firstRule["toolName"] as? String)
+        let ruleContent = normalizedString(firstRule["ruleContent"] as? String)
+
+        let baseLabel: String
+        if let ruleContent {
+            if ruleContent.contains("**") {
+                let dir = ruleContent
+                    .components(separatedBy: "**")
+                    .first?
+                    .replacingOccurrences(of: "\\", with: "/")
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    .split(separator: "/")
+                    .last
+                    .map(String.init)
+                if let toolName, let dir, !dir.isEmpty {
+                    baseLabel = "Allow \(toolName) in \(dir)/"
+                } else if let dir, !dir.isEmpty {
+                    baseLabel = "Allow in \(dir)/"
+                } else {
+                    baseLabel = "Always Allow"
+                }
+            } else {
+                let shortRule = ruleContent.count > 30 ? String(ruleContent.prefix(29)) + "…" : ruleContent
+                if let toolName {
+                    baseLabel = "Allow \(toolName) `\(shortRule)`"
+                } else {
+                    baseLabel = "Always Allow `\(shortRule)`"
+                }
+            }
+        } else if let toolName {
+            baseLabel = "Allow \(toolName)"
+        } else {
+            baseLabel = "Always Allow"
+        }
+
+        if rules.count > 1 {
+            return "\(baseLabel) +\(rules.count - 1)"
+        }
+
+        return baseLabel
+    }
+
+    private static func decorateLabel(_ label: String, destination: String?) -> String {
+        switch normalizedString(destination) {
+        case "projectSettings":
+            return "\(label) (Project)"
+        case "localSettings", nil:
+            return label
+        case let value?:
+            return "\(label) (\(value))"
         }
     }
 
@@ -158,6 +280,38 @@ struct BubbleView: View {
 
     @State private var isInputExpanded = false
 
+    /// 展开时最大高度限制，防止长内容撑出屏幕。
+    private static let expandedMaxHeight: CGFloat = 280
+
+    @ViewBuilder
+    private var inputSection: some View {
+        let text = Text(toolInput)
+            .font(.system(.body, design: .monospaced))
+            .multilineTextAlignment(.leading)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+        if isInputExpanded {
+            ScrollView(.vertical, showsIndicators: true) {
+                text
+            }
+            .frame(maxHeight: Self.expandedMaxHeight)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                isInputExpanded = false
+                DispatchQueue.main.async { onContentHeightChanged?() }
+            }
+        } else {
+            text
+                .lineLimit(3)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    isInputExpanded = true
+                    DispatchQueue.main.async { onContentHeightChanged?() }
+                }
+        }
+    }
+
     @ViewBuilder
     private var buttonGroup: some View {
         let buttons = Group {
@@ -191,17 +345,7 @@ struct BubbleView: View {
                 Spacer()
             }
 
-            Text(toolInput)
-                .font(.system(.body, design: .monospaced))
-                .lineLimit(isInputExpanded ? nil : 3)
-                .multilineTextAlignment(.leading)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    isInputExpanded.toggle()
-                    DispatchQueue.main.async { onContentHeightChanged?() }
-                }
+            inputSection
 
             buttonGroup
         }
