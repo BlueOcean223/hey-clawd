@@ -122,7 +122,9 @@ enum MenuBuilder {
         ))
         menu.addItem(.separator())
         menu.addItem(languageMenuItem(state: state, target: target))
-        menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
+        if target.shouldShowCheckForUpdatesMenu() {
+            menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
+        }
         menu.addItem(.separator())
         menu.addItem(actionItem(
             title: text(state.isPetVisible ? "hidePet" : "showPet", lang: state.language),

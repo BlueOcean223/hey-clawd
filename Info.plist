@@ -22,6 +22,8 @@
 	<string>12.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>ClawdEnableSparkleUpdater</key>
+	<false/>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/BlueOcean223/hey-clawd/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>

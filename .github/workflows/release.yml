@@ -19,6 +19,7 @@ jobs:
         run: |
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.VERSION }}" Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ github.run_number }}" Info.plist
+          /usr/libexec/PlistBuddy -c "Set :ClawdEnableSparkleUpdater true" Info.plist
 
       - name: Resolve Xcode packages
         run: xcodebuild -resolvePackageDependencies -project hey-clawd.xcodeproj -scheme hey-clawd

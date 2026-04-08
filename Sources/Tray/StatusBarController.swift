@@ -18,6 +18,7 @@ final class StatusBarController: NSObject {
     var onFocusSession: @MainActor (SessionMenuSnapshot) -> Void = { _ in }
     var checkForUpdatesMenuTarget: AnyObject?
     var checkForUpdatesMenuAction: Selector?
+    var shouldShowCheckForUpdatesMenu: @MainActor () -> Bool = { false }
     var canCheckForUpdatesMenu: @MainActor () -> Bool = { false }
 
     init(stateProvider: @escaping @MainActor () -> AppMenuState) {
