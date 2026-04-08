@@ -110,6 +110,24 @@
     isReacting = Boolean(value);
   }
 
+  function scheduleSVGCommit(nextSVG, filename, loadID) {
+    var didCommit = false;
+
+    function commit() {
+      if (didCommit) {
+        return;
+      }
+
+      didCommit = true;
+      swapSVG(nextSVG, filename, loadID);
+    }
+
+    // 可见时优先等一帧，保留现有 layout/淡入节奏。
+    window.requestAnimationFrame(commit);
+    // 窗口被隐藏后 rAF 可能长期不触发，补一个 timer 兜底完成提交。
+    window.setTimeout(commit, 32);
+  }
+
   // 提交新 SVG：移除旧节点，清空几何缓存，通知 Swift。
   function swapSVG(nextSVG, filename, loadID) {
     if (pendingSVG !== nextSVG || currentLoadID !== loadID) {
@@ -184,10 +202,8 @@
       container.appendChild(nextSVG);
       pendingSVG = nextSVG;
 
-      // 等一帧让浏览器完成 layout，再提交切换。
-      window.requestAnimationFrame(function () {
-        swapSVG(nextSVG, filename, loadID);
-      });
+      // 正常情况等一帧提交；窗口隐藏时再由 timeout 兜底。
+      scheduleSVGCommit(nextSVG, filename, loadID);
     } catch (error) {
       if (currentLoadID !== loadID) {
         return;
