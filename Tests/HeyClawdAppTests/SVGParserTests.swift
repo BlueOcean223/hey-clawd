@@ -1,8 +1,22 @@
+import Foundation
 import CoreGraphics
 import XCTest
 @testable import HeyClawdApp
 
 final class SVGParserTests: XCTestCase {
+    private static var projectRoot: String {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .path
+    }
+
+    private func loadSVG(_ name: String) throws -> String {
+        let path = Self.projectRoot + "/Resources/svg/\(name).svg"
+        return try String(contentsOfFile: path, encoding: .utf8)
+    }
+
     func testParseParsesBasicRectGroupAndUseWithInheritedFill() throws {
         let document = SVGParser.parse(
             """
@@ -572,6 +586,108 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(animation.keyframes[1].offsets, [1])
         XCTAssertEqual(animation.keyframes[1].properties["opacity"], "1")
     }
+
+    func testAllSVGsParseWithoutCrash() throws {
+        let svgDirectory = Self.projectRoot + "/Resources/svg"
+        let filenames = try FileManager.default.contentsOfDirectory(atPath: svgDirectory)
+            .filter { $0.hasPrefix("clawd-") && $0.hasSuffix(".svg") }
+            .sorted()
+
+        XCTAssertEqual(filenames.count, 51)
+
+        for filename in filenames {
+            let svg = try String(contentsOfFile: svgDirectory + "/\(filename)", encoding: .utf8)
+            let document = SVGParser.parse(svg)
+            let nodeCount = totalNodeCount(in: document)
+            print("Parsed \(filename): \(nodeCount) nodes")
+
+            XCTAssertTrue(
+                document.viewBox != nil || !document.rootChildren.isEmpty,
+                "Expected \(filename) to produce a viewBox or root children."
+            )
+        }
+    }
+
+    func testErrorSVGHasHcShakeWith28UniqueStops() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-error"))
+        let shake = try XCTUnwrap(document.animations["hc-shake"])
+
+        XCTAssertEqual(document.animations.count, 5)
+        XCTAssertNotNil(document.animations["hc-arms-up"])
+        XCTAssertNotNil(document.animations["hc-smoke-puff"])
+        XCTAssertNotNil(document.animations["hc-alert-up"])
+        XCTAssertNotNil(document.animations["hc-arms-up-r"])
+
+        XCTAssertEqual(shake.keyframes.count, 6)
+
+        let uniqueOffsets = Set(shake.keyframes.flatMap(\.offsets).map(normalizedOffset))
+        XCTAssertEqual(uniqueOffsets.count, 28)
+
+        XCTAssertTrue(containsNodeType(.group, in: document.rootChildren))
+        XCTAssertTrue(containsNodeType(.rect, in: document.rootChildren))
+        XCTAssertTrue(containsNodeType(.line, in: document.rootChildren))
+    }
+
+    func testCollapseSleepSVGHas14Keyframes() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-collapse-sleep"))
+
+        XCTAssertEqual(document.animations.count, 14)
+        XCTAssertTrue(document.animationBindings.contains { $0.fillMode == .forwards })
+        XCTAssertTrue(document.animationBindings.contains { $0.delay > 0 })
+    }
+
+    func testIdleLivingSVGHas15PlusStopKeyframes() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-idle-living"))
+        let maxKeyframeCount = document.animations.values.map(\.keyframes.count).max() ?? 0
+
+        XCTAssertGreaterThanOrEqual(
+            maxKeyframeCount,
+            14,
+            "Current clawd-idle-living.svg tops out at \(maxKeyframeCount) keyframe blocks."
+        )
+    }
+
+    func testWorkingBeaconSVGHasExtendedKeyframeProperties() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-working-beacon"))
+        let waveExpand = try XCTUnwrap(document.animations["wave-expand"])
+        let waveProperties = Set(waveExpand.keyframes.flatMap { $0.properties.keys })
+
+        XCTAssertTrue(waveProperties.contains("r"))
+        XCTAssertTrue(waveProperties.contains("stroke-width"))
+        XCTAssertTrue(waveProperties.contains("opacity"))
+
+        let antBlink = try XCTUnwrap(document.animations["ant-blink"])
+        let antBlinkProperties = Set(antBlink.keyframes.flatMap { $0.properties.keys })
+        XCTAssertTrue(antBlinkProperties.contains("fill"))
+    }
+
+    func testPercentagePrecision() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-idle-living"))
+        let offsets = document.animations.values.flatMap(\.keyframes).flatMap(\.offsets)
+
+        XCTAssertFalse(offsets.isEmpty)
+
+        for offset in offsets {
+            XCTAssertFalse(offset.isNaN)
+            XCTAssertGreaterThanOrEqual(offset, 0)
+        }
+
+        if let offset1428 = offsets.first(where: { abs($0 - 0.1428) < 0.001 }) {
+            XCTAssertEqual(offset1428, 0.1428, accuracy: 0.0001)
+        }
+    }
+
+    func testGoingAwaySVGHasClipPathAndMultipleUseRefs() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-going-away"))
+
+        XCTAssertTrue(document.defs.values.contains { node in
+            if case .clipPath = node {
+                return true
+            }
+            return false
+        })
+        XCTAssertGreaterThanOrEqual(countNodes(of: .use, in: document.rootChildren), 8)
+    }
 }
 
 private enum SVGNodeTypeError: Error {
@@ -720,4 +836,75 @@ private func clipPathNode(from node: SVGNode, file: StaticString = #filePath, li
         throw SVGNodeTypeError.mismatch
     }
     return clipPath
+}
+
+private enum SVGNodeKind {
+    case group
+    case rect
+    case use
+    case circle
+    case ellipse
+    case line
+    case path
+    case polygon
+    case polyline
+    case clipPath
+}
+
+private func totalNodeCount(in document: SVGDocument) -> Int {
+    totalNodeCount(in: document.rootChildren) + totalNodeCount(in: Array(document.defs.values))
+}
+
+private func totalNodeCount(in nodes: [SVGNode]) -> Int {
+    nodes.reduce(0) { $0 + totalNodeCount(in: $1) }
+}
+
+private func totalNodeCount(in node: SVGNode) -> Int {
+    1 + childNodes(of: node).reduce(0) { $0 + totalNodeCount(in: $1) }
+}
+
+private func containsNodeType(_ kind: SVGNodeKind, in nodes: [SVGNode]) -> Bool {
+    countNodes(of: kind, in: nodes) > 0
+}
+
+private func countNodes(of kind: SVGNodeKind, in nodes: [SVGNode]) -> Int {
+    nodes.reduce(0) { $0 + countNodes(of: kind, in: $1) }
+}
+
+private func countNodes(of kind: SVGNodeKind, in node: SVGNode) -> Int {
+    let current = matches(kind, node: node) ? 1 : 0
+    return current + childNodes(of: node).reduce(0) { $0 + countNodes(of: kind, in: $1) }
+}
+
+private func childNodes(of node: SVGNode) -> [SVGNode] {
+    switch node {
+    case .group(let group):
+        return group.children
+    case .clipPath(let clipPath):
+        return clipPath.children
+    case .rect, .use, .circle, .ellipse, .line, .path, .polygon, .polyline:
+        return []
+    }
+}
+
+private func matches(_ kind: SVGNodeKind, node: SVGNode) -> Bool {
+    switch (kind, node) {
+    case (.group, .group),
+         (.rect, .rect),
+         (.use, .use),
+         (.circle, .circle),
+         (.ellipse, .ellipse),
+         (.line, .line),
+         (.path, .path),
+         (.polygon, .polygon),
+         (.polyline, .polyline),
+         (.clipPath, .clipPath):
+        return true
+    default:
+        return false
+    }
+}
+
+private func normalizedOffset(_ offset: CGFloat) -> Int {
+    Int((offset * 10_000).rounded())
 }
