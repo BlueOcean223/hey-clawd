@@ -129,10 +129,16 @@ private final class ContinuationGate<Value: Sendable>: @unchecked Sendable {
 private final class ConnectionPermissionTracker: @unchecked Sendable {
     private let lock = NSLock()
     private var pendingPermission: PendingPermissionRequest?
+    private var isDisconnected = false
 
     func attach(_ request: PendingPermissionRequest) {
-        lock.withLock {
+        let shouldCancelImmediately = lock.withLock { () -> Bool in
             pendingPermission = request
+            return isDisconnected
+        }
+
+        if shouldCancelImmediately {
+            request.cancelDueToDisconnect()
         }
     }
 
@@ -144,6 +150,7 @@ private final class ConnectionPermissionTracker: @unchecked Sendable {
 
     func cancelPendingPermission() {
         let request = lock.withLock { () -> PendingPermissionRequest? in
+            isDisconnected = true
             defer { pendingPermission = nil }
             return pendingPermission
         }
@@ -506,9 +513,11 @@ final class HTTPServer: @unchecked Sendable {
     /// 在 /permission 挂起期间主动读取连接，检测客户端断连（EOF/RST）。
     /// TCP 半关闭不会让 NWConnection 转到 .failed，但 receive 会收到 isComplete=true。
     private func monitorDisconnect(connection: NWConnection, tracker: ConnectionPermissionTracker) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { _, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] _, _, isComplete, error in
             if error != nil || isComplete {
                 tracker.cancelPendingPermission()
+            } else {
+                self?.monitorDisconnect(connection: connection, tracker: tracker)
             }
         }
     }
@@ -563,3 +572,38 @@ final class HTTPServer: @unchecked Sendable {
         runtimeDirectoryURL().appendingPathComponent("runtime.json", isDirectory: false)
     }
 }
+
+#if DEBUG
+enum HTTPServerTestSupport {
+    static func attachAfterDisconnectResult() async -> (behavior: PermissionBehavior, disconnectHandlerCalled: Bool) {
+        let tracker = ConnectionPermissionTracker()
+        tracker.cancelPendingPermission()
+
+        let disconnectFlag = LockedFlag()
+        let result = await withCheckedContinuation { continuation in
+            let request = PendingPermissionRequest(body: Data(), continuation: continuation)
+            tracker.attach(request)
+            request.setDisconnectHandler {
+                disconnectFlag.setTrue()
+            }
+        }
+
+        return (result.behavior, disconnectFlag.value)
+    }
+}
+
+private final class LockedFlag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = false
+
+    var value: Bool {
+        lock.withLock { storage }
+    }
+
+    func setTrue() {
+        lock.withLock {
+            storage = true
+        }
+    }
+}
+#endif

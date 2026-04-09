@@ -33,6 +33,7 @@ let package = Package(
                 "Info.plist",
                 "references",
                 "test-bubble.sh",
+                "Tests",
             ],
             sources: [
                 "Sources",
@@ -41,6 +42,13 @@ let package = Package(
                 .copy("Resources"),
                 .copy("hooks"),
             ]
+        ),
+        .testTarget(
+            name: "HeyClawdAppTests",
+            dependencies: [
+                "HeyClawdApp",
+            ],
+            path: "Tests/HeyClawdAppTests"
         ),
     ]
 )
