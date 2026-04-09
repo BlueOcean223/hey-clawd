@@ -22,6 +22,83 @@ enum SVGParser {
         parser.parse()
         return delegate.result
     }
+
+    static func parse(_ svgString: String) -> SVGDocument {
+        let xmlResult = parseXML(svgString)
+        let cssResult = CSSParser.parse(xmlResult.styleBlocks)
+
+        let document = SVGDocument(
+            viewBox: xmlResult.viewBox,
+            width: xmlResult.width,
+            height: xmlResult.height,
+            defs: xmlResult.defs,
+            rootChildren: xmlResult.rootChildren,
+            animations: cssResult.animations,
+            animationBindings: cssResult.animationBindings,
+            transitions: cssResult.transitions
+        )
+
+        validateUseReferences(in: document)
+        return document
+    }
+
+    private static func validateUseReferences(in document: SVGDocument) {
+        validateUseReferences(in: document.rootChildren, defs: document.defs)
+        validateUseReferences(in: Array(document.defs.values), defs: document.defs)
+    }
+
+    private static func validateUseReferences(in nodes: [SVGNode], defs: [String: SVGNode]) {
+        for node in nodes {
+            validateUseReferences(in: node, defs: defs)
+        }
+    }
+
+    private static func validateUseReferences(in node: SVGNode, defs: [String: SVGNode]) {
+        switch node {
+        case .group(let group):
+            validateUseReferences(in: group.children, defs: defs)
+        case .use(let use):
+            validateUseReference(use, defs: defs)
+        case .clipPath(let clipPath):
+            validateUseReferences(in: clipPath.children, defs: defs)
+        case .rect, .circle, .ellipse, .line, .path, .polygon, .polyline:
+            return
+        }
+    }
+
+    private static func validateUseReference(_ use: SVGUse, defs: [String: SVGNode]) {
+        guard let targetID = referencedDefID(from: use.href) else {
+            logWarning("SVGParser: <use> has an empty href\(use.id.map { " (id=\($0))" } ?? "").")
+            return
+        }
+
+        guard defs[targetID] != nil else {
+            logWarning("SVGParser: <use> references missing def '#\(targetID)'\(use.id.map { " (id=\($0))" } ?? "").")
+            return
+        }
+    }
+
+    private static func referencedDefID(from href: String) -> String? {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        if trimmed.hasPrefix("#") {
+            let targetID = String(trimmed.dropFirst())
+            return targetID.isEmpty ? nil : targetID
+        }
+
+        return trimmed
+    }
+
+    private static func logWarning(_ message: String) {
+        guard let data = "\(message)\n".data(using: .utf8) else {
+            return
+        }
+
+        FileHandle.standardError.write(data)
+    }
 }
 
 private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
