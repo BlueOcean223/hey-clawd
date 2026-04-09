@@ -25,7 +25,8 @@ enum CALayerRenderer {
                 for: node,
                 inheritedFill: nil,
                 document: document,
-                nodePath: nodePath
+                nodePath: nodePath,
+                visitedDefs: []
             ) else {
                 continue
             }
@@ -44,7 +45,8 @@ enum CALayerRenderer {
         for node: SVGNode,
         inheritedFill: String?,
         document: SVGDocument,
-        nodePath: String
+        nodePath: String,
+        visitedDefs: Set<String> = []
     ) -> CALayer? {
         switch node {
         case .group(let group):
@@ -63,7 +65,8 @@ enum CALayerRenderer {
                     for: childNode,
                     inheritedFill: childFill,
                     document: document,
-                    nodePath: childPath
+                    nodePath: childPath,
+                    visitedDefs: visitedDefs
                 ) else {
                     continue
                 }
@@ -95,6 +98,7 @@ enum CALayerRenderer {
             layer.name = rect.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: rect.classes)
+            applyStaticStyleMetadata(to: layer, id: rect.id, classes: rect.classes, document: document)
             applyInlineStyles(rect.inlineStyles, to: layer, hasExplicitOpacity: rect.opacity != nil)
             applyClipPath(rect.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -122,6 +126,7 @@ enum CALayerRenderer {
             layer.name = circle.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: circle.classes)
+            applyStaticStyleMetadata(to: layer, id: circle.id, classes: circle.classes, document: document)
             applyInlineStyles(circle.inlineStyles, to: layer, hasExplicitOpacity: circle.opacity != nil)
             applyClipPath(circle.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -147,6 +152,7 @@ enum CALayerRenderer {
             layer.name = ellipse.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: ellipse.classes)
+            applyStaticStyleMetadata(to: layer, id: ellipse.id, classes: ellipse.classes, document: document)
             applyInlineStyles(ellipse.inlineStyles, to: layer, hasExplicitOpacity: ellipse.opacity != nil)
             applyClipPath(ellipse.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -166,6 +172,7 @@ enum CALayerRenderer {
             layer.name = line.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: line.classes)
+            applyStaticStyleMetadata(to: layer, id: line.id, classes: line.classes, document: document)
             applyInlineStyles(line.inlineStyles, to: layer, hasExplicitOpacity: false)
             applyClipPath(line.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -186,6 +193,7 @@ enum CALayerRenderer {
             layer.name = path.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: path.classes)
+            applyStaticStyleMetadata(to: layer, id: path.id, classes: path.classes, document: document)
             applyInlineStyles(path.inlineStyles, to: layer, hasExplicitOpacity: false)
             applyClipPath(path.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -202,6 +210,7 @@ enum CALayerRenderer {
             layer.name = polygon.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: polygon.classes)
+            applyStaticStyleMetadata(to: layer, id: polygon.id, classes: polygon.classes, document: document)
             applyInlineStyles(polygon.inlineStyles, to: layer, hasExplicitOpacity: polygon.opacity != nil)
             applyClipPath(polygon.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -223,12 +232,15 @@ enum CALayerRenderer {
             layer.name = polyline.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: polyline.classes)
+            applyStaticStyleMetadata(to: layer, id: polyline.id, classes: polyline.classes, document: document)
             applyInlineStyles(polyline.inlineStyles, to: layer, hasExplicitOpacity: false)
             applyClipPath(polyline.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
 
         case .use(let use):
-            guard let referencedNode = document.referencedNode(for: use) else {
+            guard let defID = referencedDefID(from: use.href),
+                  !visitedDefs.contains(defID),
+                  let referencedNode = document.referencedNode(for: use) else {
                 return nil
             }
 
@@ -236,7 +248,8 @@ enum CALayerRenderer {
                 for: referencedNode,
                 inheritedFill: use.fill ?? inheritedFill,
                 document: document,
-                nodePath: nodePath
+                nodePath: nodePath,
+                visitedDefs: visitedDefs.union([defID])
             ) ?? makeLayer()
 
             if let x = use.x, x != 0 {
@@ -249,6 +262,7 @@ enum CALayerRenderer {
 
             layer.name = use.id
             storeMetadata(on: layer, nodePath: nodePath, classes: use.classes)
+            applyStaticStyleMetadata(to: layer, id: use.id, classes: use.classes, document: document)
             applyInlineStyles(use.inlineStyles, to: layer, hasExplicitOpacity: false)
             applyClipPath(use.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -264,7 +278,8 @@ enum CALayerRenderer {
                     for: childNode,
                     inheritedFill: "black",
                     document: document,
-                    nodePath: childPath
+                    nodePath: childPath,
+                    visitedDefs: visitedDefs
                 ) else {
                     continue
                 }
@@ -441,7 +456,12 @@ private extension CALayerRenderer {
 
         if needsBoundingBox(for: origin, on: layer) {
             let bbox = layer.sublayers?.reduce(CGRect.null) { partialResult, sublayer in
-                partialResult.union(sublayer.frame)
+                if let shapeLayer = sublayer as? CAShapeLayer,
+                   let path = shapeLayer.path {
+                    return partialResult.union(path.boundingBoxOfPath)
+                }
+
+                return partialResult.union(sublayer.frame)
             } ?? .null
 
             if !bbox.isNull, !bbox.isEmpty {
@@ -481,24 +501,8 @@ private extension CALayerRenderer {
         layer.position = CGPoint(x: layer.position.x + dx, y: layer.position.y + dy)
     }
 
-    static func needsBoundingBox(for origin: SVGTransformOrigin, on layer: CALayer) -> Bool {
-        let widthNeedsBBox: Bool
-        switch origin.x {
-        case .px:
-            widthNeedsBBox = layer.bounds.width == 0
-        case .percent:
-            widthNeedsBBox = false
-        }
-
-        let heightNeedsBBox: Bool
-        switch origin.y {
-        case .px:
-            heightNeedsBBox = layer.bounds.height == 0
-        case .percent:
-            heightNeedsBBox = false
-        }
-
-        return widthNeedsBBox || heightNeedsBBox
+    static func needsBoundingBox(for _: SVGTransformOrigin, on layer: CALayer) -> Bool {
+        layer.bounds.width == 0 || layer.bounds.height == 0
     }
 
     static func matches(_ selector: CSSSelector, id: String?, classes: [String]) -> Bool {
@@ -560,7 +564,8 @@ private extension CALayerRenderer {
                 for: .clipPath(clipPath),
                 inheritedFill: "black",
                 document: document,
-                nodePath: "\(nodePath)/clipPath"
+                nodePath: "\(nodePath)/clipPath",
+                visitedDefs: []
               ) else {
             return
         }
@@ -609,5 +614,19 @@ private extension CALayerRenderer {
         default:
             return .miter
         }
+    }
+
+    static func referencedDefID(from href: String) -> String? {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        if trimmed.hasPrefix("#") {
+            let targetID = String(trimmed.dropFirst())
+            return targetID.isEmpty ? nil : targetID
+        }
+
+        return trimmed
     }
 }
