@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isBubbleFollowEnabled: Bool
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
+    private var isAutoFocusEnabled: Bool
     private var miniModeController: MiniMode?
     private var sparkleUpdater: SparkleUpdater?
     private lazy var bubbleStack = BubbleStack(
@@ -43,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isBubbleFollowEnabled = preferences.bubbleFollowPet
         isHideBubblesEnabled = preferences.hideBubbles
         isSoundEffectsEnabled = !preferences.soundMuted
+        isAutoFocusEnabled = preferences.autoFocusSession
         super.init()
     }
 
@@ -114,9 +116,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         stateMachine.onStateChange = { [weak self, weak petWindow = self.petWindow] state, svg, sourcePid in
             petWindow?.display(state: state, svgFilename: svg, sourcePid: sourcePid)
 
-            // attention / notification 是“该回到会话看看”的信号，到前台更符合原交互。
             if state == .attention || state == .notification {
-                self?.focusCurrentSession()
+                if self?.isAutoFocusEnabled == true {
+                    self?.focusCurrentSession()
+                }
             }
         }
         stateMachine.onDoNotDisturbChange = { [weak self] enabled in
@@ -202,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isBubbleFollowEnabled: true,
                 isHideBubblesEnabled: false,
                 isSoundEffectsEnabled: true,
+                isAutoFocusEnabled: false,
                 isPetVisible: true,
                 sessions: []
             )
@@ -256,6 +260,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onToggleSoundEffects = { [weak self] enabled in
             self?.isSoundEffectsEnabled = enabled
             self?.preferences.soundMuted = !enabled
+        }
+        controller.onToggleAutoFocusSession = { [weak self] enabled in
+            self?.isAutoFocusEnabled = enabled
+            self?.preferences.autoFocusSession = enabled
         }
         controller.onSelectLanguage = { [weak self] language in
             self?.appLanguage = language
@@ -336,6 +344,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isBubbleFollowEnabled: isBubbleFollowEnabled,
             isHideBubblesEnabled: isHideBubblesEnabled,
             isSoundEffectsEnabled: isSoundEffectsEnabled,
+            isAutoFocusEnabled: isAutoFocusEnabled,
             isPetVisible: petWindow?.isVisible ?? false,
             sessions: stateMachine?.activeSessionSnapshots ?? []
         )

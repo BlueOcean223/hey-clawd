@@ -12,6 +12,7 @@ final class StatusBarController: NSObject {
     var onToggleBubbleFollow: @MainActor (Bool) -> Void = { _ in }
     var onToggleHideBubbles: @MainActor (Bool) -> Void = { _ in }
     var onToggleSoundEffects: @MainActor (Bool) -> Void = { _ in }
+    var onToggleAutoFocusSession: @MainActor (Bool) -> Void = { _ in }
     var onSelectLanguage: @MainActor (AppLanguage) -> Void = { _ in }
     var onCheckForUpdates: @MainActor () -> Void = {}
     var onRegisterHooks: @MainActor (HookInstaller.HookTarget?) -> Void = { _ in }
@@ -132,6 +133,10 @@ final class StatusBarController: NSObject {
 
     @objc func toggleSoundEffects(_ sender: NSMenuItem) {
         onToggleSoundEffects(sender.state != .on)
+    }
+
+    @objc func toggleAutoFocusSession(_ sender: NSMenuItem) {
+        onToggleAutoFocusSession(sender.state != .on)
     }
 
     @objc func selectLanguage(_ sender: NSMenuItem) {

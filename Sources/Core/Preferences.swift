@@ -15,6 +15,7 @@ enum PrefKey: String {
     case bubbleFollowPet
     case hideBubbles
     case showSessionId
+    case autoFocusSession
 }
 
 @MainActor
@@ -37,6 +38,7 @@ final class Preferences {
             PrefKey.bubbleFollowPet.rawValue: true,
             PrefKey.hideBubbles.rawValue: false,
             PrefKey.showSessionId.rawValue: false,
+            PrefKey.autoFocusSession.rawValue: false,
         ])
     }
 
@@ -137,6 +139,11 @@ final class Preferences {
     var showSessionId: Bool {
         get { defaults.bool(forKey: PrefKey.showSessionId.rawValue) }
         set { defaults.set(newValue, forKey: PrefKey.showSessionId.rawValue) }
+    }
+
+    var autoFocusSession: Bool {
+        get { defaults.bool(forKey: PrefKey.autoFocusSession.rawValue) }
+        set { defaults.set(newValue, forKey: PrefKey.autoFocusSession.rawValue) }
     }
 
     /// 常规恢复时只强制压回 Y 轴，避免顶部菜单栏或 Dock 挤掉桌宠。

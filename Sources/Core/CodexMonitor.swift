@@ -16,6 +16,13 @@ actor CodexMonitor {
         case ignored
     }
 
+    private struct SavedTrackingState {
+        let offset: UInt64
+        let partial: String
+        let cwd: String?
+        let hadToolUse: Bool
+    }
+
     private final class TrackedFile {
         let sessionId: String
         let fileURL: URL
@@ -67,6 +74,8 @@ actor CodexMonitor {
     private let homeDirectoryURL: URL
     private var trackedFiles: [URL: TrackedFile] = [:]
     private var scanTask: Task<Void, Never>?
+    private var previouslyTrackedStates: [URL: SavedTrackingState] = [:]
+    private var lastPrunedDate: Date?
 
     var onStateUpdate: (@MainActor @Sendable (CodexStateUpdate) -> Void)?
 
@@ -98,6 +107,7 @@ actor CodexMonitor {
         for url in urls {
             stopTracking(fileURL: url, emitSessionEnd: false)
         }
+        previouslyTrackedStates.removeAll()
     }
 
     func setOnStateUpdate(_ handler: @escaping @MainActor @Sendable (CodexStateUpdate) -> Void) {
@@ -141,6 +151,7 @@ actor CodexMonitor {
         }
 
         cleanStaleFiles(referenceTime: now)
+        pruneStaleOffsets(candidateDirectories: candidateSessionDirectories(relativeTo: now))
     }
 
     private func candidateSessionDirectories(relativeTo now: Date) -> [URL] {
@@ -210,6 +221,12 @@ actor CodexMonitor {
             fileHandle: fileHandle,
             source: source
         )
+        if let savedState = previouslyTrackedStates[fileURL] {
+            tracked.offset = savedState.offset
+            tracked.partial = savedState.partial
+            tracked.cwd = savedState.cwd
+            tracked.hadToolUse = savedState.hadToolUse
+        }
 
         source.setEventHandler { [weak self] in
             guard let self else {
@@ -253,6 +270,9 @@ actor CodexMonitor {
         guard fileSize >= tracked.offset else {
             tracked.offset = 0
             tracked.partial = ""
+            tracked.cwd = nil
+            tracked.hadToolUse = false
+            tracked.lastState = nil
             return
         }
 
@@ -362,10 +382,35 @@ actor CodexMonitor {
         }
     }
 
+    private func pruneStaleOffsets(candidateDirectories: [URL]) {
+        guard !previouslyTrackedStates.isEmpty else {
+            return
+        }
+
+        let now = Date()
+        if let lastPruned = lastPrunedDate,
+           Calendar.current.isDate(lastPruned, inSameDayAs: now) {
+            return
+        }
+
+        lastPrunedDate = now
+        let validPrefixes = candidateDirectories.map { $0.path }
+        previouslyTrackedStates = previouslyTrackedStates.filter { url, _ in
+            validPrefixes.contains { url.path.hasPrefix($0) }
+        }
+    }
+
     private func stopTracking(fileURL: URL, emitSessionEnd: Bool) {
         guard let tracked = trackedFiles.removeValue(forKey: fileURL) else {
             return
         }
+
+        previouslyTrackedStates[fileURL] = SavedTrackingState(
+            offset: tracked.offset,
+            partial: tracked.partial,
+            cwd: tracked.cwd,
+            hadToolUse: tracked.hadToolUse
+        )
 
         tracked.debounceTask?.cancel()
         tracked.debounceTask = nil

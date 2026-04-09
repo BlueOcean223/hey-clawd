@@ -15,6 +15,7 @@ struct AppMenuState {
     var isBubbleFollowEnabled: Bool
     var isHideBubblesEnabled: Bool
     var isSoundEffectsEnabled: Bool
+    var isAutoFocusEnabled: Bool
     var isPetVisible: Bool
     var sessions: [SessionMenuSnapshot]
 }
@@ -34,15 +35,17 @@ enum MenuBuilder {
             "sleep": "Sleep (Do Not Disturb)",
             "wake": "Wake Clawd",
             "soundEffects": "Sound Effects",
+            "autoFocus": "Auto Focus Session",
             "bubbleFollow": "Bubble Follow Pet",
             "hideBubbles": "Hide Bubbles",
             "language": "Language",
             "english": "English",
             "chinese": "中文",
             "checkForUpdates": "Check for Updates",
-            "registerHooks": "Register Hooks",
+            "hooks": "Hooks",
+            "register": "Register",
             "registerAll": "Register All",
-            "unregisterHooks": "Clean Hooks",
+            "unregister": "Clean",
             "unregisterAll": "Clean All",
             "showPet": "Show Clawd",
             "hidePet": "Hide Clawd",
@@ -60,15 +63,17 @@ enum MenuBuilder {
             "sleep": "休眠（免打扰）",
             "wake": "唤醒 Clawd",
             "soundEffects": "音效",
+            "autoFocus": "自动聚焦会话",
             "bubbleFollow": "气泡跟随桌宠",
             "hideBubbles": "隐藏气泡",
             "language": "语言",
             "english": "English",
             "chinese": "中文",
             "checkForUpdates": "检查更新",
-            "registerHooks": "注册 Hooks",
+            "hooks": "Hooks",
+            "register": "注册",
             "registerAll": "全部注册",
-            "unregisterHooks": "清理 Hooks",
+            "unregister": "清理",
             "unregisterAll": "全部清理",
             "showPet": "显示 Clawd",
             "hidePet": "隐藏 Clawd",
@@ -128,13 +133,18 @@ enum MenuBuilder {
             isOn: state.isSoundEffectsEnabled,
             target: target
         ))
+        menu.addItem(toggleItem(
+            title: text("autoFocus", lang: state.language),
+            selector: #selector(StatusBarController.toggleAutoFocusSession(_:)),
+            isOn: state.isAutoFocusEnabled,
+            target: target
+        ))
         menu.addItem(.separator())
         menu.addItem(languageMenuItem(state: state, target: target))
         if target.shouldShowCheckForUpdatesMenu() {
             menu.addItem(checkForUpdatesMenuItem(state: state, target: target))
         }
-        menu.addItem(registerHooksMenuItem(state: state, target: target))
-        menu.addItem(unregisterHooksMenuItem(state: state, target: target))
+        menu.addItem(hooksMenuItem(state: state, target: target))
         menu.addItem(.separator())
         menu.addItem(actionItem(
             title: text(state.isPetVisible ? "hidePet" : "showPet", lang: state.language),
@@ -230,10 +240,14 @@ enum MenuBuilder {
         return item
     }
 
-    private static func registerHooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
-        let item = NSMenuItem(title: text("registerHooks", lang: state.language), action: nil, keyEquivalent: "")
+    private static func hooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
+        let item = NSMenuItem(title: text("hooks", lang: state.language), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
         submenu.autoenablesItems = false
+
+        let registerItem = NSMenuItem(title: text("register", lang: state.language), action: nil, keyEquivalent: "")
+        let registerSubmenu = NSMenu()
+        registerSubmenu.autoenablesItems = false
 
         for hookTarget in HookInstaller.HookTarget.allCases {
             let entry = actionItem(
@@ -242,24 +256,22 @@ enum MenuBuilder {
                 target: target
             )
             entry.representedObject = hookTarget
-            submenu.addItem(entry)
+            registerSubmenu.addItem(entry)
         }
 
-        submenu.addItem(.separator())
-        submenu.addItem(actionItem(
+        registerSubmenu.addItem(.separator())
+        registerSubmenu.addItem(actionItem(
             title: text("registerAll", lang: state.language),
             selector: #selector(StatusBarController.registerHooks(_:)),
             target: target
         ))
 
-        item.submenu = submenu
-        return item
-    }
+        registerItem.submenu = registerSubmenu
+        submenu.addItem(registerItem)
 
-    private static func unregisterHooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
-        let item = NSMenuItem(title: text("unregisterHooks", lang: state.language), action: nil, keyEquivalent: "")
-        let submenu = NSMenu()
-        submenu.autoenablesItems = false
+        let unregisterItem = NSMenuItem(title: text("unregister", lang: state.language), action: nil, keyEquivalent: "")
+        let unregisterSubmenu = NSMenu()
+        unregisterSubmenu.autoenablesItems = false
 
         for hookTarget in HookInstaller.HookTarget.allCases {
             let entry = actionItem(
@@ -268,15 +280,18 @@ enum MenuBuilder {
                 target: target
             )
             entry.representedObject = hookTarget
-            submenu.addItem(entry)
+            unregisterSubmenu.addItem(entry)
         }
 
-        submenu.addItem(.separator())
-        submenu.addItem(actionItem(
+        unregisterSubmenu.addItem(.separator())
+        unregisterSubmenu.addItem(actionItem(
             title: text("unregisterAll", lang: state.language),
             selector: #selector(StatusBarController.unregisterHooks(_:)),
             target: target
         ))
+
+        unregisterItem.submenu = unregisterSubmenu
+        submenu.addItem(unregisterItem)
 
         item.submenu = submenu
         return item
