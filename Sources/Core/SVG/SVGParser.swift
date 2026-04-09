@@ -404,7 +404,7 @@ private extension XMLTreeBuilder {
         case path
         case polygon
         case polyline
-        case clipPath
+        case clipPath = "clippath"
         case style
         case ignored
     }
