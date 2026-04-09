@@ -58,6 +58,10 @@ enum CALayerRenderer {
                 layer.opacity = Float(opacity)
             }
 
+            if let transform = group.transform {
+                layer.transform = TransformParser.parse(transform)
+            }
+
             let childFill = group.fill ?? inheritedFill
             for (index, childNode) in group.children.enumerated() {
                 let childPath = "\(nodePath)/\(index)"
@@ -96,6 +100,10 @@ enum CALayerRenderer {
             layer.cornerRadius = resolvedCornerRadius(rx: rect.rx, ry: rect.ry)
             layer.opacity = rect.opacity.map(Float.init) ?? layer.opacity
             layer.name = rect.id
+
+            if let transform = rect.transform {
+                layer.transform = TransformParser.parse(transform)
+            }
 
             storeMetadata(on: layer, nodePath: nodePath, classes: rect.classes)
             applyStaticStyleMetadata(to: layer, id: rect.id, classes: rect.classes, document: document)
@@ -252,12 +260,17 @@ enum CALayerRenderer {
                 visitedDefs: visitedDefs.union([defID])
             ) ?? makeLayer()
 
+            var useTransform = use.transform.map(TransformParser.parse) ?? CATransform3DIdentity
             if let x = use.x, x != 0 {
-                layer.transform = CATransform3DTranslate(layer.transform, x, 0, 0)
+                useTransform = CATransform3DTranslate(useTransform, x, 0, 0)
             }
 
             if let y = use.y, y != 0 {
-                layer.transform = CATransform3DTranslate(layer.transform, 0, y, 0)
+                useTransform = CATransform3DTranslate(useTransform, 0, y, 0)
+            }
+
+            if !CATransform3DIsIdentity(useTransform) {
+                layer.transform = useTransform
             }
 
             layer.name = use.id
@@ -439,6 +452,21 @@ private extension CALayerRenderer {
 
             if let transformBox = binding.properties["transform-box"] {
                 layer.setValue(transformBox, forKey: "svgTransformBox")
+            }
+
+            if let opacityStr = binding.properties["opacity"],
+               let opacity = Double(opacityStr) {
+                layer.opacity = Float(opacity)
+            }
+
+            if let visibility = binding.properties["visibility"] {
+                if visibility.lowercased() == "hidden" {
+                    layer.isHidden = true
+                }
+            }
+
+            if let fill = binding.properties["fill"], let shapeLayer = layer as? CAShapeLayer {
+                shapeLayer.fillColor = ColorParser.parse(fill)
             }
         }
     }
