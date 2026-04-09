@@ -373,7 +373,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentPermissionBubble(for request: PendingPermissionRequest) {
         guard let content = PermissionBubbleContent.decode(from: request.body) else {
-            request.respond(with: .simple(.deny))
             return
         }
 
@@ -392,7 +391,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if isHideBubblesEnabled {
-            request.respond(with: .simple(.deny))
             return
         }
 
