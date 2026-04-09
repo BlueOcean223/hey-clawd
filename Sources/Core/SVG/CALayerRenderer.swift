@@ -479,60 +479,6 @@ private extension CALayerRenderer {
         setAnchorPoint(origin, on: layer)
     }
 
-    static func setAnchorPoint(_ origin: SVGTransformOrigin, on layer: CALayer) {
-        let oldAnchorPoint = layer.anchorPoint
-
-        if needsBoundingBox(for: origin, on: layer) {
-            let bbox = layer.sublayers?.reduce(CGRect.null) { partialResult, sublayer in
-                if let shapeLayer = sublayer as? CAShapeLayer,
-                   let path = shapeLayer.path {
-                    return partialResult.union(path.boundingBoxOfPath)
-                }
-
-                return partialResult.union(sublayer.frame)
-            } ?? .null
-
-            if !bbox.isNull, !bbox.isEmpty {
-                layer.bounds = bbox
-                layer.position = CGPoint(
-                    x: bbox.minX + (oldAnchorPoint.x * bbox.width),
-                    y: bbox.minY + (oldAnchorPoint.y * bbox.height)
-                )
-            }
-        }
-
-        let bounds = layer.bounds
-        var newAnchorPoint = oldAnchorPoint
-
-        if bounds.width != 0 {
-            switch origin.x {
-            case .px(let value):
-                newAnchorPoint.x = value / bounds.width
-            case .percent(let value):
-                newAnchorPoint.x = value / 100
-            }
-        }
-
-        if bounds.height != 0 {
-            switch origin.y {
-            case .px(let value):
-                newAnchorPoint.y = value / bounds.height
-            case .percent(let value):
-                newAnchorPoint.y = value / 100
-            }
-        }
-
-        let dx = (newAnchorPoint.x - oldAnchorPoint.x) * bounds.width
-        let dy = (newAnchorPoint.y - oldAnchorPoint.y) * bounds.height
-
-        layer.anchorPoint = newAnchorPoint
-        layer.position = CGPoint(x: layer.position.x + dx, y: layer.position.y + dy)
-    }
-
-    static func needsBoundingBox(for _: SVGTransformOrigin, on layer: CALayer) -> Bool {
-        layer.bounds.width == 0 || layer.bounds.height == 0
-    }
-
     static func matches(_ selector: CSSSelector, id: String?, classes: [String]) -> Bool {
         switch selector {
         case .className(let className):
@@ -656,5 +602,61 @@ private extension CALayerRenderer {
         }
 
         return trimmed
+    }
+}
+
+extension CALayerRenderer {
+    static func setAnchorPoint(_ origin: SVGTransformOrigin, on layer: CALayer) {
+        let oldAnchorPoint = layer.anchorPoint
+
+        if needsBoundingBox(for: origin, on: layer) {
+            let bbox = layer.sublayers?.reduce(CGRect.null) { partialResult, sublayer in
+                if let shapeLayer = sublayer as? CAShapeLayer,
+                   let path = shapeLayer.path {
+                    return partialResult.union(path.boundingBoxOfPath)
+                }
+
+                return partialResult.union(sublayer.frame)
+            } ?? .null
+
+            if !bbox.isNull, !bbox.isEmpty {
+                layer.bounds = bbox
+                layer.position = CGPoint(
+                    x: bbox.minX + (oldAnchorPoint.x * bbox.width),
+                    y: bbox.minY + (oldAnchorPoint.y * bbox.height)
+                )
+            }
+        }
+
+        let bounds = layer.bounds
+        var newAnchorPoint = oldAnchorPoint
+
+        if bounds.width != 0 {
+            switch origin.x {
+            case .px(let value):
+                newAnchorPoint.x = value / bounds.width
+            case .percent(let value):
+                newAnchorPoint.x = value / 100
+            }
+        }
+
+        if bounds.height != 0 {
+            switch origin.y {
+            case .px(let value):
+                newAnchorPoint.y = value / bounds.height
+            case .percent(let value):
+                newAnchorPoint.y = value / 100
+            }
+        }
+
+        let dx = (newAnchorPoint.x - oldAnchorPoint.x) * bounds.width
+        let dy = (newAnchorPoint.y - oldAnchorPoint.y) * bounds.height
+
+        layer.anchorPoint = newAnchorPoint
+        layer.position = CGPoint(x: layer.position.x + dx, y: layer.position.y + dy)
+    }
+
+    static func needsBoundingBox(for _: SVGTransformOrigin, on layer: CALayer) -> Bool {
+        layer.bounds.width == 0 || layer.bounds.height == 0
     }
 }

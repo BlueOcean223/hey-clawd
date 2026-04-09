@@ -12,6 +12,19 @@ protocol AnimationBinding {
     var fillMode: AnimationFillMode { get }
 }
 
+extension CSSSelector: Equatable {
+    static func == (lhs: CSSSelector, rhs: CSSSelector) -> Bool {
+        switch (lhs, rhs) {
+        case let (.className(lhsName), .className(rhsName)):
+            return lhsName == rhsName
+        case let (.id(lhsName), .id(rhsName)):
+            return lhsName == rhsName
+        default:
+            return false
+        }
+    }
+}
+
 enum CAAnimationBuilder {
     static func mediaTimingFunction(from tf: TimingFunction) -> CAMediaTimingFunction {
         switch tf {
@@ -202,9 +215,165 @@ enum CAAnimationBuilder {
             return true
         }
     }
+
+    static func buildAnimation(
+        from animation: SVGAnimation,
+        binding: any AnimationBinding,
+        circleCenter: CGPoint? = nil
+    ) -> CAAnimation? {
+        let properties = animatedProperties(in: animation.keyframes)
+        guard !properties.isEmpty else {
+            return nil
+        }
+
+        let animations = properties.compactMap {
+            buildKeyframeAnimation(
+                for: $0,
+                keyframes: animation.keyframes,
+                binding: binding,
+                circleCenter: circleCenter
+            )
+        }
+
+        guard !animations.isEmpty else {
+            return nil
+        }
+
+        if animations.count == 1 {
+            return animations[0]
+        }
+
+        for child in animations {
+            child.beginTime = 0
+            child.repeatCount = 0
+            child.autoreverses = false
+            child.fillMode = .removed
+            child.isRemovedOnCompletion = true
+            child.duration = binding.duration
+        }
+
+        let group = CAAnimationGroup()
+        group.animations = animations
+        group.duration = binding.duration
+        group.repeatCount = repeatCount(from: binding.iterationCount)
+        group.fillMode = caFillMode(from: binding.fillMode)
+        group.isRemovedOnCompletion = shouldRemoveOnCompletion(binding.fillMode)
+        group.autoreverses = (binding.direction == .alternate || binding.direction == .alternateReverse)
+
+        if binding.delay > 0 {
+            group.beginTime = CACurrentMediaTime() + binding.delay
+        }
+
+        return group
+    }
+
+    @MainActor
+    static func apply(_ document: SVGDocument, to rootLayer: CALayer) {
+        let resolvedBindings = resolveBindings(from: document)
+
+        for binding in resolvedBindings {
+            let layers = findLayers(matching: binding.selector, in: rootLayer)
+            guard !layers.isEmpty else {
+                logWarning("CAAnimationBuilder: no layer found for selector \(selectorKey(binding.selector))")
+                continue
+            }
+            guard let animation = document.animations[binding.animationName] else {
+                continue
+            }
+
+            for layer in layers {
+                guard let caAnimation = buildAnimation(
+                    from: animation,
+                    binding: binding,
+                    circleCenter: circleCenter(for: layer)
+                ) else {
+                    continue
+                }
+
+                applyTransformOriginIfNeeded(binding.transformOrigin, to: layer)
+                if let transformBox = binding.transformBox, layer.value(forKey: "svgTransformBox") == nil {
+                    layer.setValue(transformBox, forKey: "svgTransformBox")
+                }
+                layer.add(caAnimation, forKey: binding.animationName)
+            }
+        }
+
+        for binding in document.inlineAnimationBindings {
+            guard let layer = findLayer(withNodePath: binding.nodePath, in: rootLayer) else {
+                logWarning("CAAnimationBuilder: no layer found for nodePath \(binding.nodePath)")
+                continue
+            }
+            guard let animation = document.animations[binding.animationName] else {
+                continue
+            }
+            guard let caAnimation = buildAnimation(
+                from: animation,
+                binding: binding,
+                circleCenter: circleCenter(for: layer)
+            ) else {
+                continue
+            }
+
+            applyTransformOriginIfNeeded(binding.transformOrigin, to: layer)
+            if let transformBox = binding.transformBox, layer.value(forKey: "svgTransformBox") == nil {
+                layer.setValue(transformBox, forKey: "svgTransformBox")
+            }
+            layer.add(caAnimation, forKey: binding.animationName)
+        }
+
+        for binding in document.transitions {
+            let layers = findLayers(matching: binding.selector, in: rootLayer)
+            for layer in layers {
+                storeTransition(binding, on: layer)
+            }
+        }
+
+        for binding in document.inlineTransitionBindings {
+            guard let layer = findLayer(withNodePath: binding.nodePath, in: rootLayer) else {
+                continue
+            }
+            storeTransition(
+                property: binding.property,
+                duration: binding.duration,
+                timingFunction: binding.timingFunction,
+                delay: binding.delay,
+                on: layer
+            )
+        }
+    }
 }
 
 private extension CAAnimationBuilder {
+    struct ResolvedBinding: AnimationBinding {
+        var selector: CSSSelector
+        var animationName: String
+        var duration: TimeInterval
+        var timingFunction: TimingFunction
+        var iterationCount: AnimationIterationCount
+        var direction: AnimationDirection
+        var delay: TimeInterval
+        var fillMode: AnimationFillMode
+        var transformOrigin: SVGTransformOrigin?
+        var transformBox: String?
+    }
+
+    static func animatedProperties(in keyframes: [SVGKeyframe]) -> [String] {
+        var properties: [String] = []
+        var seen: Set<String> = []
+
+        for keyframe in keyframes {
+            for property in keyframe.properties.keys {
+                let normalized = property.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                guard !normalized.isEmpty, seen.insert(normalized).inserted else {
+                    continue
+                }
+                properties.append(normalized)
+            }
+        }
+
+        return properties
+    }
+
     static func keyframeEntries(
         for property: String,
         keyframes: [SVGKeyframe],
@@ -239,5 +408,221 @@ private extension CAAnimationBuilder {
             ),
             transform: nil
         )
+    }
+
+    static func resolveBindings(from document: SVGDocument) -> [ResolvedBinding] {
+        let styleBindingsBySelector = Dictionary(grouping: document.animationStyleBindings) {
+            selectorKey($0.selector)
+        }
+        var result: [ResolvedBinding] = []
+
+        for binding in document.animationBindings {
+            var resolved = ResolvedBinding(
+                selector: binding.selector,
+                animationName: binding.animationName,
+                duration: binding.duration,
+                timingFunction: binding.timingFunction,
+                iterationCount: binding.iterationCount,
+                direction: binding.direction,
+                delay: binding.delay,
+                fillMode: binding.fillMode,
+                transformOrigin: binding.transformOrigin,
+                transformBox: binding.transformBox
+            )
+
+            for styleBinding in styleBindingsBySelector[selectorKey(binding.selector)] ?? [] {
+                if let name = styleBinding.animationName {
+                    resolved.animationName = name
+                }
+                if let duration = styleBinding.duration {
+                    resolved.duration = duration
+                }
+                if let timingFunction = styleBinding.timingFunction {
+                    resolved.timingFunction = timingFunction
+                }
+                if let iterationCount = styleBinding.iterationCount {
+                    resolved.iterationCount = iterationCount
+                }
+                if let direction = styleBinding.direction {
+                    resolved.direction = direction
+                }
+                if let delay = styleBinding.delay {
+                    resolved.delay = delay
+                }
+                if let fillMode = styleBinding.fillMode {
+                    resolved.fillMode = fillMode
+                }
+                if let transformOrigin = styleBinding.transformOrigin {
+                    resolved.transformOrigin = transformOrigin
+                }
+                if let transformBox = styleBinding.transformBox {
+                    resolved.transformBox = transformBox
+                }
+            }
+
+            result.append(resolved)
+        }
+
+        let coveredAnimationKeys = Set(
+            document.animationBindings.map {
+                "\(selectorKey($0.selector))|\($0.animationName)"
+            }
+        )
+
+        for styleBinding in document.animationStyleBindings {
+            guard let animationName = styleBinding.animationName,
+                  !animationName.isEmpty else {
+                continue
+            }
+
+            let key = "\(selectorKey(styleBinding.selector))|\(animationName)"
+            guard !coveredAnimationKeys.contains(key) else {
+                continue
+            }
+
+            result.append(
+                ResolvedBinding(
+                    selector: styleBinding.selector,
+                    animationName: animationName,
+                    duration: styleBinding.duration ?? 0,
+                    timingFunction: styleBinding.timingFunction ?? CSSParser.defaultTimingFunction,
+                    iterationCount: styleBinding.iterationCount ?? .count(1),
+                    direction: styleBinding.direction ?? .normal,
+                    delay: styleBinding.delay ?? 0,
+                    fillMode: styleBinding.fillMode ?? .none,
+                    transformOrigin: styleBinding.transformOrigin,
+                    transformBox: styleBinding.transformBox
+                )
+            )
+        }
+
+        return result
+    }
+
+    static func selectorKey(_ selector: CSSSelector) -> String {
+        switch selector {
+        case .className(let name):
+            return ".\(name)"
+        case .id(let name):
+            return "#\(name)"
+        }
+    }
+
+    @MainActor
+    static func applyTransformOriginIfNeeded(_ origin: SVGTransformOrigin?, to layer: CALayer) {
+        guard let origin else {
+            return
+        }
+        guard layer.value(forKey: "svgTransformOrigin") == nil else {
+            return
+        }
+
+        CALayerRenderer.setAnchorPoint(origin, on: layer)
+        layer.setValue(serializedTransformOrigin(origin), forKey: "svgTransformOrigin")
+    }
+
+    @MainActor
+    static func storeTransition(_ binding: SVGTransitionBinding, on layer: CALayer) {
+        storeTransition(
+            property: binding.property,
+            duration: binding.duration,
+            timingFunction: binding.timingFunction,
+            delay: binding.delay,
+            on: layer
+        )
+    }
+
+    @MainActor
+    static func storeTransition(
+        property: String,
+        duration: TimeInterval,
+        timingFunction: TimingFunction,
+        delay: TimeInterval,
+        on layer: CALayer
+    ) {
+        var existing = layer.value(forKey: "svgTransitions") as? [[String: Any]] ?? []
+        existing.append([
+            "property": property,
+            "duration": duration,
+            "timingFunction": timingFunction,
+            "delay": delay,
+        ])
+        layer.setValue(existing, forKey: "svgTransitions")
+    }
+
+    @MainActor
+    static func findLayers(matching selector: CSSSelector, in rootLayer: CALayer) -> [CALayer] {
+        var matches: [CALayer] = []
+        traverseLayerTree(rootLayer) { layer in
+            switch selector {
+            case .className(let className):
+                let classes = layer.value(forKey: "svgClasses") as? [String] ?? []
+                if classes.contains(className) {
+                    matches.append(layer)
+                }
+            case .id(let id):
+                if layer.name == id {
+                    matches.append(layer)
+                }
+            }
+        }
+        return matches
+    }
+
+    @MainActor
+    static func findLayer(withNodePath path: String, in rootLayer: CALayer) -> CALayer? {
+        var match: CALayer?
+        traverseLayerTree(rootLayer) { layer in
+            guard match == nil else {
+                return
+            }
+            if (layer.value(forKey: "svgNodePath") as? String) == path {
+                match = layer
+            }
+        }
+        return match
+    }
+
+    @MainActor
+    static func traverseLayerTree(_ layer: CALayer, visitor: (CALayer) -> Void) {
+        visitor(layer)
+        for sublayer in layer.sublayers ?? [] {
+            traverseLayerTree(sublayer, visitor: visitor)
+        }
+    }
+
+    @MainActor
+    static func circleCenter(for layer: CALayer) -> CGPoint? {
+        guard let shapeLayer = layer as? CAShapeLayer,
+              let path = shapeLayer.path else {
+            return nil
+        }
+
+        let bounds = path.boundingBoxOfPath
+        guard !bounds.isNull, !bounds.isEmpty else {
+            return nil
+        }
+
+        return CGPoint(x: bounds.midX, y: bounds.midY)
+    }
+
+    static func serializedTransformOrigin(_ origin: SVGTransformOrigin) -> String {
+        "\(serializedTransformOriginComponent(origin.x)) \(serializedTransformOriginComponent(origin.y))"
+    }
+
+    static func serializedTransformOriginComponent(_ component: SVGTransformOriginComponent) -> String {
+        switch component {
+        case .px(let value):
+            return "\(value)px"
+        case .percent(let value):
+            return "\(value)%"
+        }
+    }
+
+    static func logWarning(_ message: String) {
+        guard let data = "\(message)\n".data(using: .utf8) else {
+            return
+        }
+        FileHandle.standardError.write(data)
     }
 }
