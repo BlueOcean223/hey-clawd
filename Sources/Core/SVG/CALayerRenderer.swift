@@ -36,6 +36,10 @@ enum CALayerRenderer {
         return rootLayer
     }
 
+    static func hitTest(point: CGPoint, in rootLayer: CALayer) -> Bool {
+        hitTest(point: point, in: rootLayer, from: rootLayer)
+    }
+
     private static func buildLayer(
         for node: SVGNode,
         inheritedFill: String?,
@@ -289,6 +293,90 @@ private extension CALayerRenderer {
         let layer = CAShapeLayer()
         layer.contentsScale = defaultContentScale
         return layer
+    }
+
+    static func hitTest(point: CGPoint, in layer: CALayer, from sourceLayer: CALayer) -> Bool {
+        guard !layer.isHidden, layer.opacity > 0 else {
+            return false
+        }
+
+        let localPoint = layer.convert(point, from: sourceLayer)
+
+        if let mask = layer.mask,
+           !hitTest(point: localPoint, in: mask, from: layer) {
+            return false
+        }
+
+        let sublayers = layer.sublayers ?? []
+        for sublayer in sublayers.reversed() {
+            if hitTest(point: point, in: sublayer, from: sourceLayer) {
+                return true
+            }
+        }
+
+        guard sublayers.isEmpty else {
+            return false
+        }
+
+        if let shapeLayer = layer as? CAShapeLayer {
+            return hitTestShapeLayer(shapeLayer, point: localPoint)
+        }
+
+        guard let backgroundColor = layer.backgroundColor,
+              backgroundColor.alpha > 0 else {
+            return false
+        }
+
+        return layer.bounds.contains(localPoint)
+    }
+
+    static func hitTestShapeLayer(_ layer: CAShapeLayer, point: CGPoint) -> Bool {
+        guard let path = layer.path else {
+            return false
+        }
+
+        if let fillColor = layer.fillColor,
+           fillColor.alpha > 0,
+           path.contains(point, using: .winding, transform: .identity) {
+            return true
+        }
+
+        guard let strokeColor = layer.strokeColor,
+              strokeColor.alpha > 0,
+              layer.lineWidth > 0 else {
+            return false
+        }
+
+        let strokedPath = path.copy(
+            strokingWithWidth: layer.lineWidth,
+            lineCap: cgLineCap(for: layer.lineCap),
+            lineJoin: cgLineJoin(for: layer.lineJoin),
+            miterLimit: layer.miterLimit
+        )
+
+        return strokedPath.contains(point, using: .winding, transform: .identity)
+    }
+
+    static func cgLineCap(for value: CAShapeLayerLineCap) -> CGLineCap {
+        switch value {
+        case .round:
+            return .round
+        case .square:
+            return .square
+        default:
+            return .butt
+        }
+    }
+
+    static func cgLineJoin(for value: CAShapeLayerLineJoin) -> CGLineJoin {
+        switch value {
+        case .round:
+            return .round
+        case .bevel:
+            return .bevel
+        default:
+            return .miter
+        }
     }
 
     static func rootBounds(for document: SVGDocument) -> CGRect {
