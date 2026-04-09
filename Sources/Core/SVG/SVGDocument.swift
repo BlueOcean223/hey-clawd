@@ -312,3 +312,6 @@ enum SVGTransformOriginComponent: Sendable, Equatable {
     case px(CGFloat)
     case percent(CGFloat)
 }
+
+extension SVGAnimationBinding: AnimationBinding {}
+extension SVGInlineAnimationBinding: AnimationBinding {}
