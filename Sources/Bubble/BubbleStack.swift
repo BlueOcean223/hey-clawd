@@ -39,9 +39,15 @@ final class BubbleStack {
         }
 
         let id = UUID()
-        let window = BubbleWindow(content: content) { [weak self] decision in
-            self?.resolveBubble(id: id, decision: decision)
-        }
+        let window = BubbleWindow(
+            content: content,
+            onDismiss: { [weak self] in
+                self?.removeBubble(id: id, respondingWith: nil)
+            },
+            onDecide: { [weak self] decision in
+                self?.resolveBubble(id: id, decision: decision)
+            }
+        )
         window.onHeightDidChange = { [weak self] in
             self?.repositionBubbles()
         }

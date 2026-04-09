@@ -276,6 +276,7 @@ struct BubbleView: View {
     let toolInput: String
     let suggestions: [PermissionSuggestion]
     let onDecide: (PermissionDecision) -> Void
+    var onDismiss: (() -> Void)?
     var onContentHeightChanged: (() -> Void)?
 
     @State private var isInputExpanded = false
@@ -343,6 +344,14 @@ struct BubbleView: View {
                     .padding(.vertical, 4)
                     .background(Capsule().fill(.blue.opacity(0.2)))
                 Spacer()
+                Button(action: { onDismiss?() }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 18, height: 18)
+                        .background(Circle().fill(.secondary.opacity(0.15)))
+                }
+                .buttonStyle(.plain)
             }
 
             inputSection

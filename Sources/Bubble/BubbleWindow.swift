@@ -24,13 +24,14 @@ final class BubbleWindow: NSPanel {
         false
     }
 
-    init(content: PermissionBubbleContent, onDecide: @escaping (PermissionDecision) -> Void) {
-        let view = BubbleView(
+    init(content: PermissionBubbleContent, onDismiss: @escaping () -> Void, onDecide: @escaping (PermissionDecision) -> Void) {
+        var view = BubbleView(
             toolName: content.toolName,
             toolInput: content.toolInput,
             suggestions: content.suggestions,
             onDecide: onDecide
         )
+        view.onDismiss = onDismiss
         hostingView = ClickThroughHostingView(rootView: view)
         minimumHeight = content.estimatedHeight
 
