@@ -35,18 +35,17 @@
       .dirt-group {
         animation: show-dirt 3s forwards linear;
       }
-      .dirt-particle {
-        opacity: 0;
-        animation: fly-dirt 0.5s infinite linear;
-      }
-      .d1 { animation-delay: 0s; }
-      .d2 { animation-delay: -0.1s; }
-      .d3 { animation-delay: -0.2s; }
-      .d4 { animation-delay: -0.3s; }
-      .d5 { animation-delay: -0.05s; }
-      .d6 { animation-delay: -0.15s; }
-      .d7 { animation-delay: -0.25s; }
-      .d8 { animation-delay: -0.35s; }
+
+      /* Per-particle dirt animations (replaces var()/calc()) */
+      .dirt-particle { opacity: 0; }
+      .dp1 { animation: fly-dirt-1 0.5s infinite linear; animation-delay: 0s; }
+      .dp2 { animation: fly-dirt-2 0.5s infinite linear; animation-delay: -0.1s; }
+      .dp3 { animation: fly-dirt-3 0.5s infinite linear; animation-delay: -0.2s; }
+      .dp4 { animation: fly-dirt-4 0.5s infinite linear; animation-delay: -0.3s; }
+      .dp5 { animation: fly-dirt-5 0.5s infinite linear; animation-delay: -0.05s; }
+      .dp6 { animation: fly-dirt-6 0.5s infinite linear; animation-delay: -0.15s; }
+      .dp7 { animation: fly-dirt-7 0.5s infinite linear; animation-delay: -0.25s; }
+      .dp8 { animation: fly-dirt-8 0.5s infinite linear; animation-delay: -0.35s; }
 
       /* ===== Keyframes ===== */
       @keyframes dig-down {
@@ -86,12 +85,69 @@
         100%    { opacity: 0; }
       }
 
-      @keyframes fly-dirt {
+      /* tx: -12px, ty: -8px */
+      @keyframes fly-dirt-1 {
         0%   { opacity: 0; transform: translate(0, 0); }
         10%  { opacity: 1; transform: translate(0, 0); }
-        70%  { opacity: 1; transform: translate(calc(var(--tx) * 0.8), calc(var(--ty) * 0.8)); }
-        90%  { opacity: 0; transform: translate(var(--tx), var(--ty)); }
-        100% { opacity: 0; transform: translate(var(--tx), var(--ty)); }
+        70%  { opacity: 1; transform: translate(-9.6px, -6.4px); }
+        90%  { opacity: 0; transform: translate(-12px, -8px); }
+        100% { opacity: 0; transform: translate(-12px, -8px); }
+      }
+      /* tx: 14px, ty: -10px */
+      @keyframes fly-dirt-2 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(11.2px, -8px); }
+        90%  { opacity: 0; transform: translate(14px, -10px); }
+        100% { opacity: 0; transform: translate(14px, -10px); }
+      }
+      /* tx: -18px, ty: -4px */
+      @keyframes fly-dirt-3 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(-14.4px, -3.2px); }
+        90%  { opacity: 0; transform: translate(-18px, -4px); }
+        100% { opacity: 0; transform: translate(-18px, -4px); }
+      }
+      /* tx: 12px, ty: -14px */
+      @keyframes fly-dirt-4 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(9.6px, -11.2px); }
+        90%  { opacity: 0; transform: translate(12px, -14px); }
+        100% { opacity: 0; transform: translate(12px, -14px); }
+      }
+      /* tx: -10px, ty: -12px */
+      @keyframes fly-dirt-5 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(-8px, -9.6px); }
+        90%  { opacity: 0; transform: translate(-10px, -12px); }
+        100% { opacity: 0; transform: translate(-10px, -12px); }
+      }
+      /* tx: 16px, ty: -6px */
+      @keyframes fly-dirt-6 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(12.8px, -4.8px); }
+        90%  { opacity: 0; transform: translate(16px, -6px); }
+        100% { opacity: 0; transform: translate(16px, -6px); }
+      }
+      /* tx: -15px, ty: -16px */
+      @keyframes fly-dirt-7 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(-12px, -12.8px); }
+        90%  { opacity: 0; transform: translate(-15px, -16px); }
+        100% { opacity: 0; transform: translate(-15px, -16px); }
+      }
+      /* tx: 10px, ty: -8px */
+      @keyframes fly-dirt-8 {
+        0%   { opacity: 0; transform: translate(0, 0); }
+        10%  { opacity: 1; transform: translate(0, 0); }
+        70%  { opacity: 1; transform: translate(8px, -6.4px); }
+        90%  { opacity: 0; transform: translate(10px, -8px); }
+        100% { opacity: 0; transform: translate(10px, -8px); }
       }
     </style>
 
@@ -111,24 +167,21 @@
     <rect x="-4.5" y="0" width="9" height="1" fill="#000000" class="hole-anim"/>
   </g>
 
-  <!-- Dirt particles -->
+  <!-- Dirt particles (each with its own keyframe, no inline style) -->
   <g class="dirt-group" transform="translate(7.5, 15)">
-    <use href="#dirt-bit" class="dirt-particle d1" style="--tx: -12px; --ty: -8px;" x="-2" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d2" style="--tx: 14px; --ty: -10px;" x="2" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d3" style="--tx: -18px; --ty: -4px;" x="-4" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d4" style="--tx: 12px; --ty: -14px;" x="4" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d5" style="--tx: -10px; --ty: -12px;" x="-1" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d6" style="--tx: 16px; --ty: -6px;" x="1" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d7" style="--tx: -15px; --ty: -16px;" x="-3" y="0"/>
-    <use href="#dirt-bit" class="dirt-particle d8" style="--tx: 10px; --ty: -8px;" x="3" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp1" x="-2" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp2" x="2" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp3" x="-4" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp4" x="4" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp5" x="-1" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp6" x="1" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp7" x="-3" y="0"/>
+    <use href="#dirt-bit" class="dirt-particle dp8" x="3" y="0"/>
   </g>
 
   <!-- Character (clipped by ground line) -->
   <g clip-path="url(#ground-clip)">
     <g class="body-dig">
-      <!-- Layer 0: Shadow (sinks with body) -->
-      <!-- Not visible once below ground -->
-
       <!-- Body + limbs -->
       <g fill="#DE886D">
         <!-- Torso -->

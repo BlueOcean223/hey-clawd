@@ -65,10 +65,9 @@
       .spark1 { opacity: 0; animation: spark-r 16s infinite step-end; }
       .spark2 { opacity: 0; animation: spark-l 16s infinite step-end; }
 
-      /* Rainbow shimmer on body — very subtle color wash */
+      /* Rainbow shimmer on body — very subtle color wash (no blend mode) */
       .body-shimmer {
         animation: shimmer 8s infinite linear;
-        mix-blend-mode: overlay;
       }
 
       /* ===== Keyframes ===== */
@@ -195,15 +194,15 @@
         81%, 100% { opacity: 0; }
       }
 
-      /* Subtle body shimmer overlay */
+      /* Subtle body shimmer overlay (lowered opacity, no blend mode) */
       @keyframes shimmer {
-        0%       { fill: #FF5252; opacity: 0.06; }
-        16.6%    { fill: #FF9800; opacity: 0.08; }
-        33.3%    { fill: #FFC107; opacity: 0.06; }
-        50%      { fill: #4CAF50; opacity: 0.08; }
-        66.6%    { fill: #2196F3; opacity: 0.06; }
-        83.3%    { fill: #9C27B0; opacity: 0.08; }
-        100%     { fill: #FF5252; opacity: 0.06; }
+        0%       { fill: #FF5252; opacity: 0.04; }
+        16.6%    { fill: #FF9800; opacity: 0.05; }
+        33.3%    { fill: #FFC107; opacity: 0.04; }
+        50%      { fill: #4CAF50; opacity: 0.05; }
+        66.6%    { fill: #2196F3; opacity: 0.04; }
+        83.3%    { fill: #9C27B0; opacity: 0.05; }
+        100%     { fill: #FF5252; opacity: 0.04; }
       }
     </style>
   </defs>
@@ -228,7 +227,7 @@
       <rect x="2" y="6" width="11" height="7" fill="#DE886D"/>
 
       <!-- Rainbow shimmer overlay on body -->
-      <rect class="body-shimmer" x="2" y="6" width="11" height="7" fill="#FF5252" opacity="0.06"/>
+      <rect class="body-shimmer" x="2" y="6" width="11" height="7" fill="#FF5252" opacity="0.04"/>
 
       <!-- Left arm -->
       <g class="arm-l">
