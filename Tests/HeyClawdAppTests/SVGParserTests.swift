@@ -165,7 +165,7 @@ final class SVGParserTests: XCTestCase {
             """
         )
 
-        XCTAssertEqual(document.defs.count, 1)
+        XCTAssertNotNil(document.defs["mask"])
         let clipPath = try clipPathNode(from: try XCTUnwrap(document.defs["mask"]))
         XCTAssertEqual(clipPath.id, "mask")
         XCTAssertEqual(clipPath.children.count, 1)
@@ -208,6 +208,26 @@ final class SVGParserTests: XCTestCase {
         XCTAssertTrue(xml.styleBlocks.contains { $0.contains(".outside { opacity: 1; }") })
     }
 
+    func testParseXMLReportsMalformedSVGAndDropsPartialTree() {
+        let malformed = """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <g>
+                <rect id="broken" x="1" y="1" width="2" height="2">
+            </svg>
+            """
+
+        let xml = SVGParser.parseXML(malformed)
+        XCTAssertNotNil(xml.parseErrorDescription)
+        XCTAssertTrue(xml.defs.isEmpty)
+        XCTAssertTrue(xml.rootChildren.isEmpty)
+        XCTAssertTrue(xml.styleBlocks.isEmpty)
+
+        let document = SVGParser.parse(malformed)
+        XCTAssertTrue(document.defs.isEmpty)
+        XCTAssertTrue(document.rootChildren.isEmpty)
+        XCTAssertTrue(document.animations.isEmpty)
+    }
+
     func testCSSParserParsesAnimationShorthandWithoutDelay() throws {
         let result = CSSParser.parse([
             ".breather { animation: breathe 3.2s ease-in-out infinite; }",
@@ -222,6 +242,7 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(binding.duration, 3.2, accuracy: 0.0001)
         assertTimingFunction(binding.timingFunction, equals: .easeInOut)
         assertIterationCount(binding.iterationCount, equals: .infinite)
+        assertAnimationDirection(binding.direction, equals: .normal)
         XCTAssertEqual(binding.delay, 0, accuracy: 0.0001)
         XCTAssertEqual(binding.fillMode, .none)
         XCTAssertNil(binding.transformOrigin)
@@ -241,8 +262,41 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(binding.duration, 0.5, accuracy: 0.0001)
         assertTimingFunction(binding.timingFunction, equals: .easeOut)
         assertIterationCount(binding.iterationCount, equals: .count(1))
+        assertAnimationDirection(binding.direction, equals: .normal)
         XCTAssertEqual(binding.delay, 1.2, accuracy: 0.0001)
         XCTAssertEqual(binding.fillMode, .forwards)
+    }
+
+    func testCSSParserDefaultsMissingAnimationTimingFunctionToEase() throws {
+        let result = CSSParser.parse([
+            ".success { animation: jump 6s infinite; }",
+        ])
+
+        let binding = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "success"))
+        XCTAssertEqual(binding.animationName, "jump")
+        XCTAssertEqual(binding.duration, 6, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .cubicBezier(0.25, 0.1, 0.25, 1))
+        assertIterationCount(binding.iterationCount, equals: .infinite)
+    }
+
+    func testCSSParserParsesCommaSeparatedAnimationDeclarations() throws {
+        let result = CSSParser.parse([
+            ".multi { animation: fadeIn 1s linear, slideUp 0.5s ease-out; }",
+        ])
+
+        XCTAssertEqual(result.animationBindings.count, 2)
+
+        let first = result.animationBindings[0]
+        assertSelector(first.selector, equalsClassName: "multi")
+        XCTAssertEqual(first.animationName, "fadeIn")
+        XCTAssertEqual(first.duration, 1, accuracy: 0.0001)
+        assertTimingFunction(first.timingFunction, equals: .linear)
+
+        let second = result.animationBindings[1]
+        assertSelector(second.selector, equalsClassName: "multi")
+        XCTAssertEqual(second.animationName, "slideUp")
+        XCTAssertEqual(second.duration, 0.5, accuracy: 0.0001)
+        assertTimingFunction(second.timingFunction, equals: .easeOut)
     }
 
     func testCSSParserParsesAnimationLonghandProperties() {
@@ -258,8 +312,29 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(binding.duration, 2, accuracy: 0.0001)
         assertTimingFunction(binding.timingFunction, equals: .linear)
         assertIterationCount(binding.iterationCount, equals: .count(1))
+        assertAnimationDirection(binding.direction, equals: .normal)
         XCTAssertEqual(binding.delay, 0, accuracy: 0.0001)
         XCTAssertEqual(binding.fillMode, .none)
+    }
+
+    func testCSSParserPreservesFractionalIterationCount() throws {
+        let result = CSSParser.parse([
+            ".pulse { animation-name: pulse; animation-duration: 2s; animation-iteration-count: 1.5; }",
+        ])
+
+        let binding = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "pulse"))
+        XCTAssertEqual(binding.animationName, "pulse")
+        assertIterationCount(binding.iterationCount, equals: .count(1.5))
+    }
+
+    func testCSSParserParsesAnimationDirection() throws {
+        let result = CSSParser.parse([
+            ".wave { animation: wave 0.15s infinite alternate ease-in-out; }",
+        ])
+
+        let binding = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "wave"))
+        XCTAssertEqual(binding.animationName, "wave")
+        assertAnimationDirection(binding.direction, equals: .alternate)
     }
 
     func testCSSParserParsesCubicBezierTimingFunction() {
@@ -278,6 +353,35 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(binding.fillMode, .forwards)
     }
 
+    func testCSSParserParsesStepEndTimingFunction() throws {
+        let result = CSSParser.parse([
+            ".blink { animation: cursor-blink 0.62s step-end infinite; }",
+        ])
+
+        XCTAssertEqual(result.animationBindings.count, 1)
+
+        let binding = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "blink"))
+        XCTAssertEqual(binding.animationName, "cursor-blink")
+        XCTAssertEqual(binding.duration, 0.62, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .stepEnd)
+        assertIterationCount(binding.iterationCount, equals: .infinite)
+        assertAnimationDirection(binding.direction, equals: .normal)
+    }
+
+    func testCSSParserAnimationShorthandTreatsReservedKeywordsAsNonNames() throws {
+        let result = CSSParser.parse([
+            ".reserved { animation: ease 1s; }",
+            ".named { animation: my-anim 1s ease; }",
+        ])
+
+        XCTAssertNil(animationBinding(in: result.animationBindings, className: "reserved"))
+
+        let binding = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "named"))
+        XCTAssertEqual(binding.animationName, "my-anim")
+        XCTAssertEqual(binding.duration, 1, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .cubicBezier(0.25, 0.1, 0.25, 1))
+    }
+
     func testCSSParserParsesTransformOriginAndTransformBox() {
         let result = CSSParser.parse([
             ".pivot { animation: spin 1s linear infinite; transform-origin: 7.5px 10px; transform-box: fill-box; }",
@@ -288,13 +392,83 @@ final class SVGParserTests: XCTestCase {
         let binding = result.animationBindings[0]
         assertSelector(binding.selector, equalsClassName: "pivot")
         XCTAssertEqual(binding.animationName, "spin")
-        XCTAssertEqual(binding.transformOrigin, CGPoint(x: 7.5, y: 10))
+        XCTAssertEqual(
+            binding.transformOrigin,
+            SVGTransformOrigin(
+                x: .px(7.5),
+                y: .px(10)
+            )
+        )
         XCTAssertEqual(binding.transformBox, "fill-box")
+    }
+
+    func testCSSParserParsesTransformOriginPercentAndKeywordUnits() throws {
+        let result = CSSParser.parse([
+            """
+            .percent { animation: hop 1s linear infinite; transform-origin: 100% 50%; }
+            .corner { animation: hop 1s linear infinite; transform-origin: top left; }
+            .top-center { animation: hop 1s linear infinite; transform-origin: top center; }
+            """,
+        ])
+
+        XCTAssertEqual(result.animationBindings.count, 3)
+
+        let percent = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "percent"))
+        XCTAssertEqual(
+            percent.transformOrigin,
+            SVGTransformOrigin(
+                x: .percent(100),
+                y: .percent(50)
+            )
+        )
+
+        let corner = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "corner"))
+        XCTAssertEqual(
+            corner.transformOrigin,
+            SVGTransformOrigin(
+                x: .percent(0),
+                y: .percent(0)
+            )
+        )
+
+        let topCenter = try XCTUnwrap(animationBinding(in: result.animationBindings, className: "top-center"))
+        XCTAssertEqual(
+            topCenter.transformOrigin,
+            SVGTransformOrigin(
+                x: .percent(50),
+                y: .percent(0)
+            )
+        )
+    }
+
+    func testCSSParserParsesStaticStyleBindings() throws {
+        let result = CSSParser.parse([
+            """
+            .wave { fill: none; stroke: #0082FC; stroke-width: 0.6; opacity: 0; }
+            .hidden { visibility: hidden; }
+            .animated { animation: fade 1s linear infinite; transform-origin: 7.5px 10px; }
+            """,
+        ])
+
+        XCTAssertEqual(result.staticStyleBindings.count, 3)
+
+        let wave = try XCTUnwrap(staticStyleBinding(in: result.staticStyleBindings, className: "wave"))
+        XCTAssertEqual(wave.properties["fill"], "none")
+        XCTAssertEqual(wave.properties["stroke"], "#0082FC")
+        XCTAssertEqual(wave.properties["stroke-width"], "0.6")
+        XCTAssertEqual(wave.properties["opacity"], "0")
+        XCTAssertNil(wave.properties["animation"])
+
+        let hidden = try XCTUnwrap(staticStyleBinding(in: result.staticStyleBindings, className: "hidden"))
+        XCTAssertEqual(hidden.properties["visibility"], "hidden")
+
+        let animated = try XCTUnwrap(staticStyleBinding(in: result.staticStyleBindings, className: "animated"))
+        XCTAssertEqual(animated.properties["transform-origin"], "7.5px 10px")
     }
 
     func testCSSParserParsesTransitionShorthand() {
         let result = CSSParser.parse([
-            ".hover { transition: transform 0.2s ease-out; }",
+            ".hover { transition: transform 0.2s ease-out 0.1s; }",
         ])
 
         XCTAssertEqual(result.transitions.count, 1)
@@ -304,6 +478,19 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(transition.property, "transform")
         XCTAssertEqual(transition.duration, 0.2, accuracy: 0.0001)
         assertTimingFunction(transition.timingFunction, equals: .easeOut)
+        XCTAssertEqual(transition.delay, 0.1, accuracy: 0.0001)
+    }
+
+    func testCSSParserDefaultsMissingTransitionTimingFunctionToEase() throws {
+        let result = CSSParser.parse([
+            ".hover { transition: opacity 0.2s; }",
+        ])
+
+        let transition = try XCTUnwrap(result.transitions.first)
+        XCTAssertEqual(transition.property, "opacity")
+        XCTAssertEqual(transition.duration, 0.2, accuracy: 0.0001)
+        assertTimingFunction(transition.timingFunction, equals: .cubicBezier(0.25, 0.1, 0.25, 1))
+        XCTAssertEqual(transition.delay, 0, accuracy: 0.0001)
     }
 
     func testCSSParserParsesKeyframesVariantsAndExtendedProperties() throws {
@@ -371,6 +558,16 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(morph.keyframes[1].properties["width"], "12")
     }
 
+    func testCSSParserParsesEmptyKeyframesBlock() throws {
+        let result = CSSParser.parse([
+            "@keyframes empty {}",
+        ])
+
+        let animation = try XCTUnwrap(result.animations["empty"])
+        XCTAssertEqual(animation.name, "empty")
+        XCTAssertTrue(animation.keyframes.isEmpty)
+    }
+
     func testParseParsesInlineStyleAttributes() throws {
         let document = SVGParser.parse(
             """
@@ -384,6 +581,64 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(rect.id, "styled")
         XCTAssertEqual(rect.inlineStyles["animation-delay"], "0.3s")
         XCTAssertEqual(rect.inlineStyles["opacity"], "0")
+    }
+
+    func testParseNormalizesInlineStyleDeclarationKeys() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <rect
+                id="styled"
+                x="1"
+                y="2"
+                width="3"
+                height="4"
+                style="ANIMATION-DELAY: 0.3s; TRANSITION: opacity 0.2s ease-out 0.1s; FILL: rgba(0,0,0,0.15);"
+              />
+            </svg>
+            """
+        )
+
+        let rect = try rectNode(from: try XCTUnwrap(document.rootChildren.first))
+        XCTAssertEqual(rect.inlineStyles["animation-delay"], "0.3s")
+        XCTAssertEqual(rect.inlineStyles["transition"], "opacity 0.2s ease-out 0.1s")
+        XCTAssertEqual(rect.inlineStyles["fill"], "rgba(0,0,0,0.15)")
+    }
+
+    func testParsePreservesRootShapeRenderingAndExtendedNodeAttributes() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+              <defs>
+                <rect id="tile" x="1" y="2" width="6" height="7" />
+              </defs>
+              <rect
+                id="arm"
+                x="0"
+                y="9"
+                width="2"
+                height="2"
+                fill="#DE886D"
+                stroke="#546E7A"
+                stroke-width="0.3"
+                transform="rotate(-20, 2, 10)"
+              />
+              <use id="smoke" href="#tile" x="3" y="4" transform="translate(5, 4)" />
+            </svg>
+            """
+        )
+
+        XCTAssertEqual(document.shapeRendering, "crispEdges")
+
+        let arm = try rectNode(from: document.rootChildren[0])
+        XCTAssertEqual(arm.id, "arm")
+        XCTAssertEqual(arm.transform, "rotate(-20, 2, 10)")
+        XCTAssertEqual(arm.stroke, "#546E7A")
+        XCTAssertEqual(arm.strokeWidth, 0.3)
+
+        let smoke = try useNode(from: document.rootChildren[1])
+        XCTAssertEqual(smoke.id, "smoke")
+        XCTAssertEqual(smoke.transform, "translate(5, 4)")
     }
 
     func testParseAllowsValidAndMissingUseReferencesWithoutCrashing() throws {
@@ -415,6 +670,76 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(missingUse.href, "#nonexistent")
     }
 
+    func testParseSupportsUseXLinkHrefFallback() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+              <defs>
+                <rect id="target" x="1" y="1" width="2" height="3" />
+              </defs>
+              <use id="legacy-use" xlink:href="#target" />
+            </svg>
+            """
+        )
+
+        let use = try useNode(from: try XCTUnwrap(document.rootChildren.first))
+        XCTAssertEqual(use.id, "legacy-use")
+        XCTAssertEqual(use.href, "#target")
+    }
+
+    func testParseRegistersDefsNestedInsideAnonymousWrapper() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <g>
+                  <rect id="nested-tile" x="1" y="2" width="3" height="4" />
+                </g>
+              </defs>
+              <use id="nested-use" href="#nested-tile" />
+            </svg>
+            """
+        )
+
+        let nestedTile = try rectNode(from: try XCTUnwrap(document.defs["nested-tile"]))
+        XCTAssertEqual(nestedTile.id, "nested-tile")
+        XCTAssertEqual(nestedTile.width, 3)
+        XCTAssertEqual(nestedTile.height, 4)
+
+        let nestedUse = try useNode(from: try XCTUnwrap(document.rootChildren.first))
+        XCTAssertEqual(nestedUse.id, "nested-use")
+        XCTAssertEqual(nestedUse.href, "#nested-tile")
+    }
+
+    func testParseRegistersDefsNestedInsideNamedWrapper() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <g id="sprite">
+                  <rect id="nested-tile" x="1" y="2" width="3" height="4" />
+                </g>
+              </defs>
+              <use id="nested-use" href="#nested-tile" />
+            </svg>
+            """
+        )
+
+        XCTAssertEqual(document.defsChildren.count, 1)
+
+        let sprite = try groupNode(from: try XCTUnwrap(document.defs["sprite"]))
+        XCTAssertEqual(sprite.id, "sprite")
+        XCTAssertEqual(sprite.children.count, 1)
+
+        let nestedTile = try rectNode(from: try XCTUnwrap(document.defs["nested-tile"]))
+        XCTAssertEqual(nestedTile.width, 3)
+        XCTAssertEqual(nestedTile.height, 4)
+
+        let nestedUse = try useNode(from: try XCTUnwrap(document.rootChildren.first))
+        let referenced = try rectNode(from: try XCTUnwrap(document.referencedNode(for: nestedUse)))
+        XCTAssertEqual(referenced.id, "nested-tile")
+    }
+
     func testParseAssemblesCompleteSVGDocument() throws {
         let document = SVGParser.parse(
             """
@@ -422,13 +747,13 @@ final class SVGParserTests: XCTestCase {
               <defs>
                 <rect id="tile" x="1" y="2" width="6" height="7" />
                 <style>
-                  .breather {
-                    animation: breathe 3.2s ease-in-out infinite;
-                    transform-origin: 7.5px 10px;
-                    transform-box: fill-box;
-                  }
-                  .hover {
-                    transition: transform 0.2s ease-out;
+                .breather {
+                  animation: breathe 3.2s ease-in-out infinite;
+                  transform-origin: 7.5px 10px;
+                  transform-box: fill-box;
+                }
+                .hover {
+                    transition: transform 0.2s ease-out 0.1s;
                   }
                   @keyframes breathe {
                     0% { transform: scale(1); }
@@ -454,7 +779,9 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(document.defs.count, 1)
         XCTAssertEqual(document.rootChildren.count, 1)
         XCTAssertEqual(document.animations.count, 1)
+        XCTAssertEqual(document.staticStyleBindings.count, 1)
         XCTAssertEqual(document.animationBindings.count, 1)
+        XCTAssertEqual(document.animationStyleBindings.count, 1)
         XCTAssertEqual(document.transitions.count, 1)
 
         let tile = try rectNode(from: try XCTUnwrap(document.defs["tile"]))
@@ -500,14 +827,25 @@ final class SVGParserTests: XCTestCase {
         assertIterationCount(animationBinding.iterationCount, equals: .infinite)
         XCTAssertEqual(animationBinding.delay, 0, accuracy: 0.0001)
         XCTAssertEqual(animationBinding.fillMode, .none)
-        XCTAssertEqual(animationBinding.transformOrigin, CGPoint(x: 7.5, y: 10))
+        XCTAssertEqual(
+            animationBinding.transformOrigin,
+            SVGTransformOrigin(
+                x: .px(7.5),
+                y: .px(10)
+            )
+        )
         XCTAssertEqual(animationBinding.transformBox, "fill-box")
+
+        let breatherStatic = try XCTUnwrap(staticStyleBinding(in: document.staticStyleBindings, className: "breather"))
+        XCTAssertEqual(breatherStatic.properties["transform-origin"], "7.5px 10px")
+        XCTAssertEqual(breatherStatic.properties["transform-box"], "fill-box")
 
         let transition = document.transitions[0]
         assertSelector(transition.selector, equalsClassName: "hover")
         XCTAssertEqual(transition.property, "transform")
         XCTAssertEqual(transition.duration, 0.2, accuracy: 0.0001)
         assertTimingFunction(transition.timingFunction, equals: .easeOut)
+        XCTAssertEqual(transition.delay, 0.1, accuracy: 0.0001)
     }
 
     func testParseHandlesEmptySVGString() {
@@ -519,7 +857,9 @@ final class SVGParserTests: XCTestCase {
         XCTAssertTrue(document.defs.isEmpty)
         XCTAssertTrue(document.rootChildren.isEmpty)
         XCTAssertTrue(document.animations.isEmpty)
+        XCTAssertTrue(document.staticStyleBindings.isEmpty)
         XCTAssertTrue(document.animationBindings.isEmpty)
+        XCTAssertTrue(document.animationStyleBindings.isEmpty)
         XCTAssertTrue(document.transitions.isEmpty)
     }
 
@@ -543,6 +883,7 @@ final class SVGParserTests: XCTestCase {
 
         XCTAssertTrue(document.animations.isEmpty)
         XCTAssertTrue(document.animationBindings.isEmpty)
+        XCTAssertTrue(document.animationStyleBindings.isEmpty)
         XCTAssertTrue(document.transitions.isEmpty)
 
         let rect = try rectNode(from: try XCTUnwrap(document.rootChildren.first))
@@ -659,6 +1000,43 @@ final class SVGParserTests: XCTestCase {
         let antBlink = try XCTUnwrap(document.animations["ant-blink"])
         let antBlinkProperties = Set(antBlink.keyframes.flatMap { $0.properties.keys })
         XCTAssertTrue(antBlinkProperties.contains("fill"))
+
+        let waveRule = try XCTUnwrap(staticStyleBinding(in: document.staticStyleBindings, className: "wave"))
+        XCTAssertEqual(waveRule.properties["fill"], "none")
+        XCTAssertEqual(waveRule.properties["stroke-width"], "0.6")
+        XCTAssertEqual(waveRule.properties["opacity"], "0")
+    }
+
+    func testWakeSVGPreservesSharedAnimationLonghandsAndStandaloneTransformOriginRules() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-wake"))
+
+        let onceStyle = try XCTUnwrap(animationStyleBinding(in: document.animationStyleBindings, className: "once"))
+        XCTAssertNil(onceStyle.animationName)
+        XCTAssertEqual(try XCTUnwrap(onceStyle.duration), 3.5, accuracy: 0.0001)
+        XCTAssertEqual(try XCTUnwrap(onceStyle.fillMode), .forwards)
+        assertIterationCount(try XCTUnwrap(onceStyle.iterationCount), equals: .count(1))
+
+        let scaleTopLeftStyle = try XCTUnwrap(animationStyleBinding(in: document.animationStyleBindings, className: "scale-top-left"))
+        XCTAssertNil(scaleTopLeftStyle.animationName)
+        XCTAssertEqual(scaleTopLeftStyle.transformBox, "fill-box")
+        XCTAssertEqual(
+            scaleTopLeftStyle.transformOrigin,
+            SVGTransformOrigin(
+                x: .percent(0),
+                y: .percent(0)
+            )
+        )
+
+        let scaleTopLeftStatic = try XCTUnwrap(staticStyleBinding(in: document.staticStyleBindings, className: "scale-top-left"))
+        XCTAssertEqual(scaleTopLeftStatic.properties["transform-box"], "fill-box")
+        XCTAssertEqual(scaleTopLeftStatic.properties["transform-origin"], "top left")
+    }
+
+    func testIdleFollowSVGPreservesStandaloneShadowTransformOriginRule() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-idle-follow"))
+
+        let shadowRule = try XCTUnwrap(staticStyleBinding(in: document.staticStyleBindings, id: "shadow-js"))
+        XCTAssertEqual(shadowRule.properties["transform-origin"], "7.5px 15px")
     }
 
     func testPercentagePrecision() throws {
@@ -688,6 +1066,363 @@ final class SVGParserTests: XCTestCase {
         })
         XCTAssertGreaterThanOrEqual(countNodes(of: .use, in: document.rootChildren), 8)
     }
+
+    func testReactDoubleJumpSVGPreservesPercentTransformOrigin() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-react-double-jump"))
+        let leftArm = try XCTUnwrap(animationBinding(in: document.animationBindings, className: "hc-dj-larm"))
+
+        XCTAssertEqual(
+            leftArm.transformOrigin,
+            SVGTransformOrigin(
+                x: .percent(100),
+                y: .percent(50)
+            )
+        )
+        XCTAssertEqual(leftArm.transformBox, "fill-box")
+    }
+
+    func testRealSVGsPreserveRectAndUseTransforms() throws {
+        let pushing = SVGParser.parse(try loadSVG("clawd-working-pushing"))
+        let rectTransforms = collectRects(in: pushing.rootChildren).compactMap(\.transform)
+        XCTAssertTrue(rectTransforms.contains("rotate(-20, 2, 10)"))
+        XCTAssertTrue(rectTransforms.contains("rotate(-25, 13, 10)"))
+
+        let overheated = SVGParser.parse(try loadSVG("clawd-working-overheated"))
+        let useTransforms = collectUses(in: overheated.rootChildren).compactMap(\.transform)
+        XCTAssertTrue(useTransforms.contains("translate(5, 4)"))
+        XCTAssertTrue(useTransforms.contains("translate(8, 3)"))
+        XCTAssertTrue(useTransforms.contains("translate(11, 4)"))
+    }
+
+    func testParseResolvesInlineAnimationBindingsFromStyleAttributes() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-error"))
+
+        let inlineArm = try XCTUnwrap(
+            document.inlineAnimationBindings.first { binding in
+                binding.animationName == "hc-arms-up-r"
+            }
+        )
+        XCTAssertEqual(
+            inlineArm.transformOrigin,
+            SVGTransformOrigin(
+                x: .px(13),
+                y: .px(10)
+            )
+        )
+        XCTAssertEqual(inlineArm.nodePath, "root/0/7")
+        XCTAssertNil(inlineArm.nodeID)
+        XCTAssertEqual(inlineArm.classes, [])
+
+        let smokeBindings = document.inlineAnimationBindings
+            .filter { $0.animationName == "hc-smoke-puff" }
+            .sorted { $0.delay < $1.delay }
+
+        XCTAssertEqual(smokeBindings.count, 2)
+        XCTAssertEqual(smokeBindings[0].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(smokeBindings[1].delay, 0.4, accuracy: 0.0001)
+    }
+
+    func testParseResolvesInlineAnimationDelayOverridesForClassAnimations() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-notification"))
+        let rippleBindings = document.inlineAnimationBindings
+            .filter { $0.animationName == "hc-ripple-out" }
+            .sorted { $0.delay < $1.delay }
+
+        XCTAssertEqual(rippleBindings.count, 2)
+        XCTAssertEqual(rippleBindings[0].delay, 0, accuracy: 0.0001)
+        XCTAssertEqual(rippleBindings[1].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(rippleBindings[0].nodePath, "root/2")
+        XCTAssertEqual(rippleBindings[0].classes, ["hc-ripple"])
+    }
+
+    func testParseResolvesInlineAnimationOverridesAcrossUtilityLonghands() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .once {
+                  animation-duration: 3.5s;
+                  animation-iteration-count: 1;
+                  animation-fill-mode: forwards;
+                }
+                .shadow-wake {
+                  animation-name: shadow-wake;
+                  transform-origin: 7.5px 15px;
+                }
+                @keyframes shadow-wake {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+              </style>
+              <rect
+                id="shadow"
+                class="once shadow-wake"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="animation-delay: 0.2s;"
+              />
+            </svg>
+            """
+        )
+
+        XCTAssertEqual(document.inlineAnimationBindings.count, 1)
+
+        let inlineBinding = try XCTUnwrap(document.inlineAnimationBindings.first)
+        XCTAssertEqual(inlineBinding.animationName, "shadow-wake")
+        XCTAssertEqual(inlineBinding.duration, 3.5, accuracy: 0.0001)
+        XCTAssertEqual(inlineBinding.delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(inlineBinding.fillMode, .forwards)
+        assertIterationCount(inlineBinding.iterationCount, equals: .count(1))
+        XCTAssertEqual(
+            inlineBinding.transformOrigin,
+            SVGTransformOrigin(
+                x: .px(7.5),
+                y: .px(15)
+            )
+        )
+    }
+
+    func testParseFansOutSharedTransformContextAcrossMultipleAnimations() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .multi {
+                  animation: fadeIn 1s linear, slideUp 0.5s ease-out;
+                }
+                .pivot {
+                  transform-origin: 10px 20px;
+                  transform-box: fill-box;
+                }
+                @keyframes fadeIn {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+                @keyframes slideUp {
+                  from { transform: translateY(2px); }
+                  to { transform: translateY(0); }
+                }
+              </style>
+              <rect
+                id="subject"
+                class="multi pivot"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="animation-delay: 0.2s;"
+              />
+            </svg>
+            """
+        )
+
+        let bindings = document.inlineAnimationBindings.sorted { $0.animationName < $1.animationName }
+        XCTAssertEqual(bindings.count, 2)
+
+        XCTAssertEqual(bindings[0].animationName, "fadeIn")
+        XCTAssertEqual(bindings[0].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(
+            bindings[0].transformOrigin,
+            SVGTransformOrigin(
+                x: .px(10),
+                y: .px(20)
+            )
+        )
+        XCTAssertEqual(bindings[0].transformBox, "fill-box")
+
+        XCTAssertEqual(bindings[1].animationName, "slideUp")
+        XCTAssertEqual(bindings[1].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(
+            bindings[1].transformOrigin,
+            SVGTransformOrigin(
+                x: .px(10),
+                y: .px(20)
+            )
+        )
+        XCTAssertEqual(bindings[1].transformBox, "fill-box")
+    }
+
+    func testParseInlineAnimationNameMergesInheritedUtilityDefaults() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .once {
+                  animation-duration: 3.5s;
+                  animation-iteration-count: 1;
+                  animation-fill-mode: forwards;
+                }
+                @keyframes foo {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+              </style>
+              <rect
+                id="shadow"
+                class="once"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="animation-name: foo;"
+              />
+            </svg>
+            """
+        )
+
+        let binding = try XCTUnwrap(document.inlineAnimationBindings.first)
+        XCTAssertEqual(binding.animationName, "foo")
+        XCTAssertEqual(binding.duration, 3.5, accuracy: 0.0001)
+        assertIterationCount(binding.iterationCount, equals: .count(1))
+        XCTAssertEqual(binding.fillMode, .forwards)
+    }
+
+    func testParseInlineAnimationUsesHigherSpecificityLonghandOverrides() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .pulse {
+                  animation-name: pulse;
+                  animation-duration: 1s;
+                  animation-timing-function: linear;
+                }
+                #subject {
+                  animation-duration: 2s;
+                }
+                @keyframes pulse {
+                  from { opacity: 0; }
+                  to { opacity: 1; }
+                }
+              </style>
+              <rect
+                id="subject"
+                class="pulse"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="animation-delay: 0.2s;"
+              />
+            </svg>
+            """
+        )
+
+        let binding = try XCTUnwrap(document.inlineAnimationBindings.first)
+        XCTAssertEqual(binding.animationName, "pulse")
+        XCTAssertEqual(binding.duration, 2, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .linear)
+        XCTAssertEqual(binding.delay, 0.2, accuracy: 0.0001)
+    }
+
+    func testParseResolvesInlineTransitionOverridesFromStyleAttributes() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .hover {
+                  transition: transform 0.2s ease-out 0.1s;
+                }
+              </style>
+              <rect
+                id="hover-target"
+                class="hover"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="transition-duration: 0.5s;"
+              />
+            </svg>
+            """
+        )
+
+        let binding = try XCTUnwrap(document.inlineTransitionBindings.first)
+        XCTAssertEqual(binding.property, "transform")
+        XCTAssertEqual(binding.duration, 0.5, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .easeOut)
+        XCTAssertEqual(binding.delay, 0.1, accuracy: 0.0001)
+        XCTAssertEqual(binding.nodeID, "hover-target")
+    }
+
+    func testParseInlineTransitionPropertyInheritsHigherSpecificityDefaults() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <style>
+                .hover {
+                  transition: transform 0.2s linear;
+                }
+                #subject {
+                  transition: transform 0.5s ease-out 0.1s;
+                }
+              </style>
+              <rect
+                id="subject"
+                class="hover"
+                x="0"
+                y="0"
+                width="1"
+                height="1"
+                style="transition-property: opacity;"
+              />
+            </svg>
+            """
+        )
+
+        let binding = try XCTUnwrap(document.inlineTransitionBindings.first)
+        XCTAssertEqual(binding.property, "opacity")
+        XCTAssertEqual(binding.duration, 0.5, accuracy: 0.0001)
+        assertTimingFunction(binding.timingFunction, equals: .easeOut)
+        XCTAssertEqual(binding.delay, 0.1, accuracy: 0.0001)
+    }
+
+    func testParseSupportsNumericAttributesWithPxAndPercentUnits() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" width="120px" height="80%">
+              <defs>
+                <rect id="tile" x="1" y="2" width="3" height="4" />
+              </defs>
+              <rect id="subject" x=".5px" y="25%" width="3px" height="4%" rx="1.25px" ry=".75" />
+              <circle id="dot" cx=".25px" cy="50%" r="2px" />
+              <use id="clone" href="#tile" x="5px" y="10%" />
+            </svg>
+            """
+        )
+
+        XCTAssertEqual(document.width, 120)
+        XCTAssertEqual(document.height, 80)
+
+        let rect = try rectNode(from: document.rootChildren[0])
+        XCTAssertEqual(rect.x, 0.5)
+        XCTAssertEqual(rect.y, 25)
+        XCTAssertEqual(rect.width, 3)
+        XCTAssertEqual(rect.height, 4)
+        XCTAssertEqual(rect.rx, 1.25)
+        XCTAssertEqual(rect.ry, 0.75)
+
+        let circle = try circleNode(from: document.rootChildren[1])
+        XCTAssertEqual(circle.cx, 0.25)
+        XCTAssertEqual(circle.cy, 50)
+        XCTAssertEqual(circle.r, 2)
+
+        let use = try useNode(from: document.rootChildren[2])
+        XCTAssertEqual(use.x, 5)
+        XCTAssertEqual(use.y, 10)
+    }
+
+    func testWorkingPushingSVGPreservesAlternateAnimationDirection() throws {
+        let document = SVGParser.parse(try loadSVG("clawd-working-pushing"))
+
+        let actionBody = try XCTUnwrap(animationBinding(in: document.animationBindings, className: "action-body"))
+        assertAnimationDirection(actionBody.direction, equals: .alternate)
+
+        let blockShake = try XCTUnwrap(animationBinding(in: document.animationBindings, className: "block-shake"))
+        assertAnimationDirection(blockShake.direction, equals: .alternate)
+    }
 }
 
 private enum SVGNodeTypeError: Error {
@@ -699,12 +1434,20 @@ private enum ExpectedTimingFunction {
     case linear
     case easeOut
     case easeIn
+    case stepEnd
     case cubicBezier(CGFloat, CGFloat, CGFloat, CGFloat)
 }
 
 private enum ExpectedIterationCount {
     case infinite
-    case count(Int)
+    case count(Double)
+}
+
+private enum ExpectedAnimationDirection {
+    case normal
+    case reverse
+    case alternate
+    case alternateReverse
 }
 
 private func assertSelector(
@@ -730,7 +1473,8 @@ private func assertTimingFunction(
     case (.easeInOut, .easeInOut),
          (.linear, .linear),
          (.easeOut, .easeOut),
-         (.easeIn, .easeIn):
+         (.easeIn, .easeIn),
+         (.stepEnd, .stepEnd):
         return
     case let (.cubicBezier(a1, b1, c1, d1), .cubicBezier(a2, b2, c2, d2)):
         XCTAssertEqual(a1, a2, accuracy: 0.0001, file: file, line: line)
@@ -752,9 +1496,74 @@ private func assertIterationCount(
     case (.infinite, .infinite):
         return
     case let (.count(actualValue), .count(expectedValue)):
-        XCTAssertEqual(actualValue, expectedValue, file: file, line: line)
+        XCTAssertEqual(actualValue, expectedValue, accuracy: 0.0001, file: file, line: line)
     default:
         XCTFail("Unexpected iteration count.", file: file, line: line)
+    }
+}
+
+private func assertAnimationDirection(
+    _ actual: AnimationDirection,
+    equals expected: ExpectedAnimationDirection,
+    file: StaticString = #filePath,
+    line: UInt = #line
+) {
+    switch (actual, expected) {
+    case (.normal, .normal),
+         (.reverse, .reverse),
+         (.alternate, .alternate),
+         (.alternateReverse, .alternateReverse):
+        return
+    default:
+        XCTFail("Unexpected animation direction.", file: file, line: line)
+    }
+}
+
+private func animationBinding(
+    in bindings: [SVGAnimationBinding],
+    className: String
+) -> SVGAnimationBinding? {
+    bindings.first { binding in
+        guard case .className(let name) = binding.selector else {
+            return false
+        }
+        return name == className
+    }
+}
+
+private func staticStyleBinding(
+    in bindings: [SVGStaticStyleBinding],
+    className: String
+) -> SVGStaticStyleBinding? {
+    bindings.first { binding in
+        guard case .className(let name) = binding.selector else {
+            return false
+        }
+        return name == className
+    }
+}
+
+private func staticStyleBinding(
+    in bindings: [SVGStaticStyleBinding],
+    id: String
+) -> SVGStaticStyleBinding? {
+    bindings.first { binding in
+        guard case .id(let name) = binding.selector else {
+            return false
+        }
+        return name == id
+    }
+}
+
+private func animationStyleBinding(
+    in bindings: [SVGAnimationStyleBinding],
+    className: String
+) -> SVGAnimationStyleBinding? {
+    bindings.first { binding in
+        guard case .className(let name) = binding.selector else {
+            return false
+        }
+        return name == className
     }
 }
 
@@ -852,7 +1661,7 @@ private enum SVGNodeKind {
 }
 
 private func totalNodeCount(in document: SVGDocument) -> Int {
-    totalNodeCount(in: document.rootChildren) + totalNodeCount(in: Array(document.defs.values))
+    totalNodeCount(in: document.rootChildren) + totalNodeCount(in: document.defsChildren)
 }
 
 private func totalNodeCount(in nodes: [SVGNode]) -> Int {
@@ -883,6 +1692,40 @@ private func childNodes(of node: SVGNode) -> [SVGNode] {
     case .clipPath(let clipPath):
         return clipPath.children
     case .rect, .use, .circle, .ellipse, .line, .path, .polygon, .polyline:
+        return []
+    }
+}
+
+private func collectRects(in nodes: [SVGNode]) -> [SVGRect] {
+    nodes.flatMap(collectRects(in:))
+}
+
+private func collectRects(in node: SVGNode) -> [SVGRect] {
+    switch node {
+    case .rect(let rect):
+        return [rect]
+    case .group(let group):
+        return collectRects(in: group.children)
+    case .clipPath(let clipPath):
+        return collectRects(in: clipPath.children)
+    case .use, .circle, .ellipse, .line, .path, .polygon, .polyline:
+        return []
+    }
+}
+
+private func collectUses(in nodes: [SVGNode]) -> [SVGUse] {
+    nodes.flatMap(collectUses(in:))
+}
+
+private func collectUses(in node: SVGNode) -> [SVGUse] {
+    switch node {
+    case .use(let use):
+        return [use]
+    case .group(let group):
+        return collectUses(in: group.children)
+    case .clipPath(let clipPath):
+        return collectUses(in: clipPath.children)
+    case .rect, .circle, .ellipse, .line, .path, .polygon, .polyline:
         return []
     }
 }

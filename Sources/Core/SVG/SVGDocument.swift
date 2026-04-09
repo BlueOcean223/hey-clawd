@@ -5,11 +5,40 @@ struct SVGDocument: Sendable {
     var viewBox: SVGViewBox?
     var width: CGFloat?
     var height: CGFloat?
+    var shapeRendering: String?
+    var defsChildren: [SVGNode]
     var defs: [String: SVGNode]
     var rootChildren: [SVGNode]
     var animations: [String: SVGAnimation]
+    var staticStyleBindings: [SVGStaticStyleBinding]
     var animationBindings: [SVGAnimationBinding]
+    var animationStyleBindings: [SVGAnimationStyleBinding]
+    var inlineAnimationBindings: [SVGInlineAnimationBinding]
     var transitions: [SVGTransitionBinding]
+    var inlineTransitionBindings: [SVGInlineTransitionBinding]
+
+    func referencedNode(for use: SVGUse) -> SVGNode? {
+        referencedNode(for: use.href)
+    }
+
+    func referencedNode(for href: String) -> SVGNode? {
+        guard let targetID = referencedDefID(from: href) else {
+            return nil
+        }
+        return defs[targetID]
+    }
+
+    private func referencedDefID(from href: String) -> String? {
+        let trimmed = href.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+        if trimmed.hasPrefix("#") {
+            let targetID = String(trimmed.dropFirst())
+            return targetID.isEmpty ? nil : targetID
+        }
+        return trimmed
+    }
 }
 
 struct SVGViewBox: Sendable {
@@ -54,7 +83,10 @@ struct SVGRect: Sendable {
     var height: CGFloat?
     var rx: CGFloat?
     var ry: CGFloat?
+    var transform: String?
     var fill: String?
+    var stroke: String?
+    var strokeWidth: CGFloat?
     var opacity: CGFloat?
 }
 
@@ -64,6 +96,7 @@ struct SVGUse: Sendable {
     var inlineStyles: [String: String]
     var clipPathRef: String?
     var href: String
+    var transform: String?
     var fill: String?
     var x: CGFloat?
     var y: CGFloat?
@@ -163,16 +196,58 @@ struct SVGKeyframe: Sendable {
     var properties: [String: String]
 }
 
+struct SVGStaticStyleBinding: Sendable {
+    var selector: CSSSelector
+    var properties: [String: String]
+}
+
 struct SVGAnimationBinding: Sendable {
     var selector: CSSSelector
     var animationName: String
     var duration: TimeInterval
     var timingFunction: TimingFunction
     var iterationCount: AnimationIterationCount
+    var direction: AnimationDirection
     var delay: TimeInterval
     var fillMode: AnimationFillMode
-    var transformOrigin: CGPoint?
+    var transformOrigin: SVGTransformOrigin?
     var transformBox: String?
+}
+
+struct SVGAnimationStyleBinding: Sendable {
+    var selector: CSSSelector
+    var animationName: String?
+    var duration: TimeInterval?
+    var timingFunction: TimingFunction?
+    var iterationCount: AnimationIterationCount?
+    var direction: AnimationDirection?
+    var delay: TimeInterval?
+    var fillMode: AnimationFillMode?
+    var transformOrigin: SVGTransformOrigin?
+    var transformBox: String?
+}
+
+struct SVGNodeTarget: Sendable, Equatable {
+    var nodePath: String
+    var nodeID: String?
+    var classes: [String]
+}
+
+struct SVGInlineAnimationBinding: Sendable {
+    var target: SVGNodeTarget
+    var animationName: String
+    var duration: TimeInterval
+    var timingFunction: TimingFunction
+    var iterationCount: AnimationIterationCount
+    var direction: AnimationDirection
+    var delay: TimeInterval
+    var fillMode: AnimationFillMode
+    var transformOrigin: SVGTransformOrigin?
+    var transformBox: String?
+
+    var nodePath: String { target.nodePath }
+    var nodeID: String? { target.nodeID }
+    var classes: [String] { target.classes }
 }
 
 struct SVGTransitionBinding: Sendable {
@@ -180,6 +255,19 @@ struct SVGTransitionBinding: Sendable {
     var property: String
     var duration: TimeInterval
     var timingFunction: TimingFunction
+    var delay: TimeInterval
+}
+
+struct SVGInlineTransitionBinding: Sendable {
+    var target: SVGNodeTarget
+    var property: String
+    var duration: TimeInterval
+    var timingFunction: TimingFunction
+    var delay: TimeInterval
+
+    var nodePath: String { target.nodePath }
+    var nodeID: String? { target.nodeID }
+    var classes: [String] { target.classes }
 }
 
 enum CSSSelector: Sendable {
@@ -192,12 +280,20 @@ enum TimingFunction: Sendable {
     case linear
     case easeOut
     case easeIn
+    case stepEnd
     case cubicBezier(CGFloat, CGFloat, CGFloat, CGFloat)
 }
 
 enum AnimationIterationCount: Sendable {
     case infinite
-    case count(Int)
+    case count(Double)
+}
+
+enum AnimationDirection: Sendable {
+    case normal
+    case reverse
+    case alternate
+    case alternateReverse
 }
 
 enum AnimationFillMode: Sendable {
@@ -205,4 +301,14 @@ enum AnimationFillMode: Sendable {
     case forwards
     case backwards
     case both
+}
+
+struct SVGTransformOrigin: Sendable, Equatable {
+    var x: SVGTransformOriginComponent
+    var y: SVGTransformOriginComponent
+}
+
+enum SVGTransformOriginComponent: Sendable, Equatable {
+    case px(CGFloat)
+    case percent(CGFloat)
 }

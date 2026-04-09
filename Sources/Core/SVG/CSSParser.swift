@@ -4,9 +4,13 @@ import CoreGraphics
 enum CSSParser {
     struct CSSResult: Sendable {
         var animations: [String: SVGAnimation] = [:]
+        var staticStyleBindings: [SVGStaticStyleBinding] = []
         var animationBindings: [SVGAnimationBinding] = []
+        var animationStyleBindings: [SVGAnimationStyleBinding] = []
         var transitions: [SVGTransitionBinding] = []
     }
+
+    static let defaultTimingFunction: TimingFunction = .cubicBezier(0.25, 0.1, 0.25, 1)
 
     static func parse(_ styleBlocks: [String]) -> CSSResult {
         let combined = stripComments(styleBlocks.joined(separator: "\n"))
@@ -58,6 +62,146 @@ enum CSSParser {
 
         return result
     }
+
+    static func resolveInlineAnimationBindings(
+        from declarations: [String: String],
+        inheritedBindings: [SVGAnimationBinding],
+        target: SVGNodeTarget
+    ) -> [SVGInlineAnimationBinding] {
+        let hasAnimationNameInfo = declarations["animation"] != nil || declarations["animation-name"] != nil
+        let namedInheritedBindings = inheritedBindings.filter { !$0.animationName.isEmpty }
+        let anonymousInheritedBindings = inheritedBindings.filter(\.animationName.isEmpty)
+        let hasAnimationOverrides = declarations.keys.contains { isAnimationOverrideProperty($0) }
+
+        if hasAnimationNameInfo {
+            let transformOrigin = declarations["transform-origin"].flatMap(parseTransformOrigin)
+            let transformBox = declarations["transform-box"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            return parseAnimationStyleBindings(
+                declarations: declarations,
+                transformOrigin: transformOrigin,
+                transformBox: transformBox
+            ).enumerated().compactMap { index, template in
+                guard let animationName = template.animationName else {
+                    return nil
+                }
+
+                let baseBinding = namedInheritedBindings.first { $0.animationName == animationName }
+                    ?? indexedBinding(in: anonymousInheritedBindings, at: index)
+
+                return SVGInlineAnimationBinding(
+                    target: target,
+                    animationName: animationName,
+                    duration: template.duration ?? baseBinding?.duration ?? 0,
+                    timingFunction: template.timingFunction ?? baseBinding?.timingFunction ?? defaultTimingFunction,
+                    iterationCount: template.iterationCount ?? baseBinding?.iterationCount ?? .count(1),
+                    direction: template.direction ?? baseBinding?.direction ?? .normal,
+                    delay: template.delay ?? baseBinding?.delay ?? 0,
+                    fillMode: template.fillMode ?? baseBinding?.fillMode ?? .none,
+                    transformOrigin: template.transformOrigin ?? baseBinding?.transformOrigin,
+                    transformBox: template.transformBox ?? baseBinding?.transformBox
+                )
+            }
+        }
+
+        guard hasAnimationOverrides, !namedInheritedBindings.isEmpty else {
+            return []
+        }
+
+        let transformOriginOverride = declarations["transform-origin"].flatMap(parseTransformOrigin)
+        let transformBoxOverride = nonEmpty(declarations["transform-box"])
+        let shorthandValues = commaSeparatedValues(for: declarations["animation"])
+        let names = commaSeparatedValues(for: declarations["animation-name"])
+        let durations = commaSeparatedValues(for: declarations["animation-duration"])
+        let timingFunctions = commaSeparatedValues(for: declarations["animation-timing-function"])
+        let iterationCounts = commaSeparatedValues(for: declarations["animation-iteration-count"])
+        let directions = commaSeparatedValues(for: declarations["animation-direction"])
+        let delays = commaSeparatedValues(for: declarations["animation-delay"])
+        let fillModes = commaSeparatedValues(for: declarations["animation-fill-mode"])
+
+        return namedInheritedBindings.enumerated().map { index, binding in
+            let shorthand = indexedValue(in: shorthandValues, at: index)
+            let parsedShorthand = shorthand.map(parseAnimationShorthand) ?? ParsedAnimationShorthand()
+
+            let animationName = nonEmpty(indexedValue(in: names, at: index) ?? parsedShorthand.name) ?? binding.animationName
+            let duration = parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration) ?? binding.duration
+            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? binding.timingFunction
+            let iterationCount = parseIterationCount(indexedValue(in: iterationCounts, at: index) ?? parsedShorthand.iterationCount) ?? binding.iterationCount
+            let direction = parseDirection(indexedValue(in: directions, at: index) ?? parsedShorthand.direction) ?? binding.direction
+            let delay = parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay) ?? binding.delay
+            let fillMode = parseFillMode(indexedValue(in: fillModes, at: index) ?? parsedShorthand.fillMode) ?? binding.fillMode
+
+            return SVGInlineAnimationBinding(
+                target: target,
+                animationName: animationName,
+                duration: duration,
+                timingFunction: timingFunction,
+                iterationCount: iterationCount,
+                direction: direction,
+                delay: delay,
+                fillMode: fillMode,
+                transformOrigin: transformOriginOverride ?? binding.transformOrigin,
+                transformBox: transformBoxOverride ?? binding.transformBox
+            )
+        }
+    }
+
+    static func parseInlineDeclarations(_ source: String) -> [String: String] {
+        parseDeclarations(source)
+    }
+
+    static func resolveInlineTransitionBindings(
+        from declarations: [String: String],
+        inheritedBindings: [SVGTransitionBinding],
+        target: SVGNodeTarget
+    ) -> [SVGInlineTransitionBinding] {
+        let hasTransitionNameInfo = declarations["transition"] != nil || declarations["transition-property"] != nil
+        let hasTransitionOverrides = declarations.keys.contains { isTransitionOverrideProperty($0) }
+
+        if hasTransitionNameInfo {
+            return parseTransitionStyleBindings(declarations: declarations).enumerated().map { index, template in
+                let baseBinding = template.property.flatMap { property in
+                    inheritedBindings.first { $0.property == property }
+                } ?? indexedTransitionBinding(in: inheritedBindings, at: index)
+
+                return SVGInlineTransitionBinding(
+                    target: target,
+                    property: template.property ?? baseBinding?.property ?? "all",
+                    duration: template.duration ?? baseBinding?.duration ?? 0,
+                    timingFunction: template.timingFunction ?? baseBinding?.timingFunction ?? defaultTimingFunction,
+                    delay: template.delay ?? baseBinding?.delay ?? 0
+                )
+            }
+        }
+
+        guard hasTransitionOverrides, !inheritedBindings.isEmpty else {
+            return []
+        }
+
+        let shorthandValues = commaSeparatedValues(for: declarations["transition"])
+        let properties = commaSeparatedValues(for: declarations["transition-property"])
+        let durations = commaSeparatedValues(for: declarations["transition-duration"])
+        let timingFunctions = commaSeparatedValues(for: declarations["transition-timing-function"])
+        let delays = commaSeparatedValues(for: declarations["transition-delay"])
+
+        return inheritedBindings.enumerated().map { index, binding in
+            let shorthand = indexedValue(in: shorthandValues, at: index)
+            let parsedShorthand = shorthand.map(parseTransitionShorthand) ?? ParsedTransitionShorthand()
+
+            let property = nonEmpty(indexedValue(in: properties, at: index) ?? parsedShorthand.property) ?? binding.property
+            let duration = parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration) ?? binding.duration
+            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? binding.timingFunction
+            let delay = parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay) ?? binding.delay
+
+            return SVGInlineTransitionBinding(
+                target: target,
+                property: property,
+                duration: duration,
+                timingFunction: timingFunction,
+                delay: delay
+            )
+        }
+    }
 }
 
 private extension CSSParser {
@@ -71,9 +215,22 @@ private extension CSSParser {
         var duration: TimeInterval
         var timingFunction: TimingFunction
         var iterationCount: AnimationIterationCount
+        var direction: AnimationDirection
         var delay: TimeInterval
         var fillMode: AnimationFillMode
-        var transformOrigin: CGPoint?
+        var transformOrigin: SVGTransformOrigin?
+        var transformBox: String?
+    }
+
+    struct AnimationStyleTemplate: Sendable {
+        var animationName: String?
+        var duration: TimeInterval?
+        var timingFunction: TimingFunction?
+        var iterationCount: AnimationIterationCount?
+        var direction: AnimationDirection?
+        var delay: TimeInterval?
+        var fillMode: AnimationFillMode?
+        var transformOrigin: SVGTransformOrigin?
         var transformBox: String?
     }
 
@@ -81,6 +238,14 @@ private extension CSSParser {
         var property: String
         var duration: TimeInterval
         var timingFunction: TimingFunction
+        var delay: TimeInterval
+    }
+
+    struct TransitionStyleTemplate: Sendable {
+        var property: String?
+        var duration: TimeInterval?
+        var timingFunction: TimingFunction?
+        var delay: TimeInterval?
     }
 
     struct ParsedAnimationShorthand: Sendable {
@@ -88,6 +253,7 @@ private extension CSSParser {
         var duration: String?
         var timingFunction: String?
         var iterationCount: String?
+        var direction: String?
         var delay: String?
         var fillMode: String?
     }
@@ -119,7 +285,42 @@ private extension CSSParser {
 
         let transformOrigin = declarations["transform-origin"].flatMap(parseTransformOrigin)
         let transformBox = declarations["transform-box"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let _ = staticRuleProperties(from: declarations)
+        let staticProperties = staticRuleProperties(from: declarations)
+
+        if !staticProperties.isEmpty {
+            for selector in selectors {
+                result.staticStyleBindings.append(
+                    SVGStaticStyleBinding(
+                        selector: selector,
+                        properties: staticProperties
+                    )
+                )
+            }
+        }
+
+        let animationStyleTemplates = parseAnimationStyleBindings(
+            declarations: declarations,
+            transformOrigin: transformOrigin,
+            transformBox: transformBox
+        )
+        for selector in selectors {
+            for template in animationStyleTemplates {
+                result.animationStyleBindings.append(
+                    SVGAnimationStyleBinding(
+                        selector: selector,
+                        animationName: template.animationName,
+                        duration: template.duration,
+                        timingFunction: template.timingFunction,
+                        iterationCount: template.iterationCount,
+                        direction: template.direction,
+                        delay: template.delay,
+                        fillMode: template.fillMode,
+                        transformOrigin: template.transformOrigin,
+                        transformBox: template.transformBox
+                    )
+                )
+            }
+        }
 
         let animationTemplates = parseAnimationBindings(
             declarations: declarations,
@@ -135,6 +336,7 @@ private extension CSSParser {
                         duration: template.duration,
                         timingFunction: template.timingFunction,
                         iterationCount: template.iterationCount,
+                        direction: template.direction,
                         delay: template.delay,
                         fillMode: template.fillMode,
                         transformOrigin: template.transformOrigin,
@@ -152,7 +354,8 @@ private extension CSSParser {
                         selector: selector,
                         property: template.property,
                         duration: template.duration,
-                        timingFunction: template.timingFunction
+                        timingFunction: template.timingFunction,
+                        delay: template.delay
                     )
                 )
             }
@@ -182,7 +385,7 @@ private extension CSSParser {
 
     static func parseAnimationBindings(
         declarations: [String: String],
-        transformOrigin: CGPoint?,
+        transformOrigin: SVGTransformOrigin?,
         transformBox: String?
     ) -> [AnimationTemplate] {
         let shorthandValues = commaSeparatedValues(for: declarations["animation"])
@@ -190,6 +393,7 @@ private extension CSSParser {
         let durations = commaSeparatedValues(for: declarations["animation-duration"])
         let timingFunctions = commaSeparatedValues(for: declarations["animation-timing-function"])
         let iterationCounts = commaSeparatedValues(for: declarations["animation-iteration-count"])
+        let directions = commaSeparatedValues(for: declarations["animation-direction"])
         let delays = commaSeparatedValues(for: declarations["animation-delay"])
         let fillModes = commaSeparatedValues(for: declarations["animation-fill-mode"])
 
@@ -199,6 +403,7 @@ private extension CSSParser {
             durations.count,
             timingFunctions.count,
             iterationCounts.count,
+            directions.count,
             delays.count,
             fillModes.count
         )
@@ -219,8 +424,9 @@ private extension CSSParser {
             }
 
             let duration = parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration) ?? 0
-            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? .easeInOut
+            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? defaultTimingFunction
             let iterationCount = parseIterationCount(indexedValue(in: iterationCounts, at: index) ?? parsedShorthand.iterationCount) ?? .count(1)
+            let direction = parseDirection(indexedValue(in: directions, at: index) ?? parsedShorthand.direction) ?? .normal
             let delay = parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay) ?? 0
             let fillMode = parseFillMode(indexedValue(in: fillModes, at: index) ?? parsedShorthand.fillMode) ?? .none
 
@@ -230,12 +436,79 @@ private extension CSSParser {
                     duration: duration,
                     timingFunction: timingFunction,
                     iterationCount: iterationCount,
+                    direction: direction,
                     delay: delay,
                     fillMode: fillMode,
                     transformOrigin: transformOrigin,
                     transformBox: nonEmpty(transformBox)
                 )
             )
+        }
+
+        return bindings
+    }
+
+    static func parseAnimationStyleBindings(
+        declarations: [String: String],
+        transformOrigin: SVGTransformOrigin?,
+        transformBox: String?
+    ) -> [AnimationStyleTemplate] {
+        let shorthandValues = commaSeparatedValues(for: declarations["animation"])
+        let names = commaSeparatedValues(for: declarations["animation-name"])
+        let durations = commaSeparatedValues(for: declarations["animation-duration"])
+        let timingFunctions = commaSeparatedValues(for: declarations["animation-timing-function"])
+        let iterationCounts = commaSeparatedValues(for: declarations["animation-iteration-count"])
+        let directions = commaSeparatedValues(for: declarations["animation-direction"])
+        let delays = commaSeparatedValues(for: declarations["animation-delay"])
+        let fillModes = commaSeparatedValues(for: declarations["animation-fill-mode"])
+        let hasTransformContext = transformOrigin != nil || nonEmpty(transformBox) != nil
+
+        let bindingCount = max(
+            shorthandValues.count,
+            names.count,
+            durations.count,
+            timingFunctions.count,
+            iterationCounts.count,
+            directions.count,
+            delays.count,
+            fillModes.count,
+            hasTransformContext ? 1 : 0
+        )
+
+        guard bindingCount > 0 else {
+            return []
+        }
+
+        var bindings: [AnimationStyleTemplate] = []
+        bindings.reserveCapacity(bindingCount)
+
+        for index in 0..<bindingCount {
+            let shorthand = indexedValue(in: shorthandValues, at: index)
+            let parsedShorthand = shorthand.map(parseAnimationShorthand) ?? ParsedAnimationShorthand()
+
+            let binding = AnimationStyleTemplate(
+                animationName: nonEmpty(indexedValue(in: names, at: index) ?? parsedShorthand.name),
+                duration: parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration),
+                timingFunction: parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction),
+                iterationCount: parseIterationCount(indexedValue(in: iterationCounts, at: index) ?? parsedShorthand.iterationCount),
+                direction: parseDirection(indexedValue(in: directions, at: index) ?? parsedShorthand.direction),
+                delay: parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay),
+                fillMode: parseFillMode(indexedValue(in: fillModes, at: index) ?? parsedShorthand.fillMode),
+                transformOrigin: transformOrigin,
+                transformBox: nonEmpty(transformBox)
+            )
+
+            if binding.animationName != nil ||
+                binding.duration != nil ||
+                binding.timingFunction != nil ||
+                binding.iterationCount != nil ||
+                binding.direction != nil ||
+                binding.delay != nil ||
+                binding.fillMode != nil ||
+                binding.transformOrigin != nil ||
+                binding.transformBox != nil {
+                bindings.append(binding)
+            }
         }
 
         return bindings
@@ -254,6 +527,8 @@ private extension CSSParser {
                 continue
             }
 
+            // CSS animation shorthand consumes ambiguous keywords as other subproperties
+            // before they can be treated as a keyframes name.
             if isTimingFunctionToken(token), result.timingFunction == nil {
                 result.timingFunction = token
                 continue
@@ -264,12 +539,17 @@ private extension CSSParser {
                 continue
             }
 
+            if isDirectionToken(token), result.direction == nil {
+                result.direction = token
+                continue
+            }
+
             if isFillModeToken(token), result.fillMode == nil {
                 result.fillMode = token
                 continue
             }
 
-            if isDirectionToken(token) || isPlayStateToken(token) {
+            if isPlayStateToken(token) {
                 continue
             }
 
@@ -312,16 +592,61 @@ private extension CSSParser {
             }
 
             let duration = parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration) ?? 0
-            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? .easeInOut
-            _ = parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay)
+            let timingFunction = parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction) ?? defaultTimingFunction
+            let delay = parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay) ?? 0
 
             bindings.append(
                 TransitionTemplate(
                     property: property,
                     duration: duration,
-                    timingFunction: timingFunction
+                    timingFunction: timingFunction,
+                    delay: delay
                 )
             )
+        }
+
+        return bindings
+    }
+
+    static func parseTransitionStyleBindings(declarations: [String: String]) -> [TransitionStyleTemplate] {
+        let shorthandValues = commaSeparatedValues(for: declarations["transition"])
+        let properties = commaSeparatedValues(for: declarations["transition-property"])
+        let durations = commaSeparatedValues(for: declarations["transition-duration"])
+        let timingFunctions = commaSeparatedValues(for: declarations["transition-timing-function"])
+        let delays = commaSeparatedValues(for: declarations["transition-delay"])
+
+        let bindingCount = max(
+            shorthandValues.count,
+            properties.count,
+            durations.count,
+            timingFunctions.count,
+            delays.count
+        )
+
+        guard bindingCount > 0 else {
+            return []
+        }
+
+        var bindings: [TransitionStyleTemplate] = []
+        bindings.reserveCapacity(bindingCount)
+
+        for index in 0..<bindingCount {
+            let shorthand = indexedValue(in: shorthandValues, at: index)
+            let parsedShorthand = shorthand.map(parseTransitionShorthand) ?? ParsedTransitionShorthand()
+
+            let binding = TransitionStyleTemplate(
+                property: nonEmpty(indexedValue(in: properties, at: index) ?? parsedShorthand.property),
+                duration: parseTime(indexedValue(in: durations, at: index) ?? parsedShorthand.duration),
+                timingFunction: parseTimingFunction(indexedValue(in: timingFunctions, at: index) ?? parsedShorthand.timingFunction),
+                delay: parseTime(indexedValue(in: delays, at: index) ?? parsedShorthand.delay)
+            )
+
+            if binding.property != nil ||
+                binding.duration != nil ||
+                binding.timingFunction != nil ||
+                binding.delay != nil {
+                bindings.append(binding)
+            }
         }
 
         return bindings
@@ -437,17 +762,42 @@ private extension CSSParser {
     static func staticRuleProperties(from declarations: [String: String]) -> [String: String] {
         var properties: [String: String] = [:]
 
-        if let visibility = declarations["visibility"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !visibility.isEmpty {
-            properties["visibility"] = visibility
-        }
+        for (property, value) in declarations {
+            guard shouldPreserveStaticProperty(property) else {
+                continue
+            }
 
-        if let opacity = declarations["opacity"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !opacity.isEmpty {
-            properties["opacity"] = opacity
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                properties[property] = trimmed
+            }
         }
 
         return properties
+    }
+
+    static func shouldPreserveStaticProperty(_ property: String) -> Bool {
+        if property.hasPrefix("animation-") || property == "animation" {
+            return false
+        }
+
+        if property.hasPrefix("transition-") || property == "transition" {
+            return false
+        }
+
+        return true
+    }
+
+    static func isAnimationOverrideProperty(_ property: String) -> Bool {
+        if property == "transform-origin" || property == "transform-box" {
+            return true
+        }
+
+        return property == "animation" || property.hasPrefix("animation-")
+    }
+
+    static func isTransitionOverrideProperty(_ property: String) -> Bool {
+        property == "transition" || property.hasPrefix("transition-")
     }
 
     static func parseTimingFunction(_ rawValue: String?) -> TimingFunction? {
@@ -464,6 +814,8 @@ private extension CSSParser {
             return .easeOut
         case "ease-in":
             return .easeIn
+        case "step-end":
+            return .stepEnd
         case "ease":
             return .cubicBezier(0.25, 0.1, 0.25, 1)
         default:
@@ -499,14 +851,33 @@ private extension CSSParser {
         }
 
         if let intValue = Int(trimmed) {
-            return .count(intValue)
+            return .count(Double(intValue))
         }
 
         if let doubleValue = Double(trimmed), doubleValue.isFinite {
-            return .count(Int(doubleValue.rounded()))
+            return .count(doubleValue)
         }
 
         return nil
+    }
+
+    static func parseDirection(_ rawValue: String?) -> AnimationDirection? {
+        guard let trimmed = nonEmpty(rawValue)?.lowercased() else {
+            return nil
+        }
+
+        switch trimmed {
+        case "normal":
+            return .normal
+        case "reverse":
+            return .reverse
+        case "alternate":
+            return .alternate
+        case "alternate-reverse":
+            return .alternateReverse
+        default:
+            return nil
+        }
     }
 
     static func parseFillMode(_ rawValue: String?) -> AnimationFillMode? {
@@ -528,7 +899,7 @@ private extension CSSParser {
         }
     }
 
-    static func parseTransformOrigin(_ rawValue: String) -> CGPoint? {
+    static func parseTransformOrigin(_ rawValue: String) -> SVGTransformOrigin? {
         let tokens = splitWhitespaceAware(rawValue)
         guard !tokens.isEmpty else {
             return nil
@@ -540,14 +911,14 @@ private extension CSSParser {
                 guard let y = originComponent(from: token, axis: .vertical) else {
                     return nil
                 }
-                return CGPoint(x: 50, y: y)
+                return SVGTransformOrigin(x: .percent(50), y: y)
             }
 
             guard let x = originComponent(from: token, axis: .horizontal) ?? originComponent(from: token, axis: .vertical) else {
                 return nil
             }
-            let y = token == "center" ? x : CGFloat(50)
-            return CGPoint(x: x, y: y)
+            let y = token == "center" ? x : SVGTransformOriginComponent.percent(50)
+            return SVGTransformOrigin(x: x, y: y)
         }
 
         let first = tokens[0].lowercased()
@@ -559,7 +930,7 @@ private extension CSSParser {
             else {
                 return nil
             }
-            return CGPoint(x: x, y: y)
+            return SVGTransformOrigin(x: x, y: y)
         }
 
         guard let x = originComponent(from: first, axis: .horizontal) ?? originComponent(from: first, axis: .vertical),
@@ -568,7 +939,7 @@ private extension CSSParser {
             return nil
         }
 
-        return CGPoint(x: x, y: y)
+        return SVGTransformOrigin(x: x, y: y)
     }
 
     static func parseTime(_ rawValue: String?) -> TimeInterval? {
@@ -611,6 +982,32 @@ private extension CSSParser {
         }
         if values.count == 1 {
             return values[0]
+        }
+        return nil
+    }
+
+    static func indexedBinding(in bindings: [SVGAnimationBinding], at index: Int) -> SVGAnimationBinding? {
+        guard !bindings.isEmpty else {
+            return nil
+        }
+        if index < bindings.count {
+            return bindings[index]
+        }
+        if bindings.count == 1 {
+            return bindings[0]
+        }
+        return nil
+    }
+
+    static func indexedTransitionBinding(in bindings: [SVGTransitionBinding], at index: Int) -> SVGTransitionBinding? {
+        guard !bindings.isEmpty else {
+            return nil
+        }
+        if index < bindings.count {
+            return bindings[index]
+        }
+        if bindings.count == 1 {
+            return bindings[0]
         }
         return nil
     }
@@ -865,12 +1262,7 @@ private extension CSSParser {
     }
 
     static func isDirectionToken(_ token: String) -> Bool {
-        switch token.lowercased() {
-        case "normal", "reverse", "alternate", "alternate-reverse":
-            return true
-        default:
-            return false
-        }
+        parseDirection(token) != nil
     }
 
     static func isPlayStateToken(_ token: String) -> Bool {
@@ -896,32 +1288,38 @@ private extension CSSParser {
         case vertical
     }
 
-    static func originComponent(from token: String, axis: OriginAxis) -> CGFloat? {
+    static func originComponent(from token: String, axis: OriginAxis) -> SVGTransformOriginComponent? {
         let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         switch trimmed {
         case "left" where axis == .horizontal:
-            return 0
+            return .percent(0)
         case "right" where axis == .horizontal:
-            return 100
+            return .percent(100)
         case "top" where axis == .vertical:
-            return 0
+            return .percent(0)
         case "bottom" where axis == .vertical:
-            return 100
+            return .percent(100)
         case "center":
-            return 50
+            return .percent(50)
         default:
             break
         }
 
         if trimmed.hasSuffix("px") {
-            return Double(String(trimmed[..<trimmed.index(trimmed.endIndex, offsetBy: -2)])).map { CGFloat($0) }
+            return Double(String(trimmed[..<trimmed.index(trimmed.endIndex, offsetBy: -2)])).map {
+                SVGTransformOriginComponent.px(CGFloat($0))
+            }
         }
 
         if trimmed.hasSuffix("%") {
-            return Double(String(trimmed[..<trimmed.index(before: trimmed.endIndex)])).map { CGFloat($0) }
+            return Double(String(trimmed[..<trimmed.index(before: trimmed.endIndex)])).map {
+                SVGTransformOriginComponent.percent(CGFloat($0))
+            }
         }
 
-        return Double(trimmed).map { CGFloat($0) }
+        return Double(trimmed).map {
+            SVGTransformOriginComponent.px(CGFloat($0))
+        }
     }
 }

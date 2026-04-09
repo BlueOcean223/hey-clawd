@@ -6,12 +6,19 @@ enum SVGParser {
         var viewBox: SVGViewBox?
         var width: CGFloat?
         var height: CGFloat?
+        var shapeRendering: String?
+        var parseErrorDescription: String?
+        var defsChildren: [SVGNode] = []
         var defs: [String: SVGNode] = [:]
         var rootChildren: [SVGNode] = []
         var styleBlocks: [String] = []
     }
 
     static func parseXML(_ svgString: String) -> XMLResult {
+        guard !svgString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return XMLResult()
+        }
+
         guard let data = svgString.data(using: .utf8) else {
             return XMLResult()
         }
@@ -19,7 +26,12 @@ enum SVGParser {
         let delegate = XMLTreeBuilder()
         let parser = XMLParser(data: data)
         parser.delegate = delegate
-        parser.parse()
+        guard parser.parse() else {
+            let description = parser.parserError?.localizedDescription ?? "Malformed SVG XML."
+            logWarning("SVGParser: failed to parse XML (\(description))")
+            return XMLResult(parseErrorDescription: description)
+        }
+
         return delegate.result
     }
 
@@ -27,24 +39,261 @@ enum SVGParser {
         let xmlResult = parseXML(svgString)
         let cssResult = CSSParser.parse(xmlResult.styleBlocks)
 
-        let document = SVGDocument(
+        var document = SVGDocument(
             viewBox: xmlResult.viewBox,
             width: xmlResult.width,
             height: xmlResult.height,
+            shapeRendering: xmlResult.shapeRendering,
+            defsChildren: xmlResult.defsChildren,
             defs: xmlResult.defs,
             rootChildren: xmlResult.rootChildren,
             animations: cssResult.animations,
+            staticStyleBindings: cssResult.staticStyleBindings,
             animationBindings: cssResult.animationBindings,
-            transitions: cssResult.transitions
+            animationStyleBindings: cssResult.animationStyleBindings,
+            inlineAnimationBindings: [],
+            transitions: cssResult.transitions,
+            inlineTransitionBindings: []
         )
 
+        document.inlineAnimationBindings = collectInlineAnimationBindings(in: document)
+        document.inlineTransitionBindings = collectInlineTransitionBindings(in: document)
         validateUseReferences(in: document)
         return document
     }
 
     private static func validateUseReferences(in document: SVGDocument) {
         validateUseReferences(in: document.rootChildren, defs: document.defs)
-        validateUseReferences(in: Array(document.defs.values), defs: document.defs)
+        validateUseReferences(in: document.defsChildren, defs: document.defs)
+    }
+
+    private static func collectInlineAnimationBindings(in document: SVGDocument) -> [SVGInlineAnimationBinding] {
+        collectInlineAnimationBindings(
+            in: document.rootChildren,
+            basePath: "root",
+            document: document
+        ) + collectInlineAnimationBindingsInDefs(in: document)
+    }
+
+    private static func collectInlineAnimationBindings(
+        in nodes: [SVGNode],
+        basePath: String,
+        document: SVGDocument
+    ) -> [SVGInlineAnimationBinding] {
+        nodes.enumerated().flatMap { index, node in
+            let nodePath = "\(basePath)/\(index)"
+            let target = SVGNodeTarget(
+                nodePath: nodePath,
+                nodeID: node.nodeID,
+                classes: node.classes
+            )
+            let inheritedBindings = inheritedAnimationBindings(for: node, in: document)
+            let currentBindings = CSSParser.resolveInlineAnimationBindings(
+                from: node.inlineStyles,
+                inheritedBindings: inheritedBindings,
+                target: target
+            )
+            return currentBindings + collectInlineAnimationBindings(in: node.childNodes, basePath: nodePath, document: document)
+        }
+    }
+
+    private static func collectInlineAnimationBindingsInDefs(in document: SVGDocument) -> [SVGInlineAnimationBinding] {
+        collectInlineAnimationBindings(in: document.defsChildren, basePath: "defs", document: document)
+    }
+
+    private static func collectInlineTransitionBindings(in document: SVGDocument) -> [SVGInlineTransitionBinding] {
+        collectInlineTransitionBindings(
+            in: document.rootChildren,
+            basePath: "root",
+            document: document
+        ) + collectInlineTransitionBindingsInDefs(in: document)
+    }
+
+    private static func collectInlineTransitionBindings(
+        in nodes: [SVGNode],
+        basePath: String,
+        document: SVGDocument
+    ) -> [SVGInlineTransitionBinding] {
+        nodes.enumerated().flatMap { index, node in
+            let nodePath = "\(basePath)/\(index)"
+            let target = SVGNodeTarget(
+                nodePath: nodePath,
+                nodeID: node.nodeID,
+                classes: node.classes
+            )
+            let inheritedBindings = collapsedTransitionBindings(
+                matchedBindings(from: document.transitions, node: node) { $0.selector }
+            )
+            let currentBindings = CSSParser.resolveInlineTransitionBindings(
+                from: node.inlineStyles,
+                inheritedBindings: inheritedBindings,
+                target: target
+            )
+            return currentBindings + collectInlineTransitionBindings(in: node.childNodes, basePath: nodePath, document: document)
+        }
+    }
+
+    private static func collectInlineTransitionBindingsInDefs(in document: SVGDocument) -> [SVGInlineTransitionBinding] {
+        collectInlineTransitionBindings(in: document.defsChildren, basePath: "defs", document: document)
+    }
+
+    private static func matches(selector: CSSSelector, node: SVGNode) -> Bool {
+        switch selector {
+        case .className(let className):
+            return node.classes.contains(className)
+        case .id(let id):
+            return node.nodeID == id
+        }
+    }
+
+    private static func inheritedAnimationBindings(for node: SVGNode, in document: SVGDocument) -> [SVGAnimationBinding] {
+        let directBindings = collapsedAnimationBindings(
+            matchedBindings(from: document.animationBindings, node: node) { $0.selector }
+        )
+        let styleBindings = matchedBindings(from: document.animationStyleBindings, node: node) { $0.selector }
+        guard !styleBindings.isEmpty else {
+            return directBindings
+        }
+
+        var mergedBindings = directBindings
+        var positionalStyleIndex = 0
+
+        for styleBinding in styleBindings {
+            if let animationName = styleBinding.animationName {
+                if let index = mergedBindings.firstIndex(where: { $0.animationName == animationName }) {
+                    mergedBindings[index] = merged(mergedBindings[index], with: styleBinding)
+                } else {
+                    mergedBindings.append(binding(from: styleBinding))
+                }
+                continue
+            }
+
+            if isPureTransformContext(styleBinding) {
+                for index in mergedBindings.indices {
+                    mergedBindings[index] = merged(mergedBindings[index], with: styleBinding)
+                }
+                continue
+            }
+
+            guard !mergedBindings.isEmpty else {
+                mergedBindings.append(binding(from: styleBinding))
+                continue
+            }
+
+            let targetIndex: Int
+            if mergedBindings.count == 1 {
+                targetIndex = 0
+            } else {
+                targetIndex = min(positionalStyleIndex, mergedBindings.count - 1)
+                positionalStyleIndex += 1
+            }
+
+            mergedBindings[targetIndex] = merged(mergedBindings[targetIndex], with: styleBinding)
+        }
+
+        return mergedBindings
+    }
+
+    private static func isPureTransformContext(_ styleBinding: SVGAnimationStyleBinding) -> Bool {
+        styleBinding.animationName == nil &&
+            styleBinding.duration == nil &&
+            styleBinding.timingFunction == nil &&
+            styleBinding.iterationCount == nil &&
+            styleBinding.direction == nil &&
+            styleBinding.delay == nil &&
+            styleBinding.fillMode == nil &&
+            (styleBinding.transformOrigin != nil || styleBinding.transformBox != nil)
+    }
+
+    private static func binding(from styleBinding: SVGAnimationStyleBinding) -> SVGAnimationBinding {
+        SVGAnimationBinding(
+            selector: styleBinding.selector,
+            animationName: styleBinding.animationName ?? "",
+            duration: styleBinding.duration ?? 0,
+            timingFunction: styleBinding.timingFunction ?? CSSParser.defaultTimingFunction,
+            iterationCount: styleBinding.iterationCount ?? .count(1),
+            direction: styleBinding.direction ?? .normal,
+            delay: styleBinding.delay ?? 0,
+            fillMode: styleBinding.fillMode ?? .none,
+            transformOrigin: styleBinding.transformOrigin,
+            transformBox: styleBinding.transformBox
+        )
+    }
+
+    private static func matchedBindings<T>(
+        from bindings: [T],
+        node: SVGNode,
+        selector: (T) -> CSSSelector
+    ) -> [T] {
+        bindings
+            .enumerated()
+            .filter { matches(selector: selector($0.element), node: node) }
+            .sorted { lhs, rhs in
+                let lhsSpecificity = selectorSpecificity(selector(lhs.element))
+                let rhsSpecificity = selectorSpecificity(selector(rhs.element))
+                if lhsSpecificity == rhsSpecificity {
+                    return lhs.offset < rhs.offset
+                }
+                return lhsSpecificity < rhsSpecificity
+            }
+            .map(\.element)
+    }
+
+    private static func collapsedAnimationBindings(_ bindings: [SVGAnimationBinding]) -> [SVGAnimationBinding] {
+        var collapsed: [SVGAnimationBinding] = []
+
+        for binding in bindings {
+            guard !binding.animationName.isEmpty else {
+                collapsed.append(binding)
+                continue
+            }
+
+            if let index = collapsed.firstIndex(where: { $0.animationName == binding.animationName }) {
+                collapsed[index] = binding
+            } else {
+                collapsed.append(binding)
+            }
+        }
+
+        return collapsed
+    }
+
+    private static func collapsedTransitionBindings(_ bindings: [SVGTransitionBinding]) -> [SVGTransitionBinding] {
+        var collapsed: [SVGTransitionBinding] = []
+
+        for binding in bindings {
+            if let index = collapsed.firstIndex(where: { $0.property == binding.property }) {
+                collapsed[index] = binding
+            } else {
+                collapsed.append(binding)
+            }
+        }
+
+        return collapsed
+    }
+
+    private static func selectorSpecificity(_ selector: CSSSelector) -> Int {
+        switch selector {
+        case .className:
+            return 0
+        case .id:
+            return 1
+        }
+    }
+
+    private static func merged(_ binding: SVGAnimationBinding, with styleBinding: SVGAnimationStyleBinding) -> SVGAnimationBinding {
+        SVGAnimationBinding(
+            selector: binding.selector,
+            animationName: styleBinding.animationName ?? binding.animationName,
+            duration: styleBinding.duration ?? binding.duration,
+            timingFunction: styleBinding.timingFunction ?? binding.timingFunction,
+            iterationCount: styleBinding.iterationCount ?? binding.iterationCount,
+            direction: styleBinding.direction ?? binding.direction,
+            delay: styleBinding.delay ?? binding.delay,
+            fillMode: styleBinding.fillMode ?? binding.fillMode,
+            transformOrigin: styleBinding.transformOrigin ?? binding.transformOrigin,
+            transformBox: styleBinding.transformBox ?? binding.transformBox
+        )
     }
 
     private static func validateUseReferences(in nodes: [SVGNode], defs: [String: SVGNode]) {
@@ -124,6 +373,7 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
             result.viewBox = parseViewBox(attributeValue(named: "viewBox", in: attributeDict))
             result.width = parseCGFloat(attributeValue(named: "width", in: attributeDict))
             result.height = parseCGFloat(attributeValue(named: "height", in: attributeDict))
+            result.shapeRendering = attributeValue(named: "shape-rendering", in: attributeDict)
         } else if kind == .defs {
             defsDepth += 1
         }
@@ -154,6 +404,7 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
 
         if frame.kind == .defs {
             defsDepth = max(0, defsDepth - 1)
+            result.defsChildren.append(contentsOf: frame.children)
             return
         }
 
@@ -168,9 +419,8 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
 
         let parentKind = stack.last?.kind
         if inDefs, parentKind == .defs {
-            if let id = node.nodeID {
-                result.defs[id] = node
-            }
+            registerDefs(from: node)
+            stack[stack.count - 1].children.append(node)
             return
         }
 
@@ -199,6 +449,16 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
         }
 
         stack[index].textBuffer += string
+    }
+
+    private func registerDefs(from node: SVGNode) {
+        if let id = node.nodeID {
+            result.defs[id] = node
+        }
+
+        for child in node.childNodes {
+            registerDefs(from: child)
+        }
     }
 
     private func buildNode(from frame: ElementFrame) -> SVGNode? {
@@ -232,7 +492,10 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     height: parseCGFloat(attributeValue(named: "height", in: frame.attributes)),
                     rx: parseCGFloat(attributeValue(named: "rx", in: frame.attributes)),
                     ry: parseCGFloat(attributeValue(named: "ry", in: frame.attributes)),
+                    transform: attributeValue(named: "transform", in: frame.attributes),
                     fill: fill,
+                    stroke: attributeValue(named: "stroke", in: frame.attributes),
+                    strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
                     opacity: parseCGFloat(attributeValue(named: "opacity", in: frame.attributes))
                 )
             )
@@ -250,6 +513,7 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     inlineStyles: common.inlineStyles,
                     clipPathRef: common.clipPathRef,
                     href: href,
+                    transform: attributeValue(named: "transform", in: frame.attributes),
                     fill: fill,
                     x: parseCGFloat(attributeValue(named: "x", in: frame.attributes)),
                     y: parseCGFloat(attributeValue(named: "y", in: frame.attributes))
@@ -427,24 +691,7 @@ private extension XMLTreeBuilder {
         guard let rawValue else {
             return [:]
         }
-
-        var styles: [String: String] = [:]
-        for declaration in rawValue.split(separator: ";", omittingEmptySubsequences: true) {
-            let parts = declaration.split(separator: ":", maxSplits: 1, omittingEmptySubsequences: false)
-            guard parts.count == 2 else {
-                continue
-            }
-
-            let key = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
-            let value = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !key.isEmpty else {
-                continue
-            }
-
-            styles[key] = value
-        }
-
-        return styles
+        return CSSParser.parseInlineDeclarations(rawValue)
     }
 
     func parseClasses(_ rawValue: String?) -> [String] {
@@ -499,7 +746,21 @@ private extension XMLTreeBuilder {
         }
 
         let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Double(trimmed) else {
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+
+        let normalized = trimmed.lowercased()
+        let numberPortion: String
+        if normalized.hasSuffix("px") {
+            numberPortion = String(normalized.dropLast(2))
+        } else if normalized.hasSuffix("%") {
+            numberPortion = String(normalized.dropLast())
+        } else {
+            numberPortion = normalized
+        }
+
+        guard let value = Double(numberPortion.trimmingCharacters(in: .whitespacesAndNewlines)) else {
             return nil
         }
 
@@ -554,6 +815,67 @@ private extension SVGNode {
             return polyline.id
         case .clipPath(let clipPath):
             return clipPath.id
+        }
+    }
+
+    var classes: [String] {
+        switch self {
+        case .group(let group):
+            return group.classes
+        case .rect(let rect):
+            return rect.classes
+        case .use(let use):
+            return use.classes
+        case .circle(let circle):
+            return circle.classes
+        case .ellipse(let ellipse):
+            return ellipse.classes
+        case .line(let line):
+            return line.classes
+        case .path(let path):
+            return path.classes
+        case .polygon(let polygon):
+            return polygon.classes
+        case .polyline(let polyline):
+            return polyline.classes
+        case .clipPath(let clipPath):
+            return clipPath.classes
+        }
+    }
+
+    var inlineStyles: [String: String] {
+        switch self {
+        case .group(let group):
+            return group.inlineStyles
+        case .rect(let rect):
+            return rect.inlineStyles
+        case .use(let use):
+            return use.inlineStyles
+        case .circle(let circle):
+            return circle.inlineStyles
+        case .ellipse(let ellipse):
+            return ellipse.inlineStyles
+        case .line(let line):
+            return line.inlineStyles
+        case .path(let path):
+            return path.inlineStyles
+        case .polygon(let polygon):
+            return polygon.inlineStyles
+        case .polyline(let polyline):
+            return polyline.inlineStyles
+        case .clipPath(let clipPath):
+            return clipPath.inlineStyles
+        }
+    }
+
+    var childNodes: [SVGNode] {
+        switch self {
+        case .group(let group):
+            return group.children
+        case .clipPath(let clipPath):
+            return clipPath.children
+        case .rect, .use, .circle, .ellipse, .line, .path, .polygon, .polyline:
+            return []
         }
     }
 }
