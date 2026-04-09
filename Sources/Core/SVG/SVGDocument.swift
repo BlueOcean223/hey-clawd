@@ -275,6 +275,19 @@ enum CSSSelector: Sendable {
     case id(String)
 }
 
+extension CSSSelector: Equatable {
+    static func == (lhs: CSSSelector, rhs: CSSSelector) -> Bool {
+        switch (lhs, rhs) {
+        case let (.className(lhsName), .className(rhsName)):
+            return lhsName == rhsName
+        case let (.id(lhsName), .id(rhsName)):
+            return lhsName == rhsName
+        default:
+            return false
+        }
+    }
+}
+
 enum TimingFunction: Sendable {
     case easeInOut
     case linear

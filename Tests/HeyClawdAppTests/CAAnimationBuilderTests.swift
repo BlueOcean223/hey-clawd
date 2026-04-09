@@ -112,18 +112,18 @@ final class CAAnimationBuilderTests: XCTestCase {
 
     @MainActor
     func testMediaTimingFunctionMappings() {
-        let timingFunctions: [TimingFunction] = [
-            .easeInOut,
-            .linear,
-            .easeOut,
-            .easeIn,
-            .stepEnd,
-            .cubicBezier(0.4, 0, 0.2, 1),
-        ]
-
-        for timingFunction in timingFunctions {
-            XCTAssertNotNil(CAAnimationBuilder.mediaTimingFunction(from: timingFunction))
-        }
+        assertTimingFunction(
+            CAAnimationBuilder.mediaTimingFunction(from: .linear),
+            matches: CAMediaTimingFunction(name: .linear)
+        )
+        assertTimingFunction(
+            CAAnimationBuilder.mediaTimingFunction(from: .easeInOut),
+            matches: CAMediaTimingFunction(name: .easeInEaseOut)
+        )
+        XCTAssertNotNil(CAAnimationBuilder.mediaTimingFunction(from: .easeOut))
+        XCTAssertNotNil(CAAnimationBuilder.mediaTimingFunction(from: .easeIn))
+        XCTAssertNotNil(CAAnimationBuilder.mediaTimingFunction(from: .stepEnd))
+        XCTAssertNotNil(CAAnimationBuilder.mediaTimingFunction(from: .cubicBezier(0.4, 0, 0.2, 1)))
     }
 
     @MainActor
@@ -192,6 +192,90 @@ final class CAAnimationBuilderTests: XCTestCase {
 
         XCTAssertEqual(keyframeAnimation.keyTimes?.count, 3)
         XCTAssertEqual(keyframeAnimation.values?.count, 3)
+    }
+
+    @MainActor
+    func testNegativeDelaySetsTimeOffset() throws {
+        let animation = SVGAnimation(
+            name: "delay",
+            keyframes: [
+                SVGKeyframe(offsets: [0], properties: ["opacity": "1"]),
+                SVGKeyframe(offsets: [1], properties: ["opacity": "0"]),
+            ]
+        )
+        let binding = TestBinding(animationName: "delay", duration: 2, delay: -0.5)
+
+        let builtAnimation = try XCTUnwrap(
+            CAAnimationBuilder.buildAnimation(from: animation, binding: binding)
+        )
+
+        XCTAssertEqual(builtAnimation.timeOffset, 0.5, accuracy: 0.0001)
+        XCTAssertEqual(builtAnimation.beginTime, 0, accuracy: 0.0001)
+    }
+
+    @MainActor
+    func testBuildFillColorAnimation() throws {
+        let animation = SVGAnimation(
+            name: "fillPulse",
+            keyframes: [
+                SVGKeyframe(offsets: [0], properties: ["fill": "#000000"]),
+                SVGKeyframe(offsets: [1], properties: ["fill": "#FFFFFF"]),
+            ]
+        )
+
+        let keyframeAnimation = try XCTUnwrap(
+            CAAnimationBuilder.buildKeyframeAnimation(
+                for: "fill",
+                keyframes: animation.keyframes,
+                binding: TestBinding(animationName: "fillPulse", duration: 1)
+            )
+        )
+
+        XCTAssertEqual(keyframeAnimation.keyPath, "fillColor")
+        XCTAssertEqual(keyframeAnimation.values?.count, 2)
+    }
+
+    @MainActor
+    func testBuildVisibilityAnimation() throws {
+        let animation = SVGAnimation(
+            name: "blink",
+            keyframes: [
+                SVGKeyframe(offsets: [0], properties: ["visibility": "visible"]),
+                SVGKeyframe(offsets: [1], properties: ["visibility": "hidden"]),
+            ]
+        )
+
+        let keyframeAnimation = try XCTUnwrap(
+            CAAnimationBuilder.buildKeyframeAnimation(
+                for: "visibility",
+                keyframes: animation.keyframes,
+                binding: TestBinding(animationName: "blink", duration: 1)
+            )
+        )
+
+        XCTAssertEqual(keyframeAnimation.keyPath, "hidden")
+        XCTAssertEqual(keyframeAnimation.values?.count, 2)
+    }
+
+    @MainActor
+    func testBuildStrokeWidthAnimation() throws {
+        let animation = SVGAnimation(
+            name: "trace",
+            keyframes: [
+                SVGKeyframe(offsets: [0], properties: ["stroke-width": "1"]),
+                SVGKeyframe(offsets: [1], properties: ["stroke-width": "3"]),
+            ]
+        )
+
+        let keyframeAnimation = try XCTUnwrap(
+            CAAnimationBuilder.buildKeyframeAnimation(
+                for: "stroke-width",
+                keyframes: animation.keyframes,
+                binding: TestBinding(animationName: "trace", duration: 1)
+            )
+        )
+
+        XCTAssertEqual(keyframeAnimation.keyPath, "lineWidth")
     }
 
     @MainActor
@@ -382,6 +466,25 @@ final class CAAnimationBuilderTests: XCTestCase {
     }
 
     @MainActor
+    func testBothFillModeAnimation() throws {
+        let animation = SVGAnimation(
+            name: "settle",
+            keyframes: [
+                SVGKeyframe(offsets: [0], properties: ["transform": "scale(1)"]),
+                SVGKeyframe(offsets: [1], properties: ["transform": "scale(0.95)"]),
+            ]
+        )
+        let binding = TestBinding(animationName: "settle", duration: 3.6, fillMode: .both)
+
+        let builtAnimation = try XCTUnwrap(
+            CAAnimationBuilder.buildAnimation(from: animation, binding: binding)
+        )
+
+        XCTAssertEqual(builtAnimation.fillMode, .both)
+        XCTAssertFalse(builtAnimation.isRemovedOnCompletion)
+    }
+
+    @MainActor
     func testDelayedAnimationHasBeginTime() throws {
         let animation = SVGAnimation(
             name: "delayed",
@@ -427,6 +530,68 @@ final class CAAnimationBuilderTests: XCTestCase {
         let animation = try XCTUnwrap(layer.animation(forKey: "sleep-breathe"))
 
         XCTAssertGreaterThan(animation.beginTime, 0)
+    }
+
+    @MainActor
+    func testApplyRemapsRectFillAnimationToBackgroundColor() throws {
+        let document = SVGParser.parse(
+            """
+            <svg viewBox="0 0 15 16" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <style>
+                  #torso {
+                    animation: pulse 1s linear infinite;
+                  }
+
+                  @keyframes pulse {
+                    0% { fill: #DE886D; }
+                    100% { fill: #000000; }
+                  }
+                </style>
+              </defs>
+              <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+            </svg>
+            """
+        )
+        let rootLayer = CALayerRenderer.build(document)
+
+        CAAnimationBuilder.apply(document, to: rootLayer)
+
+        let layer = try XCTUnwrap(findLayer(named: "torso", in: rootLayer))
+        XCTAssertFalse(layer is CAShapeLayer)
+
+        let animation = try XCTUnwrap(layer.animation(forKey: "pulse") as? CAKeyframeAnimation)
+        XCTAssertEqual(animation.keyPath, "backgroundColor")
+    }
+
+    @MainActor
+    func testApplyAdjustsAnchorPointForWidthAnimation() throws {
+        let document = SVGParser.parse(
+            """
+            <svg viewBox="0 0 15 16" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <style>
+                  #torso {
+                    animation: grow 1s linear infinite;
+                  }
+
+                  @keyframes grow {
+                    0% { width: 11; }
+                    100% { width: 13; }
+                  }
+                </style>
+              </defs>
+              <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+            </svg>
+            """
+        )
+        let rootLayer = CALayerRenderer.build(document)
+
+        CAAnimationBuilder.apply(document, to: rootLayer)
+
+        let layer = try XCTUnwrap(findLayer(named: "torso", in: rootLayer))
+        XCTAssertEqual(layer.anchorPoint.x, 0, accuracy: 0.0001)
+        XCTAssertEqual(layer.position.x, 2, accuracy: 0.0001)
     }
 
     @MainActor
@@ -530,5 +695,22 @@ final class CAAnimationBuilderTests: XCTestCase {
             x: (point.x * transform.m11) + (point.y * transform.m21) + transform.m41,
             y: (point.x * transform.m12) + (point.y * transform.m22) + transform.m42
         )
+    }
+
+    private func assertTimingFunction(
+        _ actual: CAMediaTimingFunction,
+        matches expected: CAMediaTimingFunction,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        for index in 0...3 {
+            var actualPoint: [Float] = [0, 0]
+            var expectedPoint: [Float] = [0, 0]
+            actual.getControlPoint(at: index, values: &actualPoint)
+            expected.getControlPoint(at: index, values: &expectedPoint)
+
+            XCTAssertEqual(actualPoint[0], expectedPoint[0], accuracy: 0.0001, file: file, line: line)
+            XCTAssertEqual(actualPoint[1], expectedPoint[1], accuracy: 0.0001, file: file, line: line)
+        }
     }
 }

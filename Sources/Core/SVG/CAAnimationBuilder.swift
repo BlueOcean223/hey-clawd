@@ -12,19 +12,6 @@ protocol AnimationBinding {
     var fillMode: AnimationFillMode { get }
 }
 
-extension CSSSelector: Equatable {
-    static func == (lhs: CSSSelector, rhs: CSSSelector) -> Bool {
-        switch (lhs, rhs) {
-        case let (.className(lhsName), .className(rhsName)):
-            return lhsName == rhsName
-        case let (.id(lhsName), .id(rhsName)):
-            return lhsName == rhsName
-        default:
-            return false
-        }
-    }
-}
-
 enum CAAnimationBuilder {
     static func mediaTimingFunction(from tf: TimingFunction) -> CAMediaTimingFunction {
         switch tf {
@@ -178,6 +165,8 @@ enum CAAnimationBuilder {
 
         if binding.delay > 0 {
             animation.beginTime = CACurrentMediaTime() + binding.delay
+        } else if binding.delay < 0 {
+            animation.timeOffset = -binding.delay
         }
 
         if isStepEnd(binding.timingFunction) {
@@ -198,8 +187,10 @@ enum CAAnimationBuilder {
 
     static func caFillMode(from mode: AnimationFillMode) -> CAMediaTimingFillMode {
         switch mode {
-        case .forwards, .both:
+        case .forwards:
             return .forwards
+        case .both:
+            return .both
         case .backwards:
             return .backwards
         case .none:
@@ -262,6 +253,8 @@ enum CAAnimationBuilder {
 
         if binding.delay > 0 {
             group.beginTime = CACurrentMediaTime() + binding.delay
+        } else if binding.delay < 0 {
+            group.timeOffset = -binding.delay
         }
 
         return group
@@ -294,6 +287,8 @@ enum CAAnimationBuilder {
                 if let transformBox = binding.transformBox, layer.value(forKey: "svgTransformBox") == nil {
                     layer.setValue(transformBox, forKey: "svgTransformBox")
                 }
+                adjustFillAnimationForLayerType(caAnimation, layer: layer)
+                adjustAnchorForWidthAnimation(caAnimation, on: layer)
                 layer.add(caAnimation, forKey: binding.animationName)
             }
         }
@@ -318,6 +313,8 @@ enum CAAnimationBuilder {
             if let transformBox = binding.transformBox, layer.value(forKey: "svgTransformBox") == nil {
                 layer.setValue(transformBox, forKey: "svgTransformBox")
             }
+            adjustFillAnimationForLayerType(caAnimation, layer: layer)
+            adjustAnchorForWidthAnimation(caAnimation, on: layer)
             layer.add(caAnimation, forKey: binding.animationName)
         }
 
@@ -519,6 +516,52 @@ private extension CAAnimationBuilder {
 
         CALayerRenderer.setAnchorPoint(origin, on: layer)
         layer.setValue(serializedTransformOrigin(origin), forKey: "svgTransformOrigin")
+    }
+
+    @MainActor
+    static func adjustFillAnimationForLayerType(_ animation: CAAnimation, layer: CALayer) {
+        guard !(layer is CAShapeLayer) else {
+            return
+        }
+
+        if let keyframe = animation as? CAKeyframeAnimation, keyframe.keyPath == "fillColor" {
+            keyframe.keyPath = "backgroundColor"
+            return
+        }
+
+        if let group = animation as? CAAnimationGroup {
+            for child in group.animations ?? [] {
+                if let keyframe = child as? CAKeyframeAnimation, keyframe.keyPath == "fillColor" {
+                    keyframe.keyPath = "backgroundColor"
+                }
+            }
+        }
+    }
+
+    @MainActor
+    static func adjustAnchorForWidthAnimation(_ animation: CAAnimation, on layer: CALayer) {
+        let hasWidthAnimation: Bool
+        if let keyframe = animation as? CAKeyframeAnimation {
+            hasWidthAnimation = keyframe.keyPath == "bounds.size.width"
+        } else if let group = animation as? CAAnimationGroup {
+            hasWidthAnimation = group.animations?.contains(where: {
+                ($0 as? CAKeyframeAnimation)?.keyPath == "bounds.size.width"
+            }) ?? false
+        } else {
+            hasWidthAnimation = false
+        }
+
+        guard hasWidthAnimation else {
+            return
+        }
+
+        let oldAnchorPoint = layer.anchorPoint
+        let bounds = layer.bounds
+        layer.anchorPoint = CGPoint(x: 0, y: oldAnchorPoint.y)
+        layer.position = CGPoint(
+            x: layer.position.x - (oldAnchorPoint.x * bounds.width),
+            y: layer.position.y
+        )
     }
 
     @MainActor
