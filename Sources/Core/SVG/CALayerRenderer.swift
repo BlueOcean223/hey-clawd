@@ -47,7 +47,6 @@ enum CALayerRenderer {
             let layer = makeLayer()
             layer.name = group.id
             storeMetadata(on: layer, nodePath: nodePath, classes: group.classes)
-            applyStaticStyleMetadata(to: layer, id: group.id, classes: group.classes, document: document)
 
             if let opacity = group.opacity {
                 layer.opacity = Float(opacity)
@@ -68,6 +67,7 @@ enum CALayerRenderer {
                 layer.addSublayer(childLayer)
             }
 
+            applyStaticStyleMetadata(to: layer, id: group.id, classes: group.classes, document: document)
             applyInlineStyles(group.inlineStyles, to: layer, hasExplicitOpacity: group.opacity != nil)
             applyClipPath(group.clipPathRef, to: layer, document: document, nodePath: nodePath)
             return layer
@@ -331,12 +331,86 @@ private extension CALayerRenderer {
         for binding in matchedBindings {
             if let transformOrigin = binding.properties["transform-origin"] {
                 layer.setValue(transformOrigin, forKey: "svgTransformOrigin")
+                applyTransformOrigin(transformOrigin, to: layer)
             }
 
             if let transformBox = binding.properties["transform-box"] {
                 layer.setValue(transformBox, forKey: "svgTransformBox")
             }
         }
+    }
+
+    static func applyTransformOrigin(_ rawValue: String, to layer: CALayer) {
+        guard let origin = CSSParser.resolvedTransformOrigin(from: rawValue) else {
+            return
+        }
+
+        setAnchorPoint(origin, on: layer)
+    }
+
+    static func setAnchorPoint(_ origin: SVGTransformOrigin, on layer: CALayer) {
+        let oldAnchorPoint = layer.anchorPoint
+
+        if needsBoundingBox(for: origin, on: layer) {
+            let bbox = layer.sublayers?.reduce(CGRect.null) { partialResult, sublayer in
+                partialResult.union(sublayer.frame)
+            } ?? .null
+
+            if !bbox.isNull, !bbox.isEmpty {
+                layer.bounds = bbox
+                layer.position = CGPoint(
+                    x: bbox.minX + (oldAnchorPoint.x * bbox.width),
+                    y: bbox.minY + (oldAnchorPoint.y * bbox.height)
+                )
+            }
+        }
+
+        let bounds = layer.bounds
+        var newAnchorPoint = oldAnchorPoint
+
+        if bounds.width != 0 {
+            switch origin.x {
+            case .px(let value):
+                newAnchorPoint.x = value / bounds.width
+            case .percent(let value):
+                newAnchorPoint.x = value / 100
+            }
+        }
+
+        if bounds.height != 0 {
+            switch origin.y {
+            case .px(let value):
+                newAnchorPoint.y = value / bounds.height
+            case .percent(let value):
+                newAnchorPoint.y = value / 100
+            }
+        }
+
+        let dx = (newAnchorPoint.x - oldAnchorPoint.x) * bounds.width
+        let dy = (newAnchorPoint.y - oldAnchorPoint.y) * bounds.height
+
+        layer.anchorPoint = newAnchorPoint
+        layer.position = CGPoint(x: layer.position.x + dx, y: layer.position.y + dy)
+    }
+
+    static func needsBoundingBox(for origin: SVGTransformOrigin, on layer: CALayer) -> Bool {
+        let widthNeedsBBox: Bool
+        switch origin.x {
+        case .px:
+            widthNeedsBBox = layer.bounds.width == 0
+        case .percent:
+            widthNeedsBBox = false
+        }
+
+        let heightNeedsBBox: Bool
+        switch origin.y {
+        case .px:
+            heightNeedsBBox = layer.bounds.height == 0
+        case .percent:
+            heightNeedsBBox = false
+        }
+
+        return widthNeedsBBox || heightNeedsBBox
     }
 
     static func matches(_ selector: CSSSelector, id: String?, classes: [String]) -> Bool {

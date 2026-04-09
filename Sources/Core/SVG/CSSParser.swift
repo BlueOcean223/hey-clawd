@@ -202,6 +202,10 @@ enum CSSParser {
             )
         }
     }
+
+    static func resolvedTransformOrigin(from rawValue: String) -> SVGTransformOrigin? {
+        parseTransformOrigin(rawValue)
+    }
 }
 
 private extension CSSParser {
