@@ -43,7 +43,7 @@ The app is a **menu-bar-only macOS app** (`LSUIElement=true`) built with Swift 6
 
 - **App/** — `HeyClawdApp` (@main SwiftUI entry) → `AppDelegate` (orchestrator). `AppDelegate.assembleCoreLoop()` wires all subsystems together.
 - **Core/** — `StateMachine` (priority-based state aggregation across sessions), `HTTPServer` (localhost:23333, endpoints: `/state`, `/permission`, `/status`, `/quit`), `CodexMonitor` (kqueue-based JSONL log watcher for Codex CLI), `HookInstaller` (runs bundled JS install scripts via Node.js to register hooks on launch), `HotKeyManager`, `Preferences` (UserDefaults wrapper), `SoundPlayer`.
-- **Window/** — `PetWindow` (transparent floating NSWindow), `PetWebView` (WKWebView SVG renderer), `EyeTracker` (mouse-following eyes).
+- **Window/** — `PetWindow` (transparent floating NSWindow), `EyeTracker` (mouse-following eyes).
 - **Bubble/** — `BubbleStack` (async permission request queue with `CheckedContinuation`), `BubbleView`/`BubbleWindow` (SwiftUI overlay). Passthrough tools (TaskCreate, TaskUpdate, etc.) auto-allow without UI.
 - **Tray/** — `StatusBarController` + `MenuBuilder` (system tray menu with session list, preferences).
 - **Mini/** — `MiniMode` (edge-hugging compact mode with peek/crabwalk animations).
@@ -52,7 +52,7 @@ The app is a **menu-bar-only macOS app** (`LSUIElement=true`) built with Swift 6
 **Key data flow:**
 
 ```
-IDE hooks / CodexMonitor → HTTP POST /state → HTTPServer → StateMachine → PetWebView (SVG animation)
+IDE hooks / CodexMonitor → HTTP POST /state → HTTPServer → StateMachine → PetView (SVG animation)
 IDE hooks → HTTP POST /permission → HTTPServer → BubbleStack → allow/deny response
 ```
 

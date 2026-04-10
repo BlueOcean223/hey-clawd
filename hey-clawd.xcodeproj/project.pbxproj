@@ -10,7 +10,6 @@
 		A1B2C3D4E5F6000000000001 /* HeyClawdApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000010 /* HeyClawdApp.swift */; };
 		A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000011 /* AppDelegate.swift */; };
 		A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000014 /* PetWindow.swift */; };
-		A1B2C3D4E5F6000000000004 /* PetWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000015 /* PetWebView.swift */; };
 		A1B2C3D4E5F6000000000005 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6000000000016 /* Resources */; };
 		B100000000000000000000A0 /* HTTPParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B0 /* HTTPParser.swift */; };
 		B100000000000000000000A1 /* HTTPServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B1 /* HTTPServer.swift */; };
@@ -40,7 +39,6 @@
 		A1B2C3D4E5F6000000000012 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000013 /* hey-clawd.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "hey-clawd.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1B2C3D4E5F6000000000014 /* PetWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWindow.swift; sourceTree = "<group>"; };
-		A1B2C3D4E5F6000000000015 /* PetWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetWebView.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6000000000016 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
 		B100000000000000000000B0 /* HTTPParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPParser.swift; sourceTree = "<group>"; };
 		B100000000000000000000B1 /* HTTPServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPServer.swift; sourceTree = "<group>"; };
@@ -115,7 +113,6 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F6000000000014 /* PetWindow.swift */,
-				A1B2C3D4E5F6000000000015 /* PetWebView.swift */,
 				B100000000000000000000B7 /* EyeTracker.swift */,
 			);
 			path = Sources/Window;
@@ -260,7 +257,6 @@
 				A1B2C3D4E5F6000000000001 /* HeyClawdApp.swift in Sources */,
 				A1B2C3D4E5F6000000000002 /* AppDelegate.swift in Sources */,
 				A1B2C3D4E5F6000000000003 /* PetWindow.swift in Sources */,
-				A1B2C3D4E5F6000000000004 /* PetWebView.swift in Sources */,
 				B100000000000000000000A0 /* HTTPParser.swift in Sources */,
 				B100000000000000000000A1 /* HTTPServer.swift in Sources */,
 				B100000000000000000000A2 /* HotKeyManager.swift in Sources */,
