@@ -154,10 +154,6 @@ final class StateMachine {
         .miniHappy: 4_000,
     ]
 
-    static let oneShotStates: Set<PetState> = [
-        .attention, .error, .sweeping, .notification, .carrying
-    ]
-
     static let allowedDisplaySvgs: Set<String> = [
         "clawd-working-typing.svg",
         "clawd-working-building.svg",
@@ -412,13 +408,6 @@ final class StateMachine {
 
         if sessions[normalizedSessionId] == nil, sessions.count >= Self.maxSessions {
             evictOldestSession()
-        }
-
-        if event == "PermissionRequest" {
-            if !doNotDisturbEnabled {
-                requestDisplayTransition(to: .notification, svgOverride: svgOverride(for: .notification))
-            }
-            return
         }
 
         if event == "SessionEnd" {
@@ -895,7 +884,10 @@ final class StateMachine {
                     let queued = self.pendingTransition
                     self.pendingTransition = nil
 
-                    if let queued, queued.state.isOneShot {
+                    if let queued,
+                       queued.state.isOneShot,
+                       self.isPendingOneShotStillRelevant(queued)
+                    {
                         self.applyTransition(to: queued.state, svg: queued.svg, triggeringSession: queued.triggeringSession)
                     } else {
                         let resolvedState = self.resolveDisplayState()
@@ -913,6 +905,18 @@ final class StateMachine {
         pendingTimer = nil
         pendingTransition = nil
         applyTransition(to: effectiveState, svg: nextSvg, triggeringSession: triggeringSession)
+    }
+
+    private func isPendingOneShotStillRelevant(_ pending: PendingTransition) -> Bool {
+        guard let triggeringSession = pending.triggeringSession else {
+            return true
+        }
+
+        guard let currentSession = sessions[triggeringSession.id] else {
+            return false
+        }
+
+        return currentSession.updatedAt == triggeringSession.updatedAt
     }
 
     private func applyTransition(to state: PetState, svg: String, triggeringSession: Session? = nil) {
