@@ -169,8 +169,12 @@ import QuartzCore
             return
         }
 
+        let pausedTime = rootLayer.convertTime(CACurrentMediaTime(), from: nil)
         rootLayer.speed = 0
-        rootLayer.timeOffset = rootLayer.convertTime(CACurrentMediaTime(), from: nil)
+        rootLayer.timeOffset = pausedTime
+        if !isShowingReaction {
+            petView.pauseTracking()
+        }
     }
 
     private func resumeFromOcclusion() {
@@ -189,6 +193,9 @@ import QuartzCore
         rootLayer.beginTime = 0
         let timeSincePause = rootLayer.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
         rootLayer.beginTime = timeSincePause
+        if !isShowingReaction {
+            petView.resumeTracking()
+        }
     }
 
     private func nearestWorkArea(for origin: NSPoint) -> NSRect {
