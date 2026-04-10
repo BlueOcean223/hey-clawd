@@ -31,6 +31,17 @@
 		C100000000000000000000A0 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = C100000000000000000000B0 /* AppIcon.icns */; };
 		D100000000000000000000A0 /* hooks in Resources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B0 /* hooks */; };
 		D100000000000000000000A1 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B1 /* HookInstaller.swift */; };
+		E100000000000000000000A0 /* PetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B0 /* PetView.swift */; };
+		E100000000000000000000A1 /* CodexMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B1 /* CodexMonitor.swift */; };
+		E100000000000000000000A2 /* ColorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B2 /* ColorParser.swift */; };
+		E100000000000000000000A3 /* PathParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B3 /* PathParser.swift */; };
+		E100000000000000000000A4 /* TransformParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B4 /* TransformParser.swift */; };
+		E100000000000000000000A5 /* SVGDocument.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B5 /* SVGDocument.swift */; };
+		E100000000000000000000A6 /* SVGParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B6 /* SVGParser.swift */; };
+		E100000000000000000000A7 /* CSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B7 /* CSSParser.swift */; };
+		E100000000000000000000A8 /* CAAnimationBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B8 /* CAAnimationBuilder.swift */; };
+		E100000000000000000000A9 /* CALayerRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B9 /* CALayerRenderer.swift */; };
+		E10000000000000000000AA0 /* SVGDocumentCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = E10000000000000000000BB0 /* SVGDocumentCache.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -59,6 +70,17 @@
 		C100000000000000000000B0 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		D100000000000000000000B0 /* hooks */ = {isa = PBXFileReference; lastKnownFileType = folder; path = hooks; sourceTree = "<group>"; };
 		D100000000000000000000B1 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
+		E100000000000000000000B0 /* PetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetView.swift; sourceTree = "<group>"; };
+		E100000000000000000000B1 /* CodexMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMonitor.swift; sourceTree = "<group>"; };
+		E100000000000000000000B2 /* ColorParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorParser.swift; sourceTree = "<group>"; };
+		E100000000000000000000B3 /* PathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathParser.swift; sourceTree = "<group>"; };
+		E100000000000000000000B4 /* TransformParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformParser.swift; sourceTree = "<group>"; };
+		E100000000000000000000B5 /* SVGDocument.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGDocument.swift; sourceTree = "<group>"; };
+		E100000000000000000000B6 /* SVGParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGParser.swift; sourceTree = "<group>"; };
+		E100000000000000000000B7 /* CSSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CSSParser.swift; sourceTree = "<group>"; };
+		E100000000000000000000B8 /* CAAnimationBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CAAnimationBuilder.swift; sourceTree = "<group>"; };
+		E100000000000000000000B9 /* CALayerRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CALayerRenderer.swift; sourceTree = "<group>"; };
+		E10000000000000000000BB0 /* SVGDocumentCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SVGDocumentCache.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,6 +135,7 @@
 			isa = PBXGroup;
 			children = (
 				A1B2C3D4E5F6000000000014 /* PetWindow.swift */,
+				E100000000000000000000B0 /* PetView.swift */,
 				B100000000000000000000B7 /* EyeTracker.swift */,
 			);
 			path = Sources/Window;
@@ -121,6 +144,8 @@
 		B10000000000000000000C00 /* Sources/Core */ = {
 			isa = PBXGroup;
 			children = (
+				E10000000000000000000C00 /* SVG */,
+				E100000000000000000000B1 /* CodexMonitor.swift */,
 				B100000000000000000000B0 /* HTTPParser.swift */,
 				B100000000000000000000B1 /* HTTPServer.swift */,
 				B100000000000000000000B2 /* HotKeyManager.swift */,
@@ -131,6 +156,22 @@
 				D100000000000000000000B1 /* HookInstaller.swift */,
 			);
 			path = Sources/Core;
+			sourceTree = "<group>";
+		};
+		E10000000000000000000C00 /* SVG */ = {
+			isa = PBXGroup;
+			children = (
+				E100000000000000000000B8 /* CAAnimationBuilder.swift */,
+				E100000000000000000000B9 /* CALayerRenderer.swift */,
+				E100000000000000000000B2 /* ColorParser.swift */,
+				E100000000000000000000B7 /* CSSParser.swift */,
+				E100000000000000000000B3 /* PathParser.swift */,
+				E100000000000000000000B5 /* SVGDocument.swift */,
+				E10000000000000000000BB0 /* SVGDocumentCache.swift */,
+				E100000000000000000000B6 /* SVGParser.swift */,
+				E100000000000000000000B4 /* TransformParser.swift */,
+			);
+			path = SVG;
 			sourceTree = "<group>";
 		};
 		B10000000000000000000C01 /* Sources/Bubble */ = {
@@ -274,6 +315,17 @@
 				B10000000000000000000AA4 /* StatusBarController.swift in Sources */,
 				B10000000000000000000AA5 /* MenuBuilder.swift in Sources */,
 				D100000000000000000000A1 /* HookInstaller.swift in Sources */,
+				E100000000000000000000A0 /* PetView.swift in Sources */,
+				E100000000000000000000A1 /* CodexMonitor.swift in Sources */,
+				E100000000000000000000A2 /* ColorParser.swift in Sources */,
+				E100000000000000000000A3 /* PathParser.swift in Sources */,
+				E100000000000000000000A4 /* TransformParser.swift in Sources */,
+				E100000000000000000000A5 /* SVGDocument.swift in Sources */,
+				E100000000000000000000A6 /* SVGParser.swift in Sources */,
+				E100000000000000000000A7 /* CSSParser.swift in Sources */,
+				E100000000000000000000A8 /* CAAnimationBuilder.swift in Sources */,
+				E100000000000000000000A9 /* CALayerRenderer.swift in Sources */,
+				E10000000000000000000AA0 /* SVGDocumentCache.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
