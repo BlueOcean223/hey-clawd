@@ -1,4 +1,5 @@
 @preconcurrency import AppKit
+import QuartzCore
 
 // 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
 @MainActor final class PetWindow: NSWindow {
@@ -38,6 +39,7 @@
     private var clickWindowTimer: Timer?
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
+    private var isPausedForOcclusion = false
     private(set) var sizePreset: SizePreset
     var allowsDragging = true
     /// mini 模式需要允许窗口半藏在屏幕外；普通模式则始终钳回工作区。
@@ -75,6 +77,12 @@
         contentView = petView
         setFrame(originRect(for: size), display: false)
         observeScreenChanges()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleOcclusionStateChanged(_:)),
+            name: NSWindow.didChangeOcclusionStateNotification,
+            object: self
+        )
         // 先接默认 idle SVG，后续状态机会改这里。
         petView.loadSVG("clawd-idle-follow.svg")
     }
@@ -140,6 +148,47 @@
     @objc private func handleScreenParametersChanged(_ notification: Notification) {
         _ = notification
         clampToScreen()
+    }
+
+    @objc private func handleOcclusionStateChanged(_ notification: Notification) {
+        _ = notification
+        if occlusionState.contains(.visible) {
+            resumeFromOcclusion()
+        } else {
+            pauseForOcclusion()
+        }
+    }
+
+    private func pauseForOcclusion() {
+        guard !isPausedForOcclusion else {
+            return
+        }
+
+        isPausedForOcclusion = true
+        guard let rootLayer = petView.layer else {
+            return
+        }
+
+        rootLayer.speed = 0
+        rootLayer.timeOffset = rootLayer.convertTime(CACurrentMediaTime(), from: nil)
+    }
+
+    private func resumeFromOcclusion() {
+        guard isPausedForOcclusion else {
+            return
+        }
+
+        isPausedForOcclusion = false
+        guard let rootLayer = petView.layer else {
+            return
+        }
+
+        let pausedTime = rootLayer.timeOffset
+        rootLayer.speed = 1
+        rootLayer.timeOffset = 0
+        rootLayer.beginTime = 0
+        let timeSincePause = rootLayer.convertTime(CACurrentMediaTime(), from: nil) - pausedTime
+        rootLayer.beginTime = timeSincePause
     }
 
     private func nearestWorkArea(for origin: NSPoint) -> NSRect {
