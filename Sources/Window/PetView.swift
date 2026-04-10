@@ -8,6 +8,7 @@ final class PetView: NSView {
     private var eyesLayer: CALayer?
     private var bodyLayer: CALayer?
     private var shadowLayer: CALayer?
+    private var switchGeneration: UInt64 = 0
 
     private(set) var isTrackingPaused = false
     private(set) var isMirrored = false
@@ -38,12 +39,81 @@ final class PetView: NSView {
         fatalError("init(coder:) has not been implemented")
     }
 
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        mountedRootLayer?.frame = bounds
+    }
+
     func loadSVG(_ filename: String) {
-        // TODO: Phase 4.2
+        guard let hostLayer = layer,
+              let (newRootLayer, mountedFilename) = buildSVGLayer(from: filename) else {
+            return
+        }
+
+        switchGeneration &+= 1
+
+        mountedRootLayer?.removeFromSuperlayer()
+
+        hostLayer.addSublayer(newRootLayer)
+        mountedRootLayer = newRootLayer
+        mountedSVGFilename = mountedFilename
+        eyesLayer = findNamedLayer("eyes-js", in: newRootLayer)
+        bodyLayer = findNamedLayer("body", in: newRootLayer)
+        shadowLayer = findNamedLayer("shadow", in: newRootLayer)
+        eyeTracker.forceResend()
     }
 
     func switchSVG(_ filename: String) {
-        // TODO: Phase 4.2
+        guard mountedRootLayer != nil else {
+            loadSVG(filename)
+            return
+        }
+
+        guard filename != mountedSVGFilename else {
+            return
+        }
+
+        guard let hostLayer = layer,
+              let oldRoot = mountedRootLayer,
+              let (newRootLayer, mountedFilename) = buildSVGLayer(from: filename) else {
+            return
+        }
+
+        switchGeneration &+= 1
+        let generation = switchGeneration
+
+        newRootLayer.opacity = 0
+        hostLayer.addSublayer(newRootLayer)
+
+        mountedRootLayer = newRootLayer
+        mountedSVGFilename = mountedFilename
+        eyesLayer = findNamedLayer("eyes-js", in: newRootLayer)
+        bodyLayer = findNamedLayer("body", in: newRootLayer)
+        shadowLayer = findNamedLayer("shadow", in: newRootLayer)
+
+        let fadeDuration = 0.12
+
+        let fadeIn = CABasicAnimation(keyPath: "opacity")
+        fadeIn.fromValue = 0
+        fadeIn.toValue = 1
+        fadeIn.duration = fadeDuration
+
+        let fadeOut = CABasicAnimation(keyPath: "opacity")
+        fadeOut.fromValue = 1
+        fadeOut.toValue = 0
+        fadeOut.duration = fadeDuration
+
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak oldRoot] in
+            oldRoot?.removeFromSuperlayer()
+        }
+        newRootLayer.add(fadeIn, forKey: "pet-switch-fade-in")
+        oldRoot.add(fadeOut, forKey: "pet-switch-fade-out")
+        newRootLayer.opacity = 1
+        oldRoot.opacity = 0
+        CATransaction.commit()
+
+        eyeTracker.forceResend()
     }
 
     func playDragReaction() {
@@ -154,6 +224,19 @@ final class PetView: NSView {
             .appendingPathComponent(filename, isDirectory: false)
 
         return try? String(contentsOf: svgURL, encoding: .utf8)
+    }
+
+    private func buildSVGLayer(from filename: String) -> (CALayer, String)? {
+        guard let markup = svgMarkup(for: filename) else {
+            print("pet svg-read-error: \(filename)")
+            return nil
+        }
+
+        let document = SVGParser.parse(markup)
+        let rootLayer = CALayerRenderer.build(document)
+        CAAnimationBuilder.apply(document, to: rootLayer)
+        rootLayer.frame = bounds
+        return (rootLayer, filename)
     }
 
     private func findNamedLayer(_ name: String, in layer: CALayer) -> CALayer? {
