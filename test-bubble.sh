@@ -81,6 +81,34 @@ stack_case() {
   echo
 }
 
+same_session_case() {
+  echo "same-session: send two permission requests in one session; neither bubble should disappear until it is decided or disconnects"
+
+  (
+    request_json '{
+      "tool_name": "Bash",
+      "tool_input": {"command": "sleep 30"},
+      "session_id": "test-same-session"
+    }'
+  ) &
+  local first_pid=$!
+
+  sleep 1
+
+  (
+    request_json '{
+      "tool_name": "Write",
+      "tool_input": {"file_path": "/tmp/same-session.txt", "content": "hello"},
+      "session_id": "test-same-session"
+    }'
+  ) &
+  local second_pid=$!
+
+  wait "${first_pid}"
+  wait "${second_pid}"
+  echo
+}
+
 passthrough_case() {
   echo "passthrough: TaskCreate should auto-allow without showing a bubble"
   request_json '{
@@ -117,11 +145,12 @@ dnd_case() {
 
 usage() {
   cat <<'EOF'
-Usage: ./test-bubble.sh [all|single|stack|passthrough|disconnect|dnd]
+Usage: ./test-bubble.sh [all|single|stack|same-session|passthrough|disconnect|dnd]
 
-all          run stack, passthrough, and disconnect in sequence
+all          run stack, same-session, passthrough, and disconnect in sequence
 single       one permission request for Allow/Deny or suggestion-button checks
 stack        two pending requests for bubble stacking and hotkey checks
+same-session two pending requests in the same session; they should not be batch-dismissed
 passthrough  TaskCreate auto-allow check
 disconnect   client disconnect cleanup check
 dnd          send one request while DND is enabled and expect deny
@@ -131,6 +160,7 @@ EOF
 case "${CASE}" in
   all)
     stack_case
+    same_session_case
     passthrough_case
     disconnect_case
     ;;
@@ -139,6 +169,9 @@ case "${CASE}" in
     ;;
   stack)
     stack_case
+    ;;
+  same-session)
+    same_session_case
     ;;
   passthrough)
     passthrough_case

@@ -110,20 +110,12 @@ Claude Code 进程
 
 ## 气泡清理机制
 
-气泡有三条关闭路径：
+气泡有两条关闭路径：
 
 | 路径 | 触发条件 | 代码位置 |
 |------|----------|----------|
 | **用户点击** | 点击 Allow / Deny / Suggestion 按钮 | `BubbleStack.resolveBubble` → `removeBubble(respondingWith: result)` |
 | **断连检测** | Claude Code 关闭 /permission TCP 连接 | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
-| **生命周期事件** | /state 收到 PostToolUse 等事件 | `AppDelegate.handleStateRequest` → `dismissPendingBubbles(forSessionId:)` |
-
-生命周期解析事件集合（`AppDelegate.permissionResolutionEvents`）：
-- `PostToolUse`、`PostToolUseFailure` — 工具执行完毕
-- `Stop`、`StopFailure` — 回合结束
-- `SessionEnd` — 会话结束
-- `PermissionDenied` — 权限被拒（注：hook 端未实际发送此事件，见下方局限性）
-
 ### Passthrough 工具
 
 以下工具自动批准，不弹气泡（`BubbleStack.passthroughTools`）：
@@ -140,39 +132,31 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 ### 1. 终端批准后气泡残留（长时间 Bash 场景）
 
-**现象**：用户在终端（而非气泡）点击 Allow 后，气泡不消失，直到工具执行完毕才被 PostToolUse 事件清理。对于长时间运行的 Bash 命令或 MCP 工具调用（1-2 分钟+），气泡会一直挂在屏幕上。
+**现象**：用户在终端（而非气泡）点击 Allow 后，气泡不消失。对于长时间运行的 Bash 命令或 MCP 工具调用（1-2 分钟+），气泡会一直挂在屏幕上。
 
-**根因**：当用户在终端审批时，Claude Code 不一定会主动关闭 /permission HTTP 连接。连接仍然存活，断连检测无法触发。而 PostToolUse 事件要等工具执行完毕才会到达，中间没有任何中间事件（如 PermissionResolved / ToolStarted）可供 hey-clawd 感知"权限已被批准，工具已在运行"。
+**根因**：当用户在终端审批时，Claude Code 不一定会主动关闭 /permission HTTP 连接。连接仍然存活，断连检测无法触发。另一方面，`PermissionRequest` payload 没有 `tool_use_id`，无法和后续 `PostToolUse` 精确关联。同一 session 里还可能有并行 subagent/tool 事件，所以 hey-clawd 不能安全地靠生命周期事件去猜"这个气泡已经解决了"。
 
 **典型复现条件**：
 1. 工具触发 Bash 或 MCP 权限（不在 passthrough 列表内）
 2. 用户手通常已在终端上，习惯直接终端 Allow
-3. 执行时间长（1-2 min+），放大了 "等 PostToolUse" 的间隔
+3. 执行时间长（1-2 min+），放大了残留时间
 
 **与 d153dee 的关系**：`d153dee` 修复的是 `ConnectionPermissionTracker` 的 check-then-act 竞态——断连信号在 `attach()` 之前到达导致气泡变孤儿。那个问题已解决。此处的问题是**断连根本没有发生**，属于不同的缺口。
 
 **兜底策略**：在气泡右上角添加手动关闭按钮（×），用户可以自行 dismiss 不再需要的气泡。不发送 HTTP 响应（与断连处理一致），不影响 Claude Code 工具执行。
 
-### 2. PermissionDenied 事件未闭环
+### 2. 启发式事件 dismiss 的正确性风险
 
-**现象**：`AppDelegate.permissionResolutionEvents` 包含 `PermissionDenied`，但 `clawd-hook.js` 的 `EVENT_TO_STATE` 中没有注册此事件。
-
-**影响**：deny 路径的气泡清理不走 PermissionDenied 事件，而是依赖断连检测或后续的 Stop 事件兜底。在实际使用中 deny 场景不频繁，且断连通常能覆盖，暂无明显问题。
-
-**决策**：低优先级。如果 Claude Code 未来实际发送 `PermissionDenied` 命令 hook 事件，现有代码已经可以处理。
-
-### 3. 启发式事件 dismiss 的正确性风险
-
-**背景**：曾考虑通过监听 /state 事件（如检测到同 session 的 "working" 状态）来主动 dismiss 气泡。
+**背景**：曾考虑通过监听 /state 事件（如检测到同 session 的 `PostToolUse` 或 `working` 状态）来主动 dismiss 气泡。
 
 **为何放弃**：
 - /state 事件中没有 tool_id 字段，无法精确关联 "哪个事件对应哪个 permission 请求"
 - 同一 session 可能有并行事件（SubagentStop 等），噪声事件会导致**未授权的气泡被错误 dismiss**
 - 一旦气泡被误 dismiss，用户丧失 deny 能力，而 /permission 连接仍挂起，Claude Code 干等——比气泡多停留一分钟严重得多
 
-**决策**：不做启发式事件 dismiss。正确性 > 便利性。
+**决策**：移除按 `session_id` 批量生命周期清理。正确性 > 便利性。
 
-### 4. 响应格式陷阱
+### 3. 响应格式陷阱
 
 **历史 bug**（`367413e`）：最初权限响应直接返回 `{"behavior":"allow"}`，但 Claude Code hook 系统要求 `hookSpecificOutput` 包装。格式不匹配导致 Claude Code 忽略整个响应，用户点了 Allow 但实际无效。
 
@@ -180,13 +164,13 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **修法**：`PermissionDecisionResult` 结构体打包 behavior + suggestionPayloads，`resolveSuggestionEntry()` 按 Claude Code 要求规范化，`permissionResponse()` 按 `hookSpecificOutput` 格式组装。
 
-### 5. 首次点击被吞
+### 4. 首次点击被吞
 
 **历史 bug**（`367413e`）：`BubbleWindow`（NSPanel, nonactivatingPanel）的 NSHostingView `acceptsFirstMouse` 默认返回 false，macOS 将第一次点击消耗在"激活窗口"上。
 
 **修法**：`ClickThroughHostingView` 覆写 `acceptsFirstMouse` 返回 `true`。
 
-### 6. 断连检测竞态
+### 5. 断连检测竞态
 
 **历史 bug**（`d153dee`）：`ConnectionPermissionTracker` 的 `monitorDisconnect` 注册的 receive 回调可能在 `attach(request)` 之前触发，`pendingPermission` 为 nil 导致断连信号丢失，气泡成孤儿。
 

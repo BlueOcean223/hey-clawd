@@ -4,14 +4,6 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let sparkleUpdaterEnabledKey = "ClawdEnableSparkleUpdater"
-    private static let permissionResolutionEvents: Set<String> = [
-        "PostToolUse",
-        "PostToolUseFailure",
-        "Stop",
-        "StopFailure",
-        "SessionEnd",
-        "PermissionDenied",
-    ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
@@ -529,13 +521,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
         case .invalid:
             return Self.errorResponse(statusCode: 400, message: "invalid svg payload")
-        }
-
-        if Self.permissionResolutionEvents.contains(event ?? "") {
-            bubbleStack.dismissPendingBubbles(
-                forSessionId: normalizedSessionId,
-                reason: event ?? "unknown"
-            )
         }
 
         return Self.okResponse(["ok": true])

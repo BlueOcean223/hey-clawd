@@ -163,28 +163,6 @@ final class BubbleStack {
         resolveBubble(id: latestBubble.id, decision: .deny)
     }
 
-    func dismissPendingBubbles(
-        forSessionId sessionId: String,
-        reason: String? = nil
-    ) {
-        let normalizedSessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedSessionId.isEmpty else {
-            return
-        }
-
-        let ids = pendingPermissions
-            .filter { $0.content.sessionId == normalizedSessionId }
-            .map(\.id)
-
-        guard !ids.isEmpty else {
-            return
-        }
-
-        for id in ids {
-            removeBubble(id: id, respondingWith: .simple(.undecided))
-        }
-    }
-
     private func resolveBubble(id: UUID, decision: PermissionDecision) {
         let result = PermissionDecisionResult(
             behavior: decision.behavior,
