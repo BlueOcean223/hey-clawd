@@ -62,7 +62,7 @@ final class EyeTracker {
         timer.cancel()
     }
 
-    /// 交互 reaction 或窗口隐藏时，连 50ms timer 本身一起挂起。
+    /// 交互 reaction 或窗口隐藏时，连 100ms timer 本身一起挂起。
     /// 这里只 suspend source，不靠 tick 内部早退，这样主线程不会继续被周期性唤醒。
     func pause() {
         guard !isStopped, !isPaused else {
@@ -84,7 +84,7 @@ final class EyeTracker {
         timer.resume()
     }
 
-    /// SVG 刚切换完成时 DOM transform 会回到初始值。
+    /// SVG 刚切换完成时 CALayer transform 会回到初始值。
     /// 这里强制补发一次，避免“眼球逻辑还是旧位置，但新 SVG 还没收到 transform”。
     func forceResend() {
         forceEyeResend = true
