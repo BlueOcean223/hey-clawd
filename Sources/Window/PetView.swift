@@ -3,6 +3,8 @@ import QuartzCore
 
 @MainActor
 final class PetView: NSView {
+    private static let dragReactionSVG = "clawd-react-drag.svg"
+
     private var mountedRootLayer: CALayer?
     private var mountedSVGFilename: String?
     private var eyesLayer: CALayer?
@@ -87,6 +89,10 @@ final class PetView: NSView {
 
         mountedRootLayer?.removeFromSuperlayer()
 
+        if isMirrored {
+            newRootLayer.transform = CATransform3DMakeScale(-1, 1, 1)
+        }
+
         hostLayer.addSublayer(newRootLayer)
         mountedRootLayer = newRootLayer
         mountedSVGFilename = mountedFilename
@@ -115,6 +121,11 @@ final class PetView: NSView {
         switchGeneration &+= 1
 
         newRootLayer.opacity = 0
+
+        if isMirrored {
+            newRootLayer.transform = CATransform3DMakeScale(-1, 1, 1)
+        }
+
         hostLayer.addSublayer(newRootLayer)
 
         mountedRootLayer = newRootLayer
@@ -149,19 +160,24 @@ final class PetView: NSView {
     }
 
     func playDragReaction() {
-        // TODO: Phase 4.5
+        playReaction(svgFilename: Self.dragReactionSVG)
     }
 
     func playReaction(svgFilename: String) {
-        // TODO: Phase 4.5
+        loadSVG(svgFilename)
     }
 
     func resumeFromReaction(svgFilename: String) {
-        // TODO: Phase 4.5
+        switchSVG(svgFilename)
     }
 
     func setMiniLeft(_ enabled: Bool) {
-        // TODO: Phase 4.6
+        isMirrored = enabled
+        guard let mountedRootLayer else {
+            return
+        }
+
+        mountedRootLayer.transform = enabled ? CATransform3DMakeScale(-1, 1, 1) : CATransform3DIdentity
     }
 
     func pauseTracking() {
