@@ -25,7 +25,7 @@
         }
     }
 
-    private let petWebView: PetWebView
+    private let petView: PetView
     private var dragStartPoint: NSPoint?
     private var dragStartScreenPoint: NSPoint?
     private var lastDragScreenPoint: NSPoint?
@@ -53,7 +53,7 @@
     init(sizePreset: SizePreset = .small) {
         self.sizePreset = sizePreset
         let size = NSSize(width: sizePreset.dimension, height: sizePreset.dimension)
-        petWebView = PetWebView(frame: NSRect(origin: .zero, size: size))
+        petView = PetView(frame: NSRect(origin: .zero, size: size))
 
         super.init(
             contentRect: NSRect(origin: .zero, size: size),
@@ -72,11 +72,11 @@
         isMovableByWindowBackground = false
         // 所有桌面可见，并且切换 Space 时不参与系统重排。
         collectionBehavior = [.canJoinAllSpaces, .stationary]
-        contentView = petWebView
+        contentView = petView
         setFrame(originRect(for: size), display: false)
         observeScreenChanges()
         // 先接默认 idle SVG，后续状态机会改这里。
-        petWebView.loadSVG("clawd-idle-follow.svg")
+        petView.loadSVG("clawd-idle-follow.svg")
     }
 
     deinit {
@@ -178,7 +178,7 @@
     override func sendEvent(_ event: NSEvent) {
         switch event.type {
         case .leftMouseDown:
-            if petWebView.shouldHandleMouse(at: event.locationInWindow) {
+            if petView.shouldHandleMouse(at: event.locationInWindow) {
                 handleLeftMouseDown(event)
                 return
             }
@@ -193,7 +193,7 @@
                 return
             }
         case .rightMouseDown:
-            if petWebView.shouldHandleMouse(at: event.locationInWindow) {
+            if petView.shouldHandleMouse(at: event.locationInWindow) {
                 handleRightMouseDown(event)
                 return
             }
@@ -205,7 +205,7 @@
     }
 
     func setMiniLeft(_ enabled: Bool) {
-        petWebView.setMiniLeft(enabled)
+        petView.setMiniLeft(enabled)
     }
 
     /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
@@ -217,7 +217,7 @@
             return
         }
 
-        petWebView.switchSVG(svgFilename)
+        petView.switchSVG(svgFilename)
     }
 
     private func beginDragReactionIfNeeded() {
@@ -225,8 +225,8 @@
         reactionTimer?.invalidate()
         reactionTimer = nil
         isShowingReaction = true
-        petWebView.pauseTracking()
-        petWebView.playDragReaction()
+        petView.pauseTracking()
+        petView.playDragReaction()
     }
 
     private func endDragReactionIfNeeded() {
@@ -235,9 +235,9 @@
         }
 
         isShowingReaction = false
-        petWebView.resumeTracking()
+        petView.resumeTracking()
         // 拖拽期间状态机可能已经推进到新状态，恢复时以最新缓存结果为准。
-        petWebView.resumeFromReaction(svgFilename: currentDisplaySVGFilename)
+        petView.resumeFromReaction(svgFilename: currentDisplaySVGFilename)
     }
 
     private func handleLeftMouseDown(_ event: NSEvent) {
@@ -313,7 +313,7 @@
             return
         }
 
-        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petWebView)
+        NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petView)
     }
 
     private func handlePetClick(_ event: NSEvent) {
@@ -381,7 +381,7 @@
     private func playTimedReaction(svgFilename: String, duration: TimeInterval) {
         reactionTimer?.invalidate()
         isShowingReaction = true
-        petWebView.playReaction(svgFilename: svgFilename)
+        petView.playReaction(svgFilename: svgFilename)
 
         // 点击反应是一次性覆盖层，到时后始终回到状态机最新结果。
         reactionTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
@@ -392,7 +392,7 @@
 
                 self.reactionTimer = nil
                 self.isShowingReaction = false
-                self.petWebView.resumeFromReaction(svgFilename: self.currentDisplaySVGFilename)
+                self.petView.resumeFromReaction(svgFilename: self.currentDisplaySVGFilename)
             }
         }
         RunLoop.main.add(reactionTimer!, forMode: .common)

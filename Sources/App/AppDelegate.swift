@@ -109,7 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 2.4 的核心装配点：
     /// HTTPServer 接收 hook 请求，StateMachine 决定最终状态和 SVG，
-    /// 再由 PetWindow/PetWebView 把结果推到 bridge.js。
+    /// 再由 PetWindow/PetView 把结果推到界面层。
     @MainActor
     private func assembleCoreLoop() {
         let stateMachine = StateMachine()
@@ -312,7 +312,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         stateMachine?.cleanup()
-        petWebView?.teardown()
+        petView?.teardown()
     }
 
     private func installTerminationSignalHandlers() {
@@ -350,8 +350,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
-    private var petWebView: PetWebView? {
-        petWindow?.contentView as? PetWebView
+    private var petView: PetView? {
+        petWindow?.contentView as? PetView
     }
 
     private func togglePetVisibility() {
@@ -360,11 +360,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if petWindow.isVisible {
-            petWebView?.pauseTracking()
+            petView?.pauseTracking()
             petWindow.orderOut(nil)
         } else {
             petWindow.orderFrontRegardless()
-            petWebView?.resumeTracking()
+            petView?.resumeTracking()
         }
 
         bubbleStack.repositionBubbles()

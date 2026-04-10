@@ -682,11 +682,11 @@ final class MiniMode {
         }
 
         let localPoint = petWindow.convertPoint(fromScreen: mouseLocation)
-        guard let petWebView = petWindow.contentView as? PetWebView else {
+        guard let petView = petWindow.contentView as? PetView else {
             return true
         }
 
-        return petWebView.shouldHandleHover(at: localPoint)
+        return petView.shouldHandleHover(at: localPoint)
     }
 
     private func pointAtCenter(of rect: CGRect) -> NSPoint {

@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// 眼球追踪只负责“算偏移”和“按需发偏移”。
-/// 具体怎么改 DOM 由 PetWebView / bridge.js 处理，这样算法和渲染能分开。
+/// 具体怎么改渲染层由 PetView / CALayer 处理，这样算法和渲染能分开。
 @MainActor
 final class EyeTracker {
     private static let timerIntervalMs: Int = 50
