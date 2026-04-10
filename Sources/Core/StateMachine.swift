@@ -246,6 +246,8 @@ final class StateMachine {
 
     var onStateChange: ((PetState, String, pid_t?) -> Void)?
     var onDoNotDisturbChange: ((Bool) -> Void)?
+    /// Debug 模式下冻结显示输出，阻止状态机推送 SVG 变更到 PetWindow。
+    var debugFreezeDisplay = false
 
     private let soundPlayer = SoundPlayer.shared
     private var sessions: [String: Session] = [:]
@@ -849,6 +851,9 @@ final class StateMachine {
     }
 
     private func requestDisplayTransition(to state: PetState, svgOverride: String?, triggeringSession: Session? = nil) {
+        guard !debugFreezeDisplay else {
+            return
+        }
         guard let effectiveState = normalizedDisplayState(state) else {
             return
         }

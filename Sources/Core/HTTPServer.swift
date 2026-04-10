@@ -186,6 +186,8 @@ final class HTTPServer: @unchecked Sendable {
     private var port: Int?
     private var stateRequestHandler: ((Data) async -> HTTPResponse)?
     private var permissionRequestHandler: ((PendingPermissionRequest) -> Void)?
+    private var debugSVGHandler: ((String) async -> HTTPResponse)?
+    private var debugResetHandler: (() async -> HTTPResponse)?
 
     var currentPort: Int? {
         lock.withLock { port }
@@ -200,6 +202,18 @@ final class HTTPServer: @unchecked Sendable {
     func setPermissionRequestHandler(_ handler: ((PendingPermissionRequest) -> Void)?) {
         lock.withLock {
             permissionRequestHandler = handler
+        }
+    }
+
+    func setDebugSVGHandler(_ handler: ((String) async -> HTTPResponse)?) {
+        lock.withLock {
+            debugSVGHandler = handler
+        }
+    }
+
+    func setDebugResetHandler(_ handler: (() async -> HTTPResponse)?) {
+        lock.withLock {
+            debugResetHandler = handler
         }
     }
 
@@ -360,6 +374,8 @@ final class HTTPServer: @unchecked Sendable {
     /// - GET  /state      → 健康检查，返回 app 名称和端口
     /// - POST /state      → 状态更新，转发给 StateMachine
     /// - POST /permission → 权限请求，挂起等待用户决策
+    /// - POST /debug/svg  → 直接加载指定 SVG 文件，冻结状态机输出（开发用）
+    /// - POST /debug/reset → 解冻状态机，恢复正常运行
     /// - 其他             → 404
     private func route(_ request: HTTPRequest, permissionTracker: ConnectionPermissionTracker) async -> HTTPResponse {
         let path = normalizedPath(from: request.path)
@@ -405,6 +421,25 @@ final class HTTPServer: @unchecked Sendable {
             // 挂起当前连接，直到上层通过 PendingPermissionRequest.respond() 返回结果
             let result = await resolvePermission(body: request.body, permissionTracker: permissionTracker)
             return permissionResponse(result)
+
+        case ("POST", "/debug/svg"):
+            guard request.body.count <= Self.statePayloadLimit else {
+                return errorResponse(statusCode: 413, message: "payload too large")
+            }
+            guard let payload = try? JSONSerialization.jsonObject(with: request.body) as? [String: Any],
+                  let svgFilename = payload["svg"] as? String, !svgFilename.isEmpty else {
+                return errorResponse(statusCode: 400, message: "missing svg field")
+            }
+            guard let handler = lock.withLock({ debugSVGHandler }) else {
+                return errorResponse(statusCode: 503, message: "debug handler unavailable")
+            }
+            return await handler(svgFilename)
+
+        case ("POST", "/debug/reset"):
+            guard let handler = lock.withLock({ debugResetHandler }) else {
+                return errorResponse(statusCode: 503, message: "debug handler unavailable")
+            }
+            return await handler()
 
         default:
             return errorResponse(statusCode: 404, message: "not found")

@@ -149,6 +149,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.presentPermissionBubble(for: request)
             }
         }
+        server.setDebugSVGHandler { [weak stateMachine, weak petWindow = self.petWindow] svgFilename in
+            stateMachine?.debugFreezeDisplay = true
+            petWindow?.display(state: .idle, svgFilename: svgFilename, sourcePid: nil)
+            return Self.okResponse(["ok": true, "svg": svgFilename])
+        }
+        server.setDebugResetHandler { [weak stateMachine, weak petWindow = self.petWindow] in
+            stateMachine?.debugFreezeDisplay = false
+            let idleSvg = StateMachine.stateSVGs[.idle] ?? "clawd-idle-follow.svg"
+            petWindow?.display(state: .idle, svgFilename: idleSvg, sourcePid: nil)
+            return Self.okResponse(["ok": true])
+        }
         httpServer = server
         httpServerTask = Task { [server] in
             guard let activePort = await server.start() else {
@@ -381,7 +392,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if stateMachine?.doNotDisturbEnabled == true {
-            request.respond(with: .simple(.deny))
             return
         }
 
