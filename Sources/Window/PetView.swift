@@ -46,7 +46,9 @@ final class PetView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        mountedRootLayer?.frame = bounds
+        if let mountedRootLayer {
+            applyScaling(to: mountedRootLayer)
+        }
     }
 
     override func updateTrackingAreas() {
@@ -89,10 +91,6 @@ final class PetView: NSView {
 
         mountedRootLayer?.removeFromSuperlayer()
 
-        if isMirrored {
-            newRootLayer.transform = CATransform3DMakeScale(-1, 1, 1)
-        }
-
         hostLayer.addSublayer(newRootLayer)
         mountedRootLayer = newRootLayer
         mountedSVGFilename = mountedFilename
@@ -121,10 +119,6 @@ final class PetView: NSView {
         switchGeneration &+= 1
 
         newRootLayer.opacity = 0
-
-        if isMirrored {
-            newRootLayer.transform = CATransform3DMakeScale(-1, 1, 1)
-        }
 
         hostLayer.addSublayer(newRootLayer)
 
@@ -177,7 +171,7 @@ final class PetView: NSView {
             return
         }
 
-        mountedRootLayer.transform = enabled ? CATransform3DMakeScale(-1, 1, 1) : CATransform3DIdentity
+        applyScaling(to: mountedRootLayer)
     }
 
     func pauseTracking() {
@@ -343,8 +337,27 @@ final class PetView: NSView {
         let document = SVGParser.parse(markup)
         let rootLayer = CALayerRenderer.build(document)
         CAAnimationBuilder.apply(document, to: rootLayer)
-        rootLayer.frame = bounds
+        applyScaling(to: rootLayer)
         return (rootLayer, filename)
+    }
+
+    /// Scale the SVG root layer from its native bounds (e.g. 45x45) to fill the view,
+    /// incorporating the horizontal flip when `isMirrored` is true.
+    private func applyScaling(to rootLayer: CALayer) {
+        let svgBounds = rootLayer.bounds
+        guard svgBounds.width > 0, svgBounds.height > 0 else {
+            return
+        }
+
+        let scaleX = bounds.width / svgBounds.width
+        let scaleY = bounds.height / svgBounds.height
+        rootLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+
+        var transform = CATransform3DMakeScale(scaleX, scaleY, 1)
+        if isMirrored {
+            transform = CATransform3DScale(transform, -1, 1, 1)
+        }
+        rootLayer.transform = transform
     }
 
     private func findNamedLayer(_ name: String, in layer: CALayer) -> CALayer? {
@@ -386,15 +399,11 @@ final class PetView: NSView {
     }
 
     private func performHitTest(at localPoint: NSPoint) -> Bool {
-        guard let mountedRootLayer,
-              bounds.width > 0,
-              bounds.height > 0 else {
+        guard let mountedRootLayer, let hostLayer = layer else {
             return false
         }
 
-        let scaleX = mountedRootLayer.bounds.width / bounds.width
-        let scaleY = mountedRootLayer.bounds.height / bounds.height
-        let layerPoint = CGPoint(x: localPoint.x * scaleX, y: localPoint.y * scaleY)
+        let layerPoint = mountedRootLayer.convert(localPoint, from: hostLayer)
         return CALayerRenderer.hitTest(point: layerPoint, in: mountedRootLayer)
     }
 
