@@ -346,12 +346,20 @@ final class PetView: NSView {
     }
 
     private func buildSVGLayer(from filename: String) -> (CALayer, String)? {
-        guard let markup = svgMarkup(for: filename) else {
-            print("pet svg-read-error: \(filename)")
-            return nil
+        let document: SVGDocument
+        if let cached = SVGDocumentCache.shared.get(filename) {
+            document = cached
+        } else {
+            guard let markup = svgMarkup(for: filename) else {
+                print("pet svg-read-error: \(filename)")
+                return nil
+            }
+
+            let parsed = SVGParser.parse(markup)
+            SVGDocumentCache.shared.set(filename, parsed)
+            document = parsed
         }
 
-        let document = SVGParser.parse(markup)
         let rootLayer = CALayerRenderer.build(document)
         CAAnimationBuilder.apply(document, to: rootLayer)
         applyScaling(to: rootLayer)
