@@ -8,6 +8,9 @@ final class PetView: NSView {
     private var eyesLayer: CALayer?
     private var bodyLayer: CALayer?
     private var shadowLayer: CALayer?
+    private var trackingArea: NSTrackingArea?
+    private var lastHitTestPoint: NSPoint?
+    private var lastHitTestResult = false
     private var switchGeneration: UInt64 = 0
 
     private(set) var isTrackingPaused = false
@@ -42,6 +45,36 @@ final class PetView: NSView {
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         mountedRootLayer?.frame = bounds
+    }
+
+    override func updateTrackingAreas() {
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        let newArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(newArea)
+        trackingArea = newArea
+        super.updateTrackingAreas()
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateHitTesting(with: event)
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        updateHitTesting(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        _ = event
+        lastHitTestResult = false
+        window?.ignoresMouseEvents = true
     }
 
     func loadSVG(_ filename: String) {
@@ -80,7 +113,6 @@ final class PetView: NSView {
         }
 
         switchGeneration &+= 1
-        let generation = switchGeneration
 
         newRootLayer.opacity = 0
         hostLayer.addSublayer(newRootLayer)
@@ -133,24 +165,70 @@ final class PetView: NSView {
     }
 
     func pauseTracking() {
-        // TODO: Phase 4.3
+        isTrackingPaused = true
+        eyeTracker.pause()
+        lastHitTestResult = false
     }
 
     func resumeTracking() {
-        // TODO: Phase 4.3
+        isTrackingPaused = false
+        eyeTracker.resume()
     }
 
     func shouldHandleMouse(at windowPoint: NSPoint) -> Bool {
-        // TODO: Phase 4.3
-        false
+        guard window != nil else {
+            return false
+        }
+
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            return false
+        }
+
+        guard let lastHitTestPoint else {
+            return false
+        }
+
+        let dx = abs(lastHitTestPoint.x - localPoint.x)
+        let dy = abs(lastHitTestPoint.y - localPoint.y)
+        guard dx <= 2, dy <= 2 else {
+            return false
+        }
+
+        return lastHitTestResult
     }
 
     func shouldHandleHover(at windowPoint: NSPoint) -> Bool {
-        // TODO: Phase 4.3
-        false
+        guard window != nil else {
+            return false
+        }
+
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            return false
+        }
+
+        guard let lastHitTestPoint else {
+            return false
+        }
+
+        let hoverTolerance: CGFloat = 12
+        let dx = abs(lastHitTestPoint.x - localPoint.x)
+        let dy = abs(lastHitTestPoint.y - localPoint.y)
+        guard dx <= hoverTolerance, dy <= hoverTolerance else {
+            return false
+        }
+
+        return lastHitTestResult
     }
 
     func teardown() {
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+
+        self.trackingArea = nil
+
         if let mountedRootLayer {
             removeAllAnimationsRecursively(from: mountedRootLayer)
             mountedRootLayer.removeFromSuperlayer()
@@ -186,7 +264,21 @@ final class PetView: NSView {
     }
 
     private func applyEyeMove(dx: CGFloat, dy: CGFloat) {
-        // TODO: Phase 4.4
+        guard let eyesLayer else {
+            return
+        }
+
+        let (transitionDuration, transitionTimingFunction) = transitionParams(for: eyesLayer, property: "transform")
+        let effectiveDx = isMirrored ? -dx : dx
+        let effectiveDy = -dy
+
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(transitionDuration)
+        CATransaction.setAnimationTimingFunction(transitionTimingFunction)
+        eyesLayer.transform = CATransform3DMakeTranslation(effectiveDx, effectiveDy, 0)
+        bodyLayer?.transform = CATransform3DMakeTranslation(effectiveDx * 0.3, effectiveDy * 0.3, 0)
+        shadowLayer?.transform = CATransform3DMakeTranslation(effectiveDx * 0.15, effectiveDy * 0.15, 0)
+        CATransaction.commit()
     }
 
     /// 定位 app bundle 内的 Resources/ 目录。
@@ -258,6 +350,101 @@ final class PetView: NSView {
 
         for sublayer in layer.sublayers ?? [] {
             removeAllAnimationsRecursively(from: sublayer)
+        }
+    }
+
+    private func updateHitTesting(with event: NSEvent) {
+        guard !isTrackingPaused else {
+            return
+        }
+
+        let localPoint = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(localPoint) else {
+            return
+        }
+
+        let hit = performHitTest(at: localPoint)
+        lastHitTestPoint = localPoint
+        lastHitTestResult = hit
+        window?.ignoresMouseEvents = !hit
+    }
+
+    private func performHitTest(at localPoint: NSPoint) -> Bool {
+        guard let mountedRootLayer,
+              bounds.width > 0,
+              bounds.height > 0 else {
+            return false
+        }
+
+        let scaleX = mountedRootLayer.bounds.width / bounds.width
+        let scaleY = mountedRootLayer.bounds.height / bounds.height
+        let layerPoint = CGPoint(x: localPoint.x * scaleX, y: localPoint.y * scaleY)
+        return CALayerRenderer.hitTest(point: layerPoint, in: mountedRootLayer)
+    }
+
+    private func transitionParams(for layer: CALayer, property: String) -> (TimeInterval, CAMediaTimingFunction) {
+        let defaultTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        let transitions = layer.value(forKey: "svgTransitions") as? [[String: Any]] ?? []
+
+        guard let transition = transitions.first(where: { ($0["property"] as? String) == property }) else {
+            return (0.2, defaultTimingFunction)
+        }
+
+        let duration = transition["duration"] as? TimeInterval ?? 0.2
+        let timingFunction = mediaTimingFunction(from: transition["timingFunction"]) ?? defaultTimingFunction
+        return (duration, timingFunction)
+    }
+
+    private func mediaTimingFunction(from rawValue: Any?) -> CAMediaTimingFunction? {
+        if let timingFunction = rawValue as? TimingFunction {
+            return CAAnimationBuilder.mediaTimingFunction(from: timingFunction)
+        }
+
+        if let name = rawValue as? String,
+           let timingFunction = timingFunction(from: name) {
+            return CAAnimationBuilder.mediaTimingFunction(from: timingFunction)
+        }
+
+        return rawValue as? CAMediaTimingFunction
+    }
+
+    private func timingFunction(from rawValue: String) -> TimingFunction? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        switch trimmed {
+        case "ease-in-out":
+            return .easeInOut
+        case "linear":
+            return .linear
+        case "ease-out":
+            return .easeOut
+        case "ease-in":
+            return .easeIn
+        case "step-end":
+            return .stepEnd
+        case "ease":
+            return .cubicBezier(0.25, 0.1, 0.25, 1)
+        default:
+            guard trimmed.hasPrefix("cubic-bezier("), trimmed.hasSuffix(")") else {
+                return nil
+            }
+
+            let arguments = String(trimmed.dropFirst("cubic-bezier(".count).dropLast())
+            let values = arguments
+                .split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .compactMap(Double.init)
+
+            guard values.count == 4 else {
+                return nil
+            }
+
+            return .cubicBezier(
+                CGFloat(values[0]),
+                CGFloat(values[1]),
+                CGFloat(values[2]),
+                CGFloat(values[3])
+            )
         }
     }
 }
