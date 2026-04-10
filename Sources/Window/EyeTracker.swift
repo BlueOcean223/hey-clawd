@@ -5,7 +5,7 @@ import Foundation
 /// 具体怎么改渲染层由 PetView / CALayer 处理，这样算法和渲染能分开。
 @MainActor
 final class EyeTracker {
-    private static let timerIntervalMs: Int = 50
+    private static let timerIntervalMs: Int = 100
     private static let maxDistance: CGFloat = 300
     private static let maxEyeOffset: CGFloat = 3
     private static let maxEyeYOffset: CGFloat = 1.5
