@@ -169,12 +169,17 @@ final class PetView: NSView {
         playReaction(svgFilename: Self.dragReactionSVG)
     }
 
+    func prepareDragReaction() {
+        _ = ensureSVGDocumentCached(for: Self.dragReactionSVG)
+    }
+
     func playReaction(svgFilename: String) {
         loadSVG(svgFilename)
     }
 
     func resumeFromReaction(svgFilename: String) {
         switchSVG(svgFilename)
+        prepareDragReaction()
     }
 
     func setMiniLeft(_ enabled: Bool) {
@@ -346,24 +351,29 @@ final class PetView: NSView {
     }
 
     private func buildSVGLayer(from filename: String) -> (CALayer, String)? {
-        let document: SVGDocument
-        if let cached = SVGDocumentCache.shared.get(filename) {
-            document = cached
-        } else {
-            guard let markup = svgMarkup(for: filename) else {
-                print("pet svg-read-error: \(filename)")
-                return nil
-            }
-
-            let parsed = SVGParser.parse(markup)
-            SVGDocumentCache.shared.set(filename, parsed)
-            document = parsed
+        guard let document = ensureSVGDocumentCached(for: filename) else {
+            return nil
         }
 
         let rootLayer = CALayerRenderer.build(document)
         CAAnimationBuilder.apply(document, to: rootLayer)
         applyScaling(to: rootLayer)
         return (rootLayer, filename)
+    }
+
+    private func ensureSVGDocumentCached(for filename: String) -> SVGDocument? {
+        if let cached = SVGDocumentCache.shared.get(filename) {
+            return cached
+        }
+
+        guard let markup = svgMarkup(for: filename) else {
+            print("pet svg-read-error: \(filename)")
+            return nil
+        }
+
+        let parsed = SVGParser.parse(markup)
+        SVGDocumentCache.shared.set(filename, parsed)
+        return parsed
     }
 
     /// Scale the SVG root layer from its native bounds (e.g. 45x45) to fill the view,

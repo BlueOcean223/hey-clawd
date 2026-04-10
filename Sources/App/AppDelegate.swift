@@ -105,6 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func assembleCoreLoop() {
         let stateMachine = StateMachine()
+        petWindow?.onDragStateChange = { [weak stateMachine] isDragging in
+            stateMachine?.setPointerPollingSuspended(isDragging)
+        }
         stateMachine.onStateChange = { [weak self, weak petWindow = self.petWindow] state, svg, sourcePid in
             petWindow?.display(state: state, svgFilename: svg, sourcePid: sourcePid)
 

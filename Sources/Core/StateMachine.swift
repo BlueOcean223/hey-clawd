@@ -259,6 +259,7 @@ final class StateMachine {
     private var sleepMode: SleepMode = .awake
     private var lastPointerLocation: NSPoint?
     private var lastPointerMovedAt = Date()
+    private var isPointerPollingSuspended = false
     private var oneShotSourcePid: pid_t?
     private var oneShotFocusTarget: TerminalFocusTarget?
 
@@ -316,6 +317,16 @@ final class StateMachine {
 
     func requestMiniDisplayState(_ state: PetState) {
         requestDisplayTransition(to: state, svgOverride: svgOverride(for: state))
+    }
+
+    func setPointerPollingSuspended(_ suspended: Bool) {
+        guard isPointerPollingSuspended != suspended else {
+            return
+        }
+
+        isPointerPollingSuspended = suspended
+        lastPointerLocation = NSEvent.mouseLocation
+        lastPointerMovedAt = Date()
     }
 
     func refreshDisplayState() {
@@ -557,7 +568,7 @@ final class StateMachine {
     }
 
     private func pollSleepSequence() {
-        guard !doNotDisturbEnabled, !miniModeEnabled else {
+        guard !isPointerPollingSuspended, !doNotDisturbEnabled, !miniModeEnabled else {
             return
         }
 

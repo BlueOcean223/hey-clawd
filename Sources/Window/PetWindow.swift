@@ -29,7 +29,7 @@ import QuartzCore
     private let petView: PetView
     private var dragStartPoint: NSPoint?
     private var dragStartScreenPoint: NSPoint?
-    private var lastDragScreenPoint: NSPoint?
+    private var dragCursorOffsetFromOrigin: NSPoint?
     private var isDraggingPet = false
     /// 反应动画播放期间，状态机更新只缓存，不直接覆盖当前 SVG。
     private var isShowingReaction = false
@@ -49,6 +49,8 @@ import QuartzCore
     var onDragEnded: ((NSPoint) -> Void)?
     /// mini 模式会在这里接管拖拽中的位置约束，比如贴边移动或拖拽脱离。
     var onDragMove: ((NSPoint) -> NSPoint)?
+    /// 上层可以在拖拽期间暂停无关轮询，减轻窗口跟手时的主线程压力。
+    var onDragStateChange: ((Bool) -> Void)?
     /// 聚焦逻辑交给上层协调，这里只负责把点击事件抛出去。
     var onPetClick: (() -> Void)?
 
@@ -85,6 +87,7 @@ import QuartzCore
         )
         // 先接默认 idle SVG，后续状态机会改这里。
         petView.loadSVG("clawd-idle-follow.svg")
+        petView.prepareDragReaction()
     }
 
     deinit {
@@ -281,6 +284,7 @@ import QuartzCore
         reactionTimer?.invalidate()
         reactionTimer = nil
         isShowingReaction = true
+        onDragStateChange?(true)
         petView.pauseTracking()
         petView.playDragReaction()
     }
@@ -291,6 +295,7 @@ import QuartzCore
         }
 
         isShowingReaction = false
+        onDragStateChange?(false)
         petView.resumeTracking()
         // 拖拽期间状态机可能已经推进到新状态，恢复时以最新缓存结果为准。
         petView.resumeFromReaction(svgFilename: currentDisplaySVGFilename)
@@ -300,7 +305,10 @@ import QuartzCore
         dragStartPoint = event.locationInWindow
         let screenPoint = NSEvent.mouseLocation
         dragStartScreenPoint = screenPoint
-        lastDragScreenPoint = screenPoint
+        dragCursorOffsetFromOrigin = NSPoint(
+            x: screenPoint.x - frame.origin.x,
+            y: screenPoint.y - frame.origin.y
+        )
         isDraggingPet = false
     }
 
@@ -310,8 +318,8 @@ import QuartzCore
         }
 
         guard
-            let dragStartPoint,
-            let dragStartScreenPoint
+            let dragStartScreenPoint,
+            let dragCursorOffsetFromOrigin
         else {
             return
         }
@@ -330,23 +338,16 @@ import QuartzCore
             }
         }
 
-        guard
-            isDraggingPet,
-            let lastDragScreenPoint
-        else {
+        guard isDraggingPet else {
             return
         }
 
-        let deltaX = screenPoint.x - lastDragScreenPoint.x
-        let deltaY = screenPoint.y - lastDragScreenPoint.y
         let proposedOrigin = NSPoint(
-            x: frame.origin.x + deltaX,
-            y: frame.origin.y + deltaY
+            x: screenPoint.x - dragCursorOffsetFromOrigin.x,
+            y: screenPoint.y - dragCursorOffsetFromOrigin.y
         )
         let resolvedOrigin = onDragMove?(proposedOrigin) ?? proposedOrigin
         setFrameOrigin(resolvedOrigin)
-        self.lastDragScreenPoint = screenPoint
-        self.dragStartPoint = dragStartPoint
     }
 
     private func handleLeftMouseUp(_ event: NSEvent) {
@@ -359,7 +360,7 @@ import QuartzCore
 
         dragStartPoint = nil
         dragStartScreenPoint = nil
-        lastDragScreenPoint = nil
+        dragCursorOffsetFromOrigin = nil
         isDraggingPet = false
     }
 
