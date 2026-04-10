@@ -14,9 +14,8 @@ enum CALayerRenderer {
             rootLayer.sublayerTransform = CATransform3DMakeTranslation(-viewBox.x, -viewBox.y, 0)
         }
 
-        if document.shapeRendering == "crispEdges" {
-            rootLayer.shouldRasterize = true
-            rootLayer.rasterizationScale = rootLayer.contentsScale
+        let crispEdges = document.shapeRendering == "crispEdges"
+        if crispEdges {
             rootLayer.edgeAntialiasingMask = []
         }
 
@@ -37,6 +36,10 @@ enum CALayerRenderer {
             }
 
             rootLayer.addSublayer(layer)
+        }
+
+        if crispEdges {
+            propagateCrispEdges(rootLayer)
         }
 
         return rootLayer
@@ -71,8 +74,10 @@ enum CALayerRenderer {
                 layer.transform = TransformParser.parse(transform)
             }
 
-            let childFill = group.fill ?? inheritedFill
-            let childStroke = group.stroke ?? inheritedStroke
+            let cssFill = resolvedCSSProperty("fill", id: group.id, classes: group.classes, document: document)
+            let cssStroke = resolvedCSSProperty("stroke", id: group.id, classes: group.classes, document: document)
+            let childFill = cssFill ?? group.fill ?? inheritedFill
+            let childStroke = cssStroke ?? group.stroke ?? inheritedStroke
             let childStrokeWidth = group.strokeWidth ?? inheritedStrokeWidth
             let childStrokeLinecap = group.strokeLinecap ?? inheritedStrokeLinecap
             let childStrokeLinejoin = group.strokeLinejoin ?? inheritedStrokeLinejoin
@@ -122,7 +127,7 @@ enum CALayerRenderer {
             layer.name = rect.id
 
             if let transform = rect.transform {
-                layer.transform = TransformParser.parse(transform)
+                layer.transform = svgAttributeTransform(transform, position: layer.position)
             }
 
             storeMetadata(on: layer, nodePath: nodePath, classes: rect.classes)
@@ -503,15 +508,23 @@ private extension CALayerRenderer {
             }
             .map(\.element)
 
+        // Resolve transform-box before applying transform-origin.
+        var effectiveTransformBox: String?
+        var effectiveTransformOrigin: String?
         for binding in matchedBindings {
-            if let transformOrigin = binding.properties["transform-origin"] {
-                layer.setValue(transformOrigin, forKey: "svgTransformOrigin")
-                applyTransformOrigin(transformOrigin, to: layer)
-            }
+            if let tb = binding.properties["transform-box"] { effectiveTransformBox = tb }
+            if let to = binding.properties["transform-origin"] { effectiveTransformOrigin = to }
+        }
+        if let transformOrigin = effectiveTransformOrigin {
+            layer.setValue(transformOrigin, forKey: "svgTransformOrigin")
+            let resolvedBox = effectiveTransformBox ?? "view-box"
+            applyTransformOrigin(transformOrigin, to: layer, transformBox: resolvedBox, viewBox: document.viewBox)
+        }
+        if let transformBox = effectiveTransformBox {
+            layer.setValue(transformBox, forKey: "svgTransformBox")
+        }
 
-            if let transformBox = binding.properties["transform-box"] {
-                layer.setValue(transformBox, forKey: "svgTransformBox")
-            }
+        for binding in matchedBindings {
 
             if let opacityStr = binding.properties["opacity"],
                let opacity = Double(opacityStr) {
@@ -524,8 +537,22 @@ private extension CALayerRenderer {
                 }
             }
 
-            if let fill = binding.properties["fill"], let shapeLayer = layer as? CAShapeLayer {
-                shapeLayer.fillColor = ColorParser.parse(fill)
+            if let fill = binding.properties["fill"] {
+                if let shapeLayer = layer as? CAShapeLayer {
+                    shapeLayer.fillColor = ColorParser.parse(fill)
+                } else if (layer.sublayers ?? []).isEmpty {
+                    layer.backgroundColor = ColorParser.parse(fill)
+                }
+            }
+
+            if let stroke = binding.properties["stroke"], let shapeLayer = layer as? CAShapeLayer {
+                shapeLayer.strokeColor = ColorParser.parse(stroke)
+            }
+
+            if let strokeWidth = binding.properties["stroke-width"], let shapeLayer = layer as? CAShapeLayer {
+                if let width = parseCSSLength(strokeWidth) {
+                    shapeLayer.lineWidth = CGFloat(width)
+                }
             }
         }
     }
@@ -534,8 +561,42 @@ private extension CALayerRenderer {
         guard let origin = CSSParser.resolvedTransformOrigin(from: rawValue) else {
             return
         }
-
         setAnchorPoint(origin, on: layer)
+    }
+
+    static func applyTransformOrigin(
+        _ rawValue: String,
+        to layer: CALayer,
+        transformBox: String,
+        viewBox: SVGViewBox?
+    ) {
+        guard let origin = CSSParser.resolvedTransformOrigin(from: rawValue) else {
+            return
+        }
+        if transformBox == "fill-box" || viewBox == nil {
+            setAnchorPoint(origin, on: layer)
+            return
+        }
+        // view-box: resolve percentage/keyword origins against viewBox, then convert to px.
+        let vb = viewBox!
+        let resolved = SVGTransformOrigin(
+            x: resolveViewBoxComponent(origin.x, offset: vb.x, size: vb.width),
+            y: resolveViewBoxComponent(origin.y, offset: vb.y, size: vb.height)
+        )
+        setAnchorPoint(resolved, on: layer)
+    }
+
+    static func resolveViewBoxComponent(
+        _ component: SVGTransformOriginComponent,
+        offset: CGFloat,
+        size: CGFloat
+    ) -> SVGTransformOriginComponent {
+        switch component {
+        case .percent(let pct):
+            return .px(offset + size * pct / 100)
+        case .px:
+            return component
+        }
     }
 
     static func matches(_ selector: CSSSelector, id: String?, classes: [String]) -> Bool {
@@ -610,6 +671,59 @@ private extension CALayerRenderer {
         layer.mask = maskLayer
     }
 
+    /// SVG attribute `transform` operates in parent coordinates around (0,0).
+    /// CALayer applies `transform` around the layer's anchorPoint (= position).
+    /// Compensate by moving the layer-space origin onto the parent-space position,
+    /// applying the SVG matrix there, then moving back.
+    /// T_ca = translate(pos) · T_svg · translate(-pos)
+    static func svgAttributeTransform(_ svgTransform: String, position: CGPoint) -> CATransform3D {
+        let parsed = TransformParser.parse(svgTransform)
+        guard position.x != 0 || position.y != 0 else {
+            return parsed
+        }
+        let toPosition = CATransform3DMakeTranslation(position.x, position.y, 0)
+        let fromPosition = CATransform3DMakeTranslation(-position.x, -position.y, 0)
+        return CATransform3DConcat(CATransform3DConcat(toPosition, parsed), fromPosition)
+    }
+
+    static func propagateCrispEdges(_ layer: CALayer) {
+        for sublayer in layer.sublayers ?? [] {
+            sublayer.edgeAntialiasingMask = []
+            propagateCrispEdges(sublayer)
+        }
+    }
+
+    static func parseCSSLength(_ value: String) -> Double? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix("px") {
+            return Double(String(trimmed.dropLast(2)))
+        }
+        return Double(trimmed)
+    }
+
+    static func resolvedCSSProperty(
+        _ property: String,
+        id: String?,
+        classes: [String],
+        document: SVGDocument
+    ) -> String? {
+        var result: String?
+        let bindings = document.staticStyleBindings
+            .enumerated()
+            .filter { matches($0.element.selector, id: id, classes: classes) }
+            .sorted { lhs, rhs in
+                let lhsSpec = selectorSpecificity(lhs.element.selector)
+                let rhsSpec = selectorSpecificity(rhs.element.selector)
+                return lhsSpec == rhsSpec ? lhs.offset < rhs.offset : lhsSpec < rhsSpec
+            }
+        for (_, binding) in bindings {
+            if let value = binding.properties[property] {
+                result = value
+            }
+        }
+        return result
+    }
+
     static func resolvedCornerRadius(rx: CGFloat?, ry: CGFloat?) -> CGFloat {
         switch (rx, ry) {
         case let (.some(rx), .some(ry)):
@@ -673,14 +787,7 @@ extension CALayerRenderer {
         let oldAnchorPoint = layer.anchorPoint
 
         if needsBoundingBox(for: origin, on: layer) {
-            let bbox = layer.sublayers?.reduce(CGRect.null) { partialResult, sublayer in
-                if let shapeLayer = sublayer as? CAShapeLayer,
-                   let path = shapeLayer.path {
-                    return partialResult.union(path.boundingBoxOfPath)
-                }
-
-                return partialResult.union(sublayer.frame)
-            } ?? .null
+            let bbox = contentBoundingBox(of: layer)
 
             if !bbox.isNull, !bbox.isEmpty {
                 layer.bounds = bbox
@@ -692,12 +799,14 @@ extension CALayerRenderer {
         }
 
         let bounds = layer.bounds
+        let svgOriginX = layer.position.x - oldAnchorPoint.x * bounds.width
+        let svgOriginY = layer.position.y - oldAnchorPoint.y * bounds.height
         var newAnchorPoint = oldAnchorPoint
 
         if bounds.width != 0 {
             switch origin.x {
             case .px(let value):
-                newAnchorPoint.x = value / bounds.width
+                newAnchorPoint.x = (value - svgOriginX) / bounds.width
             case .percent(let value):
                 newAnchorPoint.x = value / 100
             }
@@ -706,7 +815,7 @@ extension CALayerRenderer {
         if bounds.height != 0 {
             switch origin.y {
             case .px(let value):
-                newAnchorPoint.y = value / bounds.height
+                newAnchorPoint.y = (value - svgOriginY) / bounds.height
             case .percent(let value):
                 newAnchorPoint.y = value / 100
             }
@@ -721,5 +830,67 @@ extension CALayerRenderer {
 
     static func needsBoundingBox(for _: SVGTransformOrigin, on layer: CALayer) -> Bool {
         layer.bounds.width == 0 || layer.bounds.height == 0
+    }
+
+    /// Recursively compute the content bounding box of a layer's subtree.
+    /// Group layers (zero bounds) are traversed to find leaf content (rects, shapes).
+    static func contentBoundingBox(of layer: CALayer) -> CGRect {
+        if let shapeLayer = layer as? CAShapeLayer, let path = shapeLayer.path {
+            return path.boundingBoxOfPath
+        }
+
+        guard let sublayers = layer.sublayers, !sublayers.isEmpty else {
+            return .null
+        }
+
+        return sublayers.reduce(CGRect.null) { result, sublayer in
+            let childRect = sublayerContentRect(sublayer)
+            guard !childRect.isNull else { return result }
+            return result.union(childRect)
+        }
+    }
+
+    private static func sublayerContentRect(_ layer: CALayer) -> CGRect {
+        if let shapeLayer = layer as? CAShapeLayer, let path = shapeLayer.path {
+            return path.boundingBoxOfPath
+        }
+
+        if layer.bounds.width > 0 || layer.bounds.height > 0 {
+            return layer.frame
+        }
+
+        guard let sublayers = layer.sublayers, !sublayers.isEmpty else {
+            return .null
+        }
+
+        var bbox = CGRect.null
+        for sublayer in sublayers {
+            let childRect = sublayerContentRect(sublayer)
+            guard !childRect.isNull else { continue }
+            bbox = bbox.union(childRect)
+        }
+
+        guard !bbox.isNull, !CATransform3DIsIdentity(layer.transform) else {
+            return bbox
+        }
+
+        return transformedRect(bbox, by: layer.transform)
+    }
+
+    private static func transformedRect(_ rect: CGRect, by transform: CATransform3D) -> CGRect {
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.minX, y: rect.maxY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+        ]
+
+        var result = CGRect.null
+        for corner in corners {
+            let x = transform.m11 * corner.x + transform.m21 * corner.y + transform.m41
+            let y = transform.m12 * corner.x + transform.m22 * corner.y + transform.m42
+            result = result.union(CGRect(x: x, y: y, width: 0, height: 0))
+        }
+        return result
     }
 }

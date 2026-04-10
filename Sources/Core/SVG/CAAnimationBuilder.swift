@@ -98,7 +98,7 @@ enum CAAnimationBuilder {
         case "stroke-width":
             keyPath = "lineWidth"
             guard let resolvedEntries = keyframeEntries(for: property, keyframes: keyframes, value: {
-                guard let value = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                guard let value = Self.parseCSSLength($0) else {
                     return nil
                 }
                 return NSNumber(value: value)
@@ -114,8 +114,7 @@ enum CAAnimationBuilder {
 
             keyPath = "path"
             guard let resolvedEntries = keyframeEntries(for: property, keyframes: keyframes, value: {
-                guard let radius = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)),
-                      radius >= 0 else {
+                guard let radius = Self.parseCSSLength($0), radius >= 0 else {
                     return nil
                 }
                 return circlePath(center: circleCenter, radius: CGFloat(radius))
@@ -127,7 +126,7 @@ enum CAAnimationBuilder {
         case "width":
             keyPath = "bounds.size.width"
             guard let resolvedEntries = keyframeEntries(for: property, keyframes: keyframes, value: {
-                guard let value = Double($0.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+                guard let value = Self.parseCSSLength($0) else {
                     return nil
                 }
                 return NSNumber(value: value)
@@ -144,8 +143,19 @@ enum CAAnimationBuilder {
             return nil
         }
 
-        var keyTimes = entries.map(\.0)
-        var values = entries.map(\.1)
+        let sorted = entries.sorted { $0.0.doubleValue < $1.0.doubleValue }
+        var keyTimes = sorted.map(\.0)
+        var values = sorted.map(\.1)
+
+        // CA requires keyTimes[0]==0 and keyTimes[last]==1; pad with held values.
+        if let first = keyTimes.first, first.doubleValue > 0.001 {
+            keyTimes.insert(NSNumber(value: 0), at: 0)
+            values.insert(values[0], at: 0)
+        }
+        if let last = keyTimes.last, last.doubleValue < 0.999 {
+            keyTimes.append(NSNumber(value: 1))
+            values.append(values[values.count - 1])
+        }
 
         if binding.direction == .reverse || binding.direction == .alternateReverse {
             let reversedEntries = Array(zip(keyTimes, values).reversed())
@@ -660,6 +670,14 @@ private extension CAAnimationBuilder {
         case .percent(let value):
             return "\(value)%"
         }
+    }
+
+    static func parseCSSLength(_ value: String) -> Double? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasSuffix("px") {
+            return Double(String(trimmed.dropLast(2)))
+        }
+        return Double(trimmed)
     }
 
     static func logWarning(_ message: String) {

@@ -105,6 +105,22 @@ enum CSSParser {
         }
 
         guard hasAnimationOverrides, !namedInheritedBindings.isEmpty else {
+            if !namedInheritedBindings.isEmpty {
+                return namedInheritedBindings.map { binding in
+                    SVGInlineAnimationBinding(
+                        target: target,
+                        animationName: binding.animationName,
+                        duration: binding.duration,
+                        timingFunction: binding.timingFunction,
+                        iterationCount: binding.iterationCount,
+                        direction: binding.direction,
+                        delay: binding.delay,
+                        fillMode: binding.fillMode,
+                        transformOrigin: binding.transformOrigin,
+                        transformBox: binding.transformBox
+                    )
+                }
+            }
             return []
         }
 
