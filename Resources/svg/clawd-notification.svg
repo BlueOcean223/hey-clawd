@@ -4,7 +4,7 @@
     .hc-r-arm { transform-origin: 13px 10px; animation: hc-wave 1.5s infinite; }
     .hc-eyes { animation: hc-eyes-wide 1.5s infinite; transform-origin: 7.5px 9px; }
     .hc-bell { fill: #FFD700; opacity: 0; animation: hc-bell-pop 1.5s infinite; transform-origin: 7.5px 0px; }
-    .hc-ripple { fill: #40C4FF; opacity: 0; animation: hc-ripple-out 1.5s infinite; transform-origin: center; }
+    .hc-ripple { fill: #40C4FF; opacity: 0; animation: hc-ripple-out 1.5s infinite; transform-origin: 9px 0px; }
     
     @keyframes hc-double-tap {
       0%, 40%, 100% { transform: translateY(0); }
@@ -28,9 +28,9 @@
     @keyframes hc-bell-pop {
       0%, 25% { opacity: 0; transform: scale(0.5); }
       30% { opacity: 1; transform: scale(1.2); }
-      35%, 65% { opacity: 1; transform: scale(1) rotate(15deg); }
-      40%, 60% { transform: scale(1) rotate(-15deg); }
-      70%, 100% { opacity: 0; transform: scale(0.5); }
+      35%, 70% { opacity: 1; transform: scale(1) rotate(15deg); }
+      45%, 65% { transform: scale(1) rotate(-15deg); }
+      85%, 100% { opacity: 0; transform: scale(0.5); }
     }
     
     @keyframes hc-ripple-out {
