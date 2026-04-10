@@ -4,6 +4,7 @@ import QuartzCore
 @MainActor
 final class PetView: NSView {
     private static let dragReactionSVG = "clawd-react-drag.svg"
+    private static let mouseRecoveryTimerIntervalMs: Int = 200
 
     private var mountedRootLayer: CALayer?
     private var mountedSVGFilename: String?
@@ -13,7 +14,9 @@ final class PetView: NSView {
     private var trackingArea: NSTrackingArea?
     private var lastHitTestPoint: NSPoint?
     private var lastHitTestResult = false
-    private var switchGeneration: UInt64 = 0
+    private let mouseRecoveryTimer: DispatchSourceTimer
+    private var isMouseRecoveryTimerStopped = false
+    private var isMouseRecoveryTimerPaused = false
 
     private(set) var isTrackingPaused = false
     private(set) var isMirrored = false
@@ -31,11 +34,24 @@ final class PetView: NSView {
     )
 
     override init(frame frameRect: NSRect) {
+        let mouseRecoveryTimer = DispatchSource.makeTimerSource(queue: .main)
+        mouseRecoveryTimer.schedule(
+            deadline: .now() + .milliseconds(Self.mouseRecoveryTimerIntervalMs),
+            repeating: .milliseconds(Self.mouseRecoveryTimerIntervalMs)
+        )
+        self.mouseRecoveryTimer = mouseRecoveryTimer
+
         super.init(frame: frameRect)
 
         wantsLayer = true
         layer?.backgroundColor = NSColor.clear.cgColor
         layerContentsRedrawPolicy = .never
+        mouseRecoveryTimer.setEventHandler { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.recoverMouseTrackingIfNeeded()
+            }
+        }
+        mouseRecoveryTimer.resume()
         _ = eyeTracker
     }
 
@@ -87,16 +103,14 @@ final class PetView: NSView {
             return
         }
 
-        switchGeneration &+= 1
-
         mountedRootLayer?.removeFromSuperlayer()
 
         hostLayer.addSublayer(newRootLayer)
         mountedRootLayer = newRootLayer
         mountedSVGFilename = mountedFilename
         eyesLayer = findNamedLayer("eyes-js", in: newRootLayer)
-        bodyLayer = findNamedLayer("body", in: newRootLayer)
-        shadowLayer = findNamedLayer("shadow", in: newRootLayer)
+        bodyLayer = findNamedLayer("body-js", in: newRootLayer)
+        shadowLayer = findNamedLayer("shadow-js", in: newRootLayer)
         eyeTracker.forceResend()
     }
 
@@ -116,8 +130,6 @@ final class PetView: NSView {
             return
         }
 
-        switchGeneration &+= 1
-
         newRootLayer.opacity = 0
 
         hostLayer.addSublayer(newRootLayer)
@@ -125,8 +137,8 @@ final class PetView: NSView {
         mountedRootLayer = newRootLayer
         mountedSVGFilename = mountedFilename
         eyesLayer = findNamedLayer("eyes-js", in: newRootLayer)
-        bodyLayer = findNamedLayer("body", in: newRootLayer)
-        shadowLayer = findNamedLayer("shadow", in: newRootLayer)
+        bodyLayer = findNamedLayer("body-js", in: newRootLayer)
+        shadowLayer = findNamedLayer("shadow-js", in: newRootLayer)
 
         let fadeDuration = 0.12
 
@@ -136,7 +148,7 @@ final class PetView: NSView {
         fadeIn.duration = fadeDuration
 
         let fadeOut = CABasicAnimation(keyPath: "opacity")
-        fadeOut.fromValue = 1
+        fadeOut.fromValue = oldRoot.presentation()?.opacity ?? oldRoot.opacity
         fadeOut.toValue = 0
         fadeOut.duration = fadeDuration
 
@@ -176,12 +188,14 @@ final class PetView: NSView {
 
     func pauseTracking() {
         isTrackingPaused = true
+        pauseMouseRecoveryTimer()
         eyeTracker.pause()
         lastHitTestResult = false
     }
 
     func resumeTracking() {
         isTrackingPaused = false
+        resumeMouseRecoveryTimer()
         eyeTracker.resume()
     }
 
@@ -239,9 +253,11 @@ final class PetView: NSView {
 
         self.trackingArea = nil
 
-        if let mountedRootLayer {
-            removeAllAnimationsRecursively(from: mountedRootLayer)
-            mountedRootLayer.removeFromSuperlayer()
+        if let hostLayer = layer {
+            for sublayer in hostLayer.sublayers ?? [] {
+                sublayer.removeAllAnimations()
+                sublayer.removeFromSuperlayer()
+            }
         }
 
         mountedRootLayer = nil
@@ -249,6 +265,7 @@ final class PetView: NSView {
         bodyLayer = nil
         shadowLayer = nil
         eyeTracker.stop()
+        stopMouseRecoveryTimer()
         mountedSVGFilename = nil
     }
 
@@ -398,6 +415,27 @@ final class PetView: NSView {
         window?.ignoresMouseEvents = !hit
     }
 
+    private func recoverMouseTrackingIfNeeded() {
+        guard let window, window.ignoresMouseEvents, !isTrackingPaused else {
+            return
+        }
+
+        let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
+        let localPoint = convert(windowPoint, from: nil)
+        guard bounds.contains(localPoint) else {
+            return
+        }
+
+        let hit = performHitTest(at: localPoint)
+        guard hit else {
+            return
+        }
+
+        window.ignoresMouseEvents = false
+        lastHitTestPoint = localPoint
+        lastHitTestResult = true
+    }
+
     private func performHitTest(at localPoint: NSPoint) -> Bool {
         guard let mountedRootLayer, let hostLayer = layer else {
             return false
@@ -471,5 +509,38 @@ final class PetView: NSView {
                 CGFloat(values[3])
             )
         }
+    }
+
+    private func pauseMouseRecoveryTimer() {
+        guard !isMouseRecoveryTimerStopped, !isMouseRecoveryTimerPaused else {
+            return
+        }
+
+        isMouseRecoveryTimerPaused = true
+        mouseRecoveryTimer.suspend()
+    }
+
+    private func resumeMouseRecoveryTimer() {
+        guard !isMouseRecoveryTimerStopped, isMouseRecoveryTimerPaused else {
+            return
+        }
+
+        isMouseRecoveryTimerPaused = false
+        mouseRecoveryTimer.resume()
+    }
+
+    private func stopMouseRecoveryTimer() {
+        guard !isMouseRecoveryTimerStopped else {
+            return
+        }
+
+        if isMouseRecoveryTimerPaused {
+            mouseRecoveryTimer.resume()
+            isMouseRecoveryTimerPaused = false
+        }
+
+        isMouseRecoveryTimerStopped = true
+        mouseRecoveryTimer.setEventHandler {}
+        mouseRecoveryTimer.cancel()
     }
 }

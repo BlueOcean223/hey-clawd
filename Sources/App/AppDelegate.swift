@@ -266,6 +266,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onToggleHideBubbles = { [weak self] enabled in
             self?.isHideBubblesEnabled = enabled
             self?.preferences.hideBubbles = enabled
+            if enabled {
+                self?.bubbleStack.dismissAll(respondingWith: .undecided)
+            }
             self?.updateHotKeyRegistration()
         }
         controller.onToggleSoundEffects = { [weak self] enabled in
@@ -314,7 +317,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         miniModeController?.cleanup()
         bubbleStack.stopObservingPetWindow()
         hotKeyManager.teardown()
-        bubbleStack.dismissAll(respondingWith: .deny)
+        bubbleStack.dismissAll(respondingWith: .undecided)
         httpServerTask?.cancel()
         httpServer?.stop()
         if let codexMonitor {
@@ -384,6 +387,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentPermissionBubble(for request: PendingPermissionRequest) {
         guard let content = PermissionBubbleContent.decode(from: request.body) else {
+            request.respond(with: .simple(.undecided))
             return
         }
 
@@ -392,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if stateMachine?.doNotDisturbEnabled == true {
+            request.respond(with: .simple(.undecided))
             return
         }
 
@@ -401,6 +406,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         if isHideBubblesEnabled {
+            request.respond(with: .simple(.undecided))
             return
         }
 

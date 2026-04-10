@@ -42,7 +42,7 @@ final class BubbleStack {
         let window = BubbleWindow(
             content: content,
             onDismiss: { [weak self] in
-                self?.removeBubble(id: id, respondingWith: nil)
+                self?.removeBubble(id: id, respondingWith: .simple(.undecided))
             },
             onDecide: { [weak self] decision in
                 self?.resolveBubble(id: id, decision: decision)
@@ -143,8 +143,8 @@ final class BubbleStack {
     }
 
     func denyAllForDoNotDisturb() {
-        // DND 打开时不应该留下任何待决权限，统一按 deny 清空最符合用户预期。
-        dismissAll(respondingWith: .deny)
+        // DND 打开时不替用户做决策，回 undecided 让 Claude Code 回退到终端提示。
+        dismissAll(respondingWith: .undecided)
     }
 
     func allowLatestBubble() {
@@ -165,7 +165,6 @@ final class BubbleStack {
 
     func dismissPendingBubbles(
         forSessionId sessionId: String,
-        preservingRequest: Bool = true,
         reason: String? = nil
     ) {
         let normalizedSessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -182,7 +181,7 @@ final class BubbleStack {
         }
 
         for id in ids {
-            removeBubble(id: id, respondingWith: preservingRequest ? nil : .simple(.deny))
+            removeBubble(id: id, respondingWith: .simple(.undecided))
         }
     }
 

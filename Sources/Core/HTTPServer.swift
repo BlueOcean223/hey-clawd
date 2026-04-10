@@ -4,6 +4,7 @@ import Foundation
 enum PermissionBehavior: String, Sendable {
     case allow
     case deny
+    case undecided
 }
 
 /// bubble 或快捷键做出的权限决策，附带可选的 suggestion 数据。
@@ -478,6 +479,10 @@ final class HTTPServer: @unchecked Sendable {
     /// Claude Code HTTP hook 要求 PermissionRequest 的响应遵循 JSON output schema：
     /// `{ hookSpecificOutput: { hookEventName, decision: { behavior, updatedPermissions? } } }`
     private func permissionResponse(_ result: PermissionDecisionResult) -> HTTPResponse {
+        if result.behavior == .undecided {
+            return errorResponse(statusCode: 503, message: "permission not handled")
+        }
+
         var decision: [String: Any] = ["behavior": result.behavior.rawValue]
 
         if result.behavior == .allow {

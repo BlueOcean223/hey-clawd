@@ -3,6 +3,7 @@ import WebKit
 
 /// WKWebView 封装层：加载 bridge.html，将 SVG 内联挂载到 DOM，
 /// 并以 30Hz 轮询鼠标位置做命中检测，驱动窗口的 ignoresMouseEvents 切换。
+@available(*, deprecated, message: "Use PetView instead. Scheduled for removal in Phase 5.")
 @MainActor
 final class PetWebView: NSView {
     private static let dragReactionSVG = "clawd-react-drag.svg"

@@ -208,7 +208,7 @@
         petView.setMiniLeft(enabled)
     }
 
-    /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 WebView。
+    /// 状态机已经选好了最终展示的 SVG，这里只负责把结果推给 PetView。
     func display(state _: PetState, svgFilename: String, sourcePid: pid_t?) {
         currentDisplaySVGFilename = svgFilename
         currentSourcePid = sourcePid
