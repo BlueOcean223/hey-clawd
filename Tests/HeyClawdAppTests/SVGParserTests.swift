@@ -187,6 +187,24 @@ final class SVGParserTests: XCTestCase {
         XCTAssertEqual(subjectRect.clipPathRef, "mask")
     }
 
+    func testParsePreservesGroupStrokeAttributesForInheritance() throws {
+        let document = SVGParser.parse(
+            """
+            <svg xmlns="http://www.w3.org/2000/svg">
+              <g id="outline" stroke="#000000" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="bevel">
+                <line id="divider" x1="1" y1="2" x2="30" y2="40" />
+              </g>
+            </svg>
+            """
+        )
+
+        let group = try groupNode(from: try XCTUnwrap(document.rootChildren.first))
+        XCTAssertEqual(group.stroke, "#000000")
+        XCTAssertEqual(group.strokeWidth, 0.9)
+        XCTAssertEqual(group.strokeLinecap, "round")
+        XCTAssertEqual(group.strokeLinejoin, "bevel")
+    }
+
     func testParseXMLCollectsStyleBlocksInsideAndOutsideDefs() {
         let xml = SVGParser.parseXML(
             """

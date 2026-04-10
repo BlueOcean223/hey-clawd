@@ -7,6 +7,7 @@ enum CALayerRenderer {
         let rootLayer = makeLayer()
         rootLayer.bounds = rootBounds(for: document)
         rootLayer.masksToBounds = true
+        rootLayer.isGeometryFlipped = true
 
         if let viewBox = document.viewBox,
            viewBox.x != 0 || viewBox.y != 0 {
@@ -24,6 +25,10 @@ enum CALayerRenderer {
             guard let layer = buildLayer(
                 for: node,
                 inheritedFill: nil,
+                inheritedStroke: nil,
+                inheritedStrokeWidth: nil,
+                inheritedStrokeLinecap: nil,
+                inheritedStrokeLinejoin: nil,
                 document: document,
                 nodePath: nodePath,
                 visitedDefs: []
@@ -44,6 +49,10 @@ enum CALayerRenderer {
     private static func buildLayer(
         for node: SVGNode,
         inheritedFill: String?,
+        inheritedStroke: String?,
+        inheritedStrokeWidth: CGFloat?,
+        inheritedStrokeLinecap: String?,
+        inheritedStrokeLinejoin: String?,
         document: SVGDocument,
         nodePath: String,
         visitedDefs: Set<String> = []
@@ -63,11 +72,19 @@ enum CALayerRenderer {
             }
 
             let childFill = group.fill ?? inheritedFill
+            let childStroke = group.stroke ?? inheritedStroke
+            let childStrokeWidth = group.strokeWidth ?? inheritedStrokeWidth
+            let childStrokeLinecap = group.strokeLinecap ?? inheritedStrokeLinecap
+            let childStrokeLinejoin = group.strokeLinejoin ?? inheritedStrokeLinejoin
             for (index, childNode) in group.children.enumerated() {
                 let childPath = "\(nodePath)/\(index)"
                 guard let childLayer = buildLayer(
                     for: childNode,
                     inheritedFill: childFill,
+                    inheritedStroke: childStroke,
+                    inheritedStrokeWidth: childStrokeWidth,
+                    inheritedStrokeLinecap: childStrokeLinecap,
+                    inheritedStrokeLinejoin: childStrokeLinejoin,
                     document: document,
                     nodePath: childPath,
                     visitedDefs: visitedDefs
@@ -94,9 +111,12 @@ enum CALayerRenderer {
             layer.position = CGPoint(x: x + (width / 2), y: y + (height / 2))
             layer.backgroundColor = ColorParser.parse(rect.fill ?? inheritedFill)
 
-            let strokeColor = ColorParser.parse(rect.stroke)
+            let strokeColor = ColorParser.parse(rect.stroke ?? inheritedStroke)
             layer.borderColor = strokeColor
-            layer.borderWidth = resolvedLineWidth(strokeColor: strokeColor, strokeWidth: rect.strokeWidth)
+            layer.borderWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: rect.strokeWidth ?? inheritedStrokeWidth
+            )
             layer.cornerRadius = resolvedCornerRadius(rx: rect.rx, ry: rect.ry)
             layer.opacity = rect.opacity.map(Float.init) ?? layer.opacity
             layer.name = rect.id
@@ -127,9 +147,14 @@ enum CALayerRenderer {
                 transform: nil
             )
             layer.fillColor = ColorParser.parse(circle.fill ?? inheritedFill)
-            let strokeColor = ColorParser.parse(circle.stroke)
+            let strokeColor = ColorParser.parse(circle.stroke ?? inheritedStroke)
             layer.strokeColor = strokeColor
-            layer.lineWidth = resolvedLineWidth(strokeColor: strokeColor, strokeWidth: circle.strokeWidth)
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: circle.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: circle.strokeLinecap ?? inheritedStrokeLinecap)
+            layer.lineJoin = lineJoin(for: circle.strokeLinejoin ?? inheritedStrokeLinejoin)
             layer.opacity = circle.opacity.map(Float.init) ?? layer.opacity
             layer.name = circle.id
 
@@ -156,6 +181,14 @@ enum CALayerRenderer {
                 transform: nil
             )
             layer.fillColor = ColorParser.parse(ellipse.fill ?? inheritedFill)
+            let strokeColor = ColorParser.parse(ellipse.stroke ?? inheritedStroke)
+            layer.strokeColor = strokeColor
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: ellipse.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: ellipse.strokeLinecap ?? inheritedStrokeLinecap)
+            layer.lineJoin = lineJoin(for: ellipse.strokeLinejoin ?? inheritedStrokeLinejoin)
             layer.opacity = ellipse.opacity.map(Float.init) ?? layer.opacity
             layer.name = ellipse.id
 
@@ -171,12 +204,15 @@ enum CALayerRenderer {
             path.move(to: CGPoint(x: line.x1 ?? 0, y: line.y1 ?? 0))
             path.addLine(to: CGPoint(x: line.x2 ?? 0, y: line.y2 ?? 0))
 
-            let strokeColor = ColorParser.parse(line.stroke)
+            let strokeColor = ColorParser.parse(line.stroke ?? inheritedStroke)
             layer.path = path
             layer.fillColor = nil
             layer.strokeColor = strokeColor
-            layer.lineWidth = resolvedLineWidth(strokeColor: strokeColor, strokeWidth: line.strokeWidth)
-            layer.lineCap = lineCap(for: line.strokeLinecap)
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: line.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: line.strokeLinecap ?? inheritedStrokeLinecap)
             layer.name = line.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: line.classes)
@@ -191,13 +227,17 @@ enum CALayerRenderer {
             }
 
             let layer = makeShapeLayer()
-            let strokeColor = ColorParser.parse(path.stroke)
+            let strokeColor = ColorParser.parse(path.stroke ?? inheritedStroke)
 
             layer.path = cgPath
             layer.fillColor = ColorParser.parse(path.fill ?? inheritedFill)
             layer.strokeColor = strokeColor
-            layer.lineWidth = resolvedLineWidth(strokeColor: strokeColor, strokeWidth: path.strokeWidth)
-            layer.lineJoin = lineJoin(for: path.strokeLinejoin)
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: path.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: path.strokeLinecap ?? inheritedStrokeLinecap)
+            layer.lineJoin = lineJoin(for: path.strokeLinejoin ?? inheritedStrokeLinejoin)
             layer.name = path.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: path.classes)
@@ -214,6 +254,14 @@ enum CALayerRenderer {
             let layer = makeShapeLayer()
             layer.path = cgPath
             layer.fillColor = ColorParser.parse(polygon.fill ?? inheritedFill)
+            let strokeColor = ColorParser.parse(polygon.stroke ?? inheritedStroke)
+            layer.strokeColor = strokeColor
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: polygon.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: polygon.strokeLinecap ?? inheritedStrokeLinecap)
+            layer.lineJoin = lineJoin(for: polygon.strokeLinejoin ?? inheritedStrokeLinejoin)
             layer.opacity = polygon.opacity.map(Float.init) ?? layer.opacity
             layer.name = polygon.id
 
@@ -229,14 +277,17 @@ enum CALayerRenderer {
             }
 
             let layer = makeShapeLayer()
-            let strokeColor = ColorParser.parse(polyline.stroke)
+            let strokeColor = ColorParser.parse(polyline.stroke ?? inheritedStroke)
 
             layer.path = cgPath
             layer.fillColor = ColorParser.parse(polyline.fill ?? inheritedFill)
             layer.strokeColor = strokeColor
-            layer.lineWidth = resolvedLineWidth(strokeColor: strokeColor, strokeWidth: polyline.strokeWidth)
-            layer.lineCap = lineCap(for: polyline.strokeLinecap)
-            layer.lineJoin = lineJoin(for: polyline.strokeLinejoin)
+            layer.lineWidth = resolvedLineWidth(
+                strokeColor: strokeColor,
+                strokeWidth: polyline.strokeWidth ?? inheritedStrokeWidth
+            )
+            layer.lineCap = lineCap(for: polyline.strokeLinecap ?? inheritedStrokeLinecap)
+            layer.lineJoin = lineJoin(for: polyline.strokeLinejoin ?? inheritedStrokeLinejoin)
             layer.name = polyline.id
 
             storeMetadata(on: layer, nodePath: nodePath, classes: polyline.classes)
@@ -255,6 +306,10 @@ enum CALayerRenderer {
             let layer = buildLayer(
                 for: referencedNode,
                 inheritedFill: use.fill ?? inheritedFill,
+                inheritedStroke: use.stroke ?? inheritedStroke,
+                inheritedStrokeWidth: use.strokeWidth ?? inheritedStrokeWidth,
+                inheritedStrokeLinecap: use.strokeLinecap ?? inheritedStrokeLinecap,
+                inheritedStrokeLinejoin: use.strokeLinejoin ?? inheritedStrokeLinejoin,
                 document: document,
                 nodePath: nodePath,
                 visitedDefs: visitedDefs.union([defID])
@@ -290,6 +345,10 @@ enum CALayerRenderer {
                 guard let childLayer = buildLayer(
                     for: childNode,
                     inheritedFill: "black",
+                    inheritedStroke: nil,
+                    inheritedStrokeWidth: nil,
+                    inheritedStrokeLinecap: nil,
+                    inheritedStrokeLinejoin: nil,
                     document: document,
                     nodePath: childPath,
                     visitedDefs: visitedDefs
@@ -537,6 +596,10 @@ private extension CALayerRenderer {
               let maskLayer = buildLayer(
                 for: .clipPath(clipPath),
                 inheritedFill: "black",
+                inheritedStroke: nil,
+                inheritedStrokeWidth: nil,
+                inheritedStrokeLinecap: nil,
+                inheritedStrokeLinejoin: nil,
                 document: document,
                 nodePath: "\(nodePath)/clipPath",
                 visitedDefs: []

@@ -474,6 +474,10 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     inlineStyles: common.inlineStyles,
                     clipPathRef: common.clipPathRef,
                     fill: fill,
+                    stroke: attributeValue(named: "stroke", in: frame.attributes),
+                    strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
+                    strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes),
                     opacity: parseCGFloat(attributeValue(named: "opacity", in: frame.attributes)),
                     transform: attributeValue(named: "transform", in: frame.attributes),
                     children: frame.children
@@ -515,6 +519,10 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     href: href,
                     transform: attributeValue(named: "transform", in: frame.attributes),
                     fill: fill,
+                    stroke: attributeValue(named: "stroke", in: frame.attributes),
+                    strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
+                    strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes),
                     x: parseCGFloat(attributeValue(named: "x", in: frame.attributes)),
                     y: parseCGFloat(attributeValue(named: "y", in: frame.attributes))
                 )
@@ -532,6 +540,8 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     fill: fill,
                     stroke: attributeValue(named: "stroke", in: frame.attributes),
                     strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
+                    strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes),
                     opacity: parseCGFloat(attributeValue(named: "opacity", in: frame.attributes))
                 )
             )
@@ -547,6 +557,10 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     rx: parseCGFloat(attributeValue(named: "rx", in: frame.attributes)),
                     ry: parseCGFloat(attributeValue(named: "ry", in: frame.attributes)),
                     fill: fill,
+                    stroke: attributeValue(named: "stroke", in: frame.attributes),
+                    strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
+                    strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes),
                     opacity: parseCGFloat(attributeValue(named: "opacity", in: frame.attributes))
                 )
             )
@@ -581,6 +595,7 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     fill: fill,
                     stroke: attributeValue(named: "stroke", in: frame.attributes),
                     strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
                     strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes)
                 )
             )
@@ -597,6 +612,10 @@ private final class XMLTreeBuilder: NSObject, XMLParserDelegate {
                     clipPathRef: common.clipPathRef,
                     points: points,
                     fill: fill,
+                    stroke: attributeValue(named: "stroke", in: frame.attributes),
+                    strokeWidth: parseCGFloat(attributeValue(named: "stroke-width", in: frame.attributes)),
+                    strokeLinecap: attributeValue(named: "stroke-linecap", in: frame.attributes),
+                    strokeLinejoin: attributeValue(named: "stroke-linejoin", in: frame.attributes),
                     opacity: parseCGFloat(attributeValue(named: "opacity", in: frame.attributes))
                 )
             )

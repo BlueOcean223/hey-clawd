@@ -67,6 +67,10 @@ struct SVGGroup: Sendable {
     var inlineStyles: [String: String]
     var clipPathRef: String?
     var fill: String?
+    var stroke: String?
+    var strokeWidth: CGFloat?
+    var strokeLinecap: String?
+    var strokeLinejoin: String?
     var opacity: CGFloat?
     var transform: String?
     var children: [SVGNode]
@@ -98,6 +102,10 @@ struct SVGUse: Sendable {
     var href: String
     var transform: String?
     var fill: String?
+    var stroke: String?
+    var strokeWidth: CGFloat?
+    var strokeLinecap: String?
+    var strokeLinejoin: String?
     var x: CGFloat?
     var y: CGFloat?
 }
@@ -113,6 +121,8 @@ struct SVGCircle: Sendable {
     var fill: String?
     var stroke: String?
     var strokeWidth: CGFloat?
+    var strokeLinecap: String?
+    var strokeLinejoin: String?
     var opacity: CGFloat?
 }
 
@@ -126,6 +136,10 @@ struct SVGEllipse: Sendable {
     var rx: CGFloat?
     var ry: CGFloat?
     var fill: String?
+    var stroke: String?
+    var strokeWidth: CGFloat?
+    var strokeLinecap: String?
+    var strokeLinejoin: String?
     var opacity: CGFloat?
 }
 
@@ -152,6 +166,7 @@ struct SVGPath: Sendable {
     var fill: String?
     var stroke: String?
     var strokeWidth: CGFloat?
+    var strokeLinecap: String?
     var strokeLinejoin: String?
 }
 
@@ -162,6 +177,10 @@ struct SVGPolygon: Sendable {
     var clipPathRef: String?
     var points: String
     var fill: String?
+    var stroke: String?
+    var strokeWidth: CGFloat?
+    var strokeLinecap: String?
+    var strokeLinejoin: String?
     var opacity: CGFloat?
 }
 

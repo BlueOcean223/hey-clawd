@@ -1,6 +1,7 @@
 references/
 
 .claude/
+.claude/phases/core-animation-migration/artifacts/baseline-screenshots/
 .ace-tool/
 
 .DS_Store

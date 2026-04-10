@@ -27,6 +27,7 @@ final class CALayerRendererTests: XCTestCase {
         let rootLayer = CALayerRenderer.build(document)
 
         XCTAssertEqual(rootLayer.bounds, CGRect(x: 0, y: 0, width: 45, height: 45))
+        XCTAssertTrue(rootLayer.isGeometryFlipped)
         XCTAssertEqual(rootLayer.sublayerTransform.m41, 15, accuracy: 0.01)
         XCTAssertEqual(rootLayer.sublayerTransform.m42, 25, accuracy: 0.01)
         XCTAssertEqual(rootLayer.sublayers?.count, document.rootChildren.count)
@@ -168,6 +169,40 @@ final class CALayerRendererTests: XCTestCase {
 
         assertColorApprox(r1Layer.backgroundColor, red: 0.87, green: 0.53, blue: 0.43, alpha: 1.0)
         assertColorApprox(r2Layer.backgroundColor, red: 0, green: 0, blue: 0, alpha: 1.0)
+    }
+
+    @MainActor
+    func testBuildInheritsParentStrokeAttributesAndAllowsOverrides() throws {
+        let document = SVGParser.parse(
+            """
+            <svg viewBox="0 0 15 16" xmlns="http://www.w3.org/2000/svg">
+              <g stroke="#000000" stroke-width="0.9" stroke-linecap="round" stroke-linejoin="bevel">
+                <line id="l1" x1="0" y1="0" x2="10" y2="10"/>
+                <polyline id="p1" points="0,10 5,5 10,10" fill="none"/>
+                <path id="path1" d="M 0 15 L 15 15" fill="none" stroke="#FF0000"/>
+              </g>
+            </svg>
+            """
+        )
+
+        let rootLayer = CALayerRenderer.build(document)
+        let lineLayer = try XCTUnwrap(findLayer(named: "l1", in: rootLayer) as? CAShapeLayer)
+        let polylineLayer = try XCTUnwrap(findLayer(named: "p1", in: rootLayer) as? CAShapeLayer)
+        let pathLayer = try XCTUnwrap(findLayer(named: "path1", in: rootLayer) as? CAShapeLayer)
+
+        assertColorApprox(lineLayer.strokeColor, red: 0, green: 0, blue: 0, alpha: 1.0)
+        XCTAssertEqual(lineLayer.lineWidth, 0.9, accuracy: 0.01)
+        XCTAssertEqual(lineLayer.lineCap, .round)
+
+        assertColorApprox(polylineLayer.strokeColor, red: 0, green: 0, blue: 0, alpha: 1.0)
+        XCTAssertEqual(polylineLayer.lineWidth, 0.9, accuracy: 0.01)
+        XCTAssertEqual(polylineLayer.lineCap, .round)
+        XCTAssertEqual(polylineLayer.lineJoin, .bevel)
+
+        assertColorApprox(pathLayer.strokeColor, red: 1, green: 0, blue: 0, alpha: 1.0)
+        XCTAssertEqual(pathLayer.lineWidth, 0.9, accuracy: 0.01)
+        XCTAssertEqual(pathLayer.lineCap, .round)
+        XCTAssertEqual(pathLayer.lineJoin, .bevel)
     }
 
     @MainActor
