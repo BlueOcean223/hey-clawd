@@ -102,12 +102,14 @@ viewBox="-15 -25 45 45"  width="500"  height="500"
 1. **腿必须独立于身体组** — 身体呼吸/倾斜时腿不应该跟着变形
 2. **呼吸层必须嵌套在动作层内部** — `action-body > breathe-anim`，不是并列
 3. **左右手臂各自独立动画** — 不要镜像同步，要有不对称感
-4. **眼睛是三层结构** — `eyes-js`(JS控制) > `eyes-look`(CSS位移) > `eyes-blink`(CSS缩放)
+4. **眼睛是三层结构** — `eyes-js`(运行时追踪) > `eyes-look`(CSS位移) > `eyes-blink`(CSS缩放)
 5. **影子跟随身体动态变化** — 身体拉伸时影子变窄变淡，落地时变宽变亮
 
-### 2.3 JS 钩子 ID（必须保留）
+### 2.3 眼球追踪钩子 ID（必须保留）
 
-以下 ID 供运行时 JS 控制眼球追踪，**支持眼球追踪的 SVG 必须包含**：
+以下 ID 供运行时 Core Animation 控制眼球追踪（通过 `CALayer.name` 查找），**支持眼球追踪的 SVG 必须包含**：
+
+> `-js` 后缀是历史命名，实际已由 Core Animation 驱动，不涉及 JavaScript。所有 SVG 中保留此命名。
 
 | ID | 用途 | 运行时行为 |
 |----|------|-----------|
@@ -377,10 +379,71 @@ viewBox="-15 -25 45 45"  width="500"  height="500"
 
 ---
 
-## 6. 质量检查清单
+## 6. 渲染引擎约束
+
+Clawd 使用自研的 Core Animation 渲染管线（非浏览器），只支持以下 SVG/CSS 特性子集。**超出此范围的特性会被静默忽略，不会报错。**
+
+详见 `docs/rendering-system.md`。
+
+### 6.1 支持的 SVG 元素
+
+| 元素 | 说明 |
+|------|------|
+| `<svg>` | viewBox、width/height |
+| `<defs>` | 定义可复用节点 |
+| `<style>` | CSS 规则（仅在 `<defs>` 内） |
+| `<g>` | 分组，支持 id/class/fill/opacity/transform/clip-path |
+| `<rect>` | 矩形，支持 x/y/width/height/rx/ry/fill/opacity/stroke |
+| `<circle>` | 圆，支持 cx/cy/r |
+| `<ellipse>` | 椭圆，支持 cx/cy/rx/ry |
+| `<path>` | 路径，支持 d 属性（M/L/H/V/C/Q/A/Z） |
+| `<polygon>` / `<polyline>` | 多边形，支持 points |
+| `<line>` | 线段，支持 x1/y1/x2/y2 |
+| `<use>` | 引用 defs 中的节点，支持 xlink:href/href |
+| `<clipPath>` | 裁剪路径 |
+
+### 6.2 支持的 CSS 动画属性
+
+| 属性 | 说明 |
+|------|------|
+| `animation` | 简写和全部拆分属性（name/duration/timing-function/iteration-count/direction/delay/fill-mode） |
+| `@keyframes` | 百分比停靠点，支持 from/to |
+| `transform` | translate/translateX/translateY/scale/scaleX/scaleY/rotate |
+| `transform-origin` | 像素、百分比、关键字（left/right/top/bottom/center） |
+| `transform-box` | fill-box / view-box |
+| `transition` | 用于 `#eyes-js` 等追踪元素的平滑过渡 |
+| `opacity` | 透明度动画 |
+| `visibility` | 可见性切换（配合 step-end） |
+| `fill` | 颜色动画 |
+| `stroke` / `stroke-width` | 描边动画 |
+| `r` | circle 半径动画 |
+| `width` | 宽度动画 |
+
+**Timing functions**：`ease-in-out`、`linear`、`ease-out`、`ease-in`、`step-end`、`cubic-bezier(x1,y1,x2,y2)`
+
+### 6.3 不支持（禁止使用）
+
+| 特性 | 替代方案 |
+|------|---------|
+| `<linearGradient>` / `<radialGradient>` | 用多个 `<rect>` 分色块近似 |
+| `<filter>` (blur/shadow/glow) | 用半透明 `<rect>` 模拟 |
+| `<text>` / `<tspan>` | 用像素点阵 `<rect>` 拼字 |
+| `<image>` | 不支持外部图片 |
+| `<foreignObject>` | 不支持 |
+| `<mask>` (SVG mask 元素) | 用 `<clipPath>` 替代 |
+| CSS 组合选择器 | 只支持 `.class` 和 `#id`，不支持 `.a .b`、`.a > .b` |
+| CSS `@media` / `@supports` | 不支持 |
+| CSS `filter` 属性 | 不支持 |
+| CSS 变量 (`var(--x)`) | 不支持 |
+| `skewX` / `skewY` / `matrix` | 不常用，避免使用 |
+
+---
+
+## 7. 质量检查清单
 
 完成一个 SVG 后，逐项检查：
 
+- [ ] **只使用了支持的 SVG/CSS 特性？** — 对照 §6 渲染引擎约束，禁止 gradient/filter/text 等
 - [ ] **腿是否独立于身体组？** — 身体呼吸/倾斜时腿不跟着变形
 - [ ] **有眨眼吗？** — 除了睡眠/闭眼状态，所有动画都必须有 3-5s 周期的眨眼
 - [ ] **影子是动态的吗？** — 跟随身体缩放/位移变化
@@ -389,14 +452,14 @@ viewBox="-15 -25 45 45"  width="500"  height="500"
 - [ ] **有动作弧线吗？** — 每个显著动作有预备→执行→回落
 - [ ] **easing 选择合理吗？** — 不是所有东西都 ease-in-out
 - [ ] **粒子/特效有相位错开吗？** — 用负 animation-delay
-- [ ] **需要 JS 钩子的 SVG 有 `#eyes-js` `#body-js` `#shadow-js` 吗？**
+- [ ] **需要追踪钩子的 SVG 有 `#eyes-js` `#body-js` `#shadow-js` 吗？**
 - [ ] **CSS 写在 `<defs><style>` 里吗？** — 不要内联 style 属性
 - [ ] **没有多余的嵌套 `<style>` 块吗？** — 只在 `<defs>` 里有一个
 - [ ] **viewBox 是 `-15 -25 45 45`、尺寸 `500x500` 吗？**
 
 ---
 
-## 7. 按文件逐个任务指令
+## 8. 按文件逐个任务指令
 
 当需要创建/重写某个具体 SVG 时，使用以下 prompt 模板：
 
@@ -405,7 +468,7 @@ viewBox="-15 -25 45 45"  width="500"  height="500"
 
 动画类型：[idle循环 / working循环 / reaction一次性 / sleep循环 / transition一次性 / mini模式]
 主时间轴周期：[Xs]
-是否需要 JS 眼球追踪钩子：[是/否]
+是否需要眼球追踪钩子：[是/否]
 
 动画内容描述：
 [用文字描述这个动画要表达什么情绪/动作]
@@ -425,7 +488,7 @@ X%-Y%: [描述]
 
 ---
 
-## 8. 常见错误与修复
+## 9. 常见错误与修复
 
 | 错误 | 表现 | 修复 |
 |------|------|------|
