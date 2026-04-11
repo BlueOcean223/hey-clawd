@@ -6,7 +6,8 @@ final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
 
     var onTogglePetVisibility: @MainActor () -> Void = {}
-    var onSelectSizePreset: @MainActor (PetWindow.SizePreset) -> Void = { _ in }
+    var onSelectSizePercent: @MainActor (Int) -> Void = { _ in }
+    var onSelectCustomSize: @MainActor () -> Void = {}
     var onToggleMiniMode: @MainActor (Bool) -> Void = { _ in }
     var onToggleDoNotDisturb: @MainActor (Bool) -> Void = { _ in }
     var onToggleBubbleFollow: @MainActor (Bool) -> Void = { _ in }
@@ -100,11 +101,15 @@ final class StatusBarController: NSObject {
         }
     }
 
-    @objc func selectSizePreset(_ sender: NSMenuItem) {
-        guard let preset = sender.representedObject as? PetWindow.SizePreset else {
+    @objc func selectSizePercent(_ sender: NSMenuItem) {
+        guard let percent = sender.representedObject as? Int else {
             return
         }
-        onSelectSizePreset(preset)
+        onSelectSizePercent(percent)
+    }
+
+    @objc func selectCustomSize(_ sender: NSMenuItem) {
+        onSelectCustomSize()
     }
 
     @objc func toggleMiniMode(_ sender: NSMenuItem) {

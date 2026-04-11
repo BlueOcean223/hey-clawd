@@ -45,7 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         // 创建桌面宠物窗口并显示
-        petWindow = PetWindow(sizePreset: preferences.windowSizePreset)
+        petWindow = PetWindow(sizePercent: preferences.windowSizePercent)
         restorePetWindowPositionIfNeeded()
         petWindow?.onDragEnded = { [weak self] origin in
             guard let self else {
@@ -204,7 +204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let controller = StatusBarController { [weak self] in
             self?.currentMenuState ?? AppMenuState(
                 language: .zh,
-                sizePreset: .small,
+                sizePercent: 100,
                 isMiniModeEnabled: false,
                 isMiniTransitioning: false,
                 isDoNotDisturbEnabled: false,
@@ -228,15 +228,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onTogglePetVisibility = { [weak self] in
             self?.togglePetVisibility()
         }
-        controller.onSelectSizePreset = { [weak self] preset in
-            self?.preferences.windowSizePreset = preset
-            self?.petWindow?.applySizePreset(preset)
-            if self?.miniModeController?.isEnabled == true {
-                self?.miniModeController?.handleSizeChange()
-            } else {
-                self?.persistPetWindowPosition()
-            }
-            self?.bubbleStack.repositionBubbles()
+        controller.onSelectSizePercent = { [weak self] percent in
+            self?.applySizePercent(percent)
+        }
+        controller.onSelectCustomSize = { [weak self] in
+            self?.showCustomSizeDialog()
         }
         controller.onToggleMiniMode = { [weak self] enabled in
             guard let self else {
@@ -307,7 +303,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             persistPetWindowPosition()
         }
-        preferences.windowSizePreset = petWindow?.sizePreset ?? preferences.windowSizePreset
+        preferences.windowSizePercent = petWindow?.sizePercent ?? preferences.windowSizePercent
         preferences.doNotDisturbEnabled = stateMachine?.doNotDisturbEnabled ?? preferences.doNotDisturbEnabled
         miniModeController?.cleanup()
         bubbleStack.stopObservingPetWindow()
@@ -346,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var currentMenuState: AppMenuState {
         AppMenuState(
             language: appLanguage,
-            sizePreset: petWindow?.sizePreset ?? .small,
+            sizePercent: petWindow?.sizePercent ?? 100,
             isMiniModeEnabled: isMiniModeEnabled,
             isMiniTransitioning: isMiniTransitioning,
             isDoNotDisturbEnabled: stateMachine?.doNotDisturbEnabled ?? false,
@@ -361,6 +357,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var petView: PetView? {
         petWindow?.contentView as? PetView
+    }
+
+    private func applySizePercent(_ percent: Int) {
+        preferences.windowSizePercent = percent
+        petWindow?.applySizePercent(percent)
+        if miniModeController?.isEnabled == true {
+            miniModeController?.handleSizeChange()
+        } else {
+            persistPetWindowPosition()
+        }
+        bubbleStack.repositionBubbles()
+    }
+
+    private func showCustomSizeDialog() {
+        let alert = NSAlert()
+        alert.messageText = appLanguage == .zh ? "自定义大小" : "Custom Size"
+        alert.informativeText = appLanguage == .zh ? "输入百分比 (25-400):" : "Enter percentage (25-400):"
+        alert.addButton(withTitle: appLanguage == .zh ? "确定" : "OK")
+        alert.addButton(withTitle: appLanguage == .zh ? "取消" : "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
+        textField.stringValue = "\(petWindow?.sizePercent ?? 100)"
+        alert.accessoryView = textField
+        alert.window.initialFirstResponder = textField
+
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn else {
+            return
+        }
+
+        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard let value = Int(trimmed), value >= 25, value <= 400 else {
+            let errorAlert = NSAlert()
+            errorAlert.alertStyle = .warning
+            errorAlert.messageText = appLanguage == .zh ? "无效输入" : "Invalid Input"
+            errorAlert.informativeText = appLanguage == .zh ? "请输入 25 到 400 之间的数字。" : "Please enter a number between 25 and 400."
+            errorAlert.runModal()
+            return
+        }
+
+        applySizePercent(value)
     }
 
     private func togglePetVisibility() {

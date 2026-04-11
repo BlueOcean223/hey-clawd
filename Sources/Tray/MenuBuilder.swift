@@ -8,7 +8,7 @@ enum AppLanguage: String {
 
 struct AppMenuState {
     var language: AppLanguage
-    var sizePreset: PetWindow.SizePreset
+    var sizePercent: Int
     var isMiniModeEnabled: Bool
     var isMiniTransitioning: Bool
     var isDoNotDisturbEnabled: Bool
@@ -25,9 +25,7 @@ enum MenuBuilder {
     private static let strings: [AppLanguage: [String: String]] = [
         .en: [
             "size": "Size",
-            "small": "Small (S)",
-            "medium": "Medium (M)",
-            "large": "Large (L)",
+            "custom": "Custom...",
             "miniMode": "Mini Mode",
             "exitMiniMode": "Exit Mini Mode",
             "sessions": "Sessions",
@@ -53,9 +51,7 @@ enum MenuBuilder {
         ],
         .zh: [
             "size": "大小",
-            "small": "小 (S)",
-            "medium": "中 (M)",
-            "large": "大 (L)",
+            "custom": "自定义...",
             "miniMode": "极简模式",
             "exitMiniMode": "退出极简模式",
             "sessions": "会话",
@@ -80,6 +76,8 @@ enum MenuBuilder {
             "quit": "退出",
         ],
     ]
+
+    private static let sizePresets = [50, 75, 100, 125, 150, 200, 250]
 
     private static let enRelativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -165,24 +163,31 @@ enum MenuBuilder {
         let submenu = NSMenu()
         submenu.autoenablesItems = false
 
-        submenu.addItem(sizeOption(
-            title: text("small", lang: state.language),
-            preset: .small,
-            selected: state.sizePreset == .small,
+        for percent in sizePresets {
+            let title = "\(percent)%"
+            let menuItem = actionItem(
+                title: title,
+                selector: #selector(StatusBarController.selectSizePercent(_:)),
+                target: target
+            )
+            menuItem.representedObject = percent
+            menuItem.state = state.sizePercent == percent ? .on : .off
+            submenu.addItem(menuItem)
+        }
+
+        submenu.addItem(.separator())
+
+        let customItem = actionItem(
+            title: text("custom", lang: state.language),
+            selector: #selector(StatusBarController.selectCustomSize(_:)),
             target: target
-        ))
-        submenu.addItem(sizeOption(
-            title: text("medium", lang: state.language),
-            preset: .medium,
-            selected: state.sizePreset == .medium,
-            target: target
-        ))
-        submenu.addItem(sizeOption(
-            title: text("large", lang: state.language),
-            preset: .large,
-            selected: state.sizePreset == .large,
-            target: target
-        ))
+        )
+        if !sizePresets.contains(state.sizePercent) {
+            customItem.title = "\(text("custom", lang: state.language)) (\(state.sizePercent)%)"
+            customItem.state = .on
+        }
+        submenu.addItem(customItem)
+
         item.submenu = submenu
         return item
     }
@@ -294,22 +299,6 @@ enum MenuBuilder {
         submenu.addItem(unregisterItem)
 
         item.submenu = submenu
-        return item
-    }
-
-    private static func sizeOption(
-        title: String,
-        preset: PetWindow.SizePreset,
-        selected: Bool,
-        target: StatusBarController
-    ) -> NSMenuItem {
-        let item = actionItem(
-            title: title,
-            selector: #selector(StatusBarController.selectSizePreset(_:)),
-            target: target
-        )
-        item.representedObject = preset
-        item.state = selected ? .on : .off
         return item
     }
 

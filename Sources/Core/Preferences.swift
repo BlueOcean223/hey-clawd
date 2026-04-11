@@ -29,7 +29,7 @@ final class Preferences {
 
         // 先注册默认值，后面的读取逻辑就可以只关心类型转换。
         defaults.register(defaults: [
-            PrefKey.windowSize.rawValue: "S",
+            PrefKey.windowSize.rawValue: 100,
             PrefKey.miniMode.rawValue: false,
             PrefKey.miniEdge.rawValue: "right",
             PrefKey.lang.rawValue: AppLanguage.zh.rawValue,
@@ -65,12 +65,25 @@ final class Preferences {
         }
     }
 
-    var windowSizePreset: PetWindow.SizePreset {
+    var windowSizePercent: Int {
         get {
-            PetWindow.SizePreset(preferenceValue: defaults.string(forKey: PrefKey.windowSize.rawValue))
+            let raw = defaults.object(forKey: PrefKey.windowSize.rawValue)
+            let value: Int
+            if let intValue = raw as? Int {
+                value = intValue
+            } else if let stringValue = raw as? String {
+                switch stringValue {
+                case "M": value = 140
+                case "L": value = 180
+                default: value = 100
+                }
+            } else {
+                value = 100
+            }
+            return min(max(value, 25), 400)
         }
         set {
-            defaults.set(newValue.preferenceValue, forKey: PrefKey.windowSize.rawValue)
+            defaults.set(newValue, forKey: PrefKey.windowSize.rawValue)
         }
     }
 
@@ -192,29 +205,5 @@ final class Preferences {
         }
 
         return NSScreen.main ?? screens.first
-    }
-}
-
-private extension PetWindow.SizePreset {
-    init(preferenceValue: String?) {
-        switch preferenceValue {
-        case "M":
-            self = .medium
-        case "L":
-            self = .large
-        default:
-            self = .small
-        }
-    }
-
-    var preferenceValue: String {
-        switch self {
-        case .small:
-            return "S"
-        case .medium:
-            return "M"
-        case .large:
-            return "L"
-        }
     }
 }

@@ -8,23 +8,7 @@ import QuartzCore
     private static let pokeReactionDuration: TimeInterval = 2.5
     private static let annoyedReactionDuration: TimeInterval = 3.5
     private static let doubleReactionDuration: TimeInterval = 3.5
-
-    enum SizePreset {
-        case small
-        case medium
-        case large
-
-        var dimension: CGFloat {
-            switch self {
-            case .small:
-                return 200
-            case .medium:
-                return 280
-            case .large:
-                return 360
-            }
-        }
-    }
+    private static let baseDimension: CGFloat = 200
 
     private let petView: PetView
     private var dragStartPoint: NSPoint?
@@ -40,7 +24,7 @@ import QuartzCore
     private var reactionTimer: Timer?
     private var lastClickPoint: NSPoint?
     private var isPausedForOcclusion = false
-    private(set) var sizePreset: SizePreset
+    private(set) var sizePercent: Int
     var allowsDragging = true
     /// mini 模式需要允许窗口半藏在屏幕外；普通模式则始终钳回工作区。
     var allowsPartialOffscreenPlacement = false
@@ -54,9 +38,10 @@ import QuartzCore
     /// 聚焦逻辑交给上层协调，这里只负责把点击事件抛出去。
     var onPetClick: (() -> Void)?
 
-    init(sizePreset: SizePreset = .small) {
-        self.sizePreset = sizePreset
-        let size = NSSize(width: sizePreset.dimension, height: sizePreset.dimension)
+    init(sizePercent: Int = 100) {
+        self.sizePercent = sizePercent
+        let dim = Self.baseDimension * CGFloat(sizePercent) / 100
+        let size = NSSize(width: dim, height: dim)
         petView = PetView(frame: NSRect(origin: .zero, size: size))
 
         super.init(
@@ -94,13 +79,14 @@ import QuartzCore
         NotificationCenter.default.removeObserver(self)
     }
 
-    func applySizePreset(_ preset: SizePreset) {
-        guard preset != sizePreset else {
+    func applySizePercent(_ percent: Int) {
+        guard percent != sizePercent else {
             return
         }
 
-        sizePreset = preset
-        let newSize = NSSize(width: preset.dimension, height: preset.dimension)
+        sizePercent = percent
+        let dim = Self.baseDimension * CGFloat(percent) / 100
+        let newSize = NSSize(width: dim, height: dim)
         let nextFrame = NSRect(origin: frame.origin, size: newSize)
         setFrame(nextFrame, display: true, animate: false)
         clampToScreen()
