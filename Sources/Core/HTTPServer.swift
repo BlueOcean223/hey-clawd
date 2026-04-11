@@ -185,6 +185,7 @@ final class HTTPServer: @unchecked Sendable {
 
     private var listener: NWListener?
     private var port: Int?
+    private var activeConnections: [NWConnection] = []
     private var stateRequestHandler: ((Data) async -> HTTPResponse)?
     private var permissionRequestHandler: ((PendingPermissionRequest) -> Void)?
     private var debugSVGHandler: ((String) async -> HTTPResponse)?
@@ -237,14 +238,18 @@ final class HTTPServer: @unchecked Sendable {
     }
 
     func stop() {
-        let activeListener = lock.withLock { () -> NWListener? in
+        let (activeListener, connections) = lock.withLock { () -> (NWListener?, [NWConnection]) in
             defer {
                 listener = nil
                 port = nil
+                activeConnections.removeAll()
             }
-            return listener
+            return (listener, activeConnections)
         }
 
+        for connection in connections {
+            connection.cancel()
+        }
         activeListener?.cancel()
         removeRuntimeConfig()
     }
@@ -311,12 +316,19 @@ final class HTTPServer: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
+        lock.withLock {
+            activeConnections.append(connection)
+        }
+
         let permissionTracker = ConnectionPermissionTracker()
 
-        connection.stateUpdateHandler = { state in
+        connection.stateUpdateHandler = { [weak self] state in
             switch state {
             case .failed, .cancelled:
                 permissionTracker.cancelPendingPermission()
+                self?.lock.withLock {
+                    self?.activeConnections.removeAll { $0 === connection }
+                }
             default:
                 break
             }
@@ -334,6 +346,9 @@ final class HTTPServer: @unchecked Sendable {
     private func processConnection(_ connection: NWConnection, permissionTracker: ConnectionPermissionTracker) async {
         defer {
             connection.cancel()
+            lock.withLock {
+                activeConnections.removeAll { $0 === connection }
+            }
         }
 
         var buffer = Data()

@@ -130,6 +130,14 @@ final class PetView: NSView {
             return
         }
 
+        // 先清理上次转场残留的孤儿图层。
+        // 当窗口被遮挡时 rootLayer.speed=0，CATransaction completionBlock 不会触发，
+        // 旧图层树就会一直挂着，造成内存持续增长。
+        for sublayer in hostLayer.sublayers ?? [] where sublayer !== oldRoot {
+            removeAllAnimationsRecursively(from: sublayer)
+            sublayer.removeFromSuperlayer()
+        }
+
         newRootLayer.opacity = 0
 
         hostLayer.addSublayer(newRootLayer)
@@ -153,14 +161,19 @@ final class PetView: NSView {
         fadeOut.duration = fadeDuration
 
         CATransaction.begin()
-        CATransaction.setCompletionBlock { [weak oldRoot] in
-            oldRoot?.removeFromSuperlayer()
-        }
         newRootLayer.add(fadeIn, forKey: "pet-switch-fade-in")
         oldRoot.add(fadeOut, forKey: "pet-switch-fade-out")
         newRootLayer.opacity = 1
         oldRoot.opacity = 0
         CATransaction.commit()
+
+        // 用定时清理替代 CATransaction.setCompletionBlock，
+        // 后者在 layer speed=0（遮挡暂停）时不会触发。
+        DispatchQueue.main.asyncAfter(deadline: .now() + fadeDuration + 0.05) { [weak oldRoot, weak self] in
+            guard let oldRoot else { return }
+            self?.removeAllAnimationsRecursively(from: oldRoot)
+            oldRoot.removeFromSuperlayer()
+        }
 
         eyeTracker.forceResend()
     }

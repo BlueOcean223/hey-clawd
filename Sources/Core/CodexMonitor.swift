@@ -54,6 +54,7 @@ actor CodexMonitor {
     private static let staleInterval: TimeInterval = 300
     private static let recentFileWindow: TimeInterval = 120
     private static let maxTrackedFiles = 50
+    private static let maxSavedStates = 200
     private static let maxPartialBytes = 65_536
     // DispatchSource runs on a utility queue, then hops back into the actor for debounced reads.
     private static let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor", qos: .utility)
@@ -411,6 +412,13 @@ actor CodexMonitor {
             cwd: tracked.cwd,
             hadToolUse: tracked.hadToolUse
         )
+
+        if previouslyTrackedStates.count > Self.maxSavedStates {
+            let oldest = previouslyTrackedStates.keys.sorted { $0.path < $1.path }.first
+            if let oldest {
+                previouslyTrackedStates.removeValue(forKey: oldest)
+            }
+        }
 
         tracked.debounceTask?.cancel()
         tracked.debounceTask = nil
