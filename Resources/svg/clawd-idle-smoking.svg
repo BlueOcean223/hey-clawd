@@ -1,0 +1,354 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-15 -25 45 45" width="500" height="500">
+  <defs>
+    <style>
+      /* ===== Idle smoking: tip trails + puff at mouth + thick exhale ===== */
+
+      /* ===== 1. Independent sub-animations (breathing, blink) ===== */
+
+      .breathe-anim {
+        transform-origin: 7.5px 13px;
+        animation: breathe 3.2s infinite ease-in-out;
+      }
+
+      .eyes-blink {
+        transform-origin: 7.5px 9px;
+        animation: eye-blink 16s infinite linear;
+      }
+
+      /* ===== 2. Main 16s timeline ===== */
+
+      .action-body {
+        transform-origin: 7.5px 13px;
+        animation: action-body 16s infinite ease-in-out;
+      }
+
+      .shadow-anim {
+        transform-origin: 7.5px 15.5px;
+        animation: shadow-action 16s infinite ease-in-out;
+      }
+
+      /* ===== 3. Component animations ===== */
+
+      .arm-l {
+        transform-origin: 2px 10px;
+        animation: arm-l-idle 16s infinite ease-in-out;
+      }
+
+      .arm-r {
+        transform-origin: 14px 10px;
+        animation: arm-r-smoke 16s infinite ease-in-out;
+      }
+
+      .eyes-look {
+        animation: eye-look 16s infinite ease-in-out;
+      }
+
+      /* ===== 4. Cigarette glow synced to puffs ===== */
+
+      .cig-glow {
+        animation: cig-glow 16s infinite ease-in-out;
+      }
+
+      /* ===== 5. Tip trail smoke (inside arm-r, independent short cycles) ===== */
+
+      .tp1 {
+        opacity: 0;
+        animation: tip-trail-1 2.5s infinite linear;
+      }
+      .tp2 {
+        opacity: 0;
+        animation: tip-trail-2 3s infinite linear;
+        animation-delay: -1s;
+      }
+      .tp3 {
+        opacity: 0;
+        animation: tip-trail-3 2.8s infinite linear;
+        animation-delay: -1.8s;
+      }
+
+      /* ===== 6. Exhale smoke (6 particles, synced to 16s puff timing) ===== */
+
+      .sp1 {
+        opacity: 0;
+        animation: exhale-1 16s infinite ease-out;
+      }
+      .sp2 {
+        opacity: 0;
+        animation: exhale-2 16s infinite ease-out;
+      }
+      .sp3 {
+        opacity: 0;
+        animation: exhale-3 16s infinite ease-out;
+      }
+      .sp4 {
+        opacity: 0;
+        animation: exhale-4 16s infinite ease-out;
+      }
+      .sp5 {
+        opacity: 0;
+        animation: exhale-5 16s infinite ease-out;
+      }
+      .sp6 {
+        opacity: 0;
+        animation: exhale-6 16s infinite ease-out;
+      }
+
+      /* ===== Keyframes ===== */
+
+      @keyframes breathe {
+        0%, 100% { transform: scale(1, 1) translate(0, 0); }
+        50%      { transform: scale(1.02, 0.98) translate(0, 0.5px); }
+      }
+
+      /*
+       * 16s master timeline — two puff cycles:
+       *
+       *   0%-8%    idle, cigarette at side (tip trail smoke visible)
+       *  10%       arm prep
+       *  14%-26%   arm at mouth — inhale (tip glows, eyes squint)
+       *  28%       arm lowers
+       *  30%-34%   exhale (body compress)
+       *  29%-50%   EXHALE BURST 1 — 6 particles cascade from mouth
+       *  36%-54%   idle, watching smoke
+       *  56%       arm prep
+       *  60%-72%   arm at mouth — inhale
+       *  74%-78%   exhale
+       *  75%-96%   EXHALE BURST 2
+       *  82%-100%  settle to idle
+       */
+
+      @keyframes action-body {
+        0%, 8%          { transform: scale(1, 1) translate(0, 0); }
+        12%, 14%        { transform: scale(1, 1) translate(0.5px, 0); }
+        18%, 26%        { transform: scale(0.97, 1.04) translate(0.3px, -0.5px); }
+        30%, 34%        { transform: scale(1.03, 0.97) translate(0, 0.3px); }
+        38%, 54%        { transform: scale(1, 1) translate(0, 0); }
+        58%, 60%        { transform: scale(1, 1) translate(0.5px, 0); }
+        64%, 72%        { transform: scale(0.97, 1.04) translate(0.3px, -0.5px); }
+        76%, 78%        { transform: scale(1.03, 0.97) translate(0, 0.3px); }
+        82%, 100%       { transform: scale(1, 1) translate(0, 0); }
+      }
+
+      @keyframes shadow-action {
+        0%, 8%          { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        12%, 14%        { transform: scaleX(1) translate(0.5px, 0); opacity: 0.5; }
+        18%, 26%        { transform: scaleX(0.95) translate(0.3px, 0); opacity: 0.45; }
+        30%, 34%        { transform: scaleX(1.05) translate(0, 0); opacity: 0.53; }
+        38%, 54%        { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+        58%, 60%        { transform: scaleX(1) translate(0.5px, 0); opacity: 0.5; }
+        64%, 72%        { transform: scaleX(0.95) translate(0.3px, 0); opacity: 0.45; }
+        76%, 78%        { transform: scaleX(1.05) translate(0, 0); opacity: 0.53; }
+        82%, 100%       { transform: scaleX(1) translate(0, 0); opacity: 0.5; }
+      }
+
+      @keyframes eye-blink {
+        0%, 3%          { transform: scaleY(1); }
+        5%              { transform: scaleY(0.1); }
+        7%, 16%         { transform: scaleY(1); }
+        18%, 26%        { transform: scaleY(0.4); }
+        28%, 42%        { transform: scaleY(1); }
+        44%             { transform: scaleY(0.1); }
+        46%, 62%        { transform: scaleY(1); }
+        64%, 72%        { transform: scaleY(0.4); }
+        74%, 84%        { transform: scaleY(1); }
+        86%             { transform: scaleY(0.1); }
+        88%, 100%       { transform: scaleY(1); }
+      }
+
+      @keyframes eye-look {
+        0%, 8%          { transform: translate(0, 0); }
+        12%, 28%        { transform: translate(1px, 0); }
+        34%, 54%        { transform: translate(0, -1px); }
+        58%, 74%        { transform: translate(1px, 0); }
+        80%, 94%        { transform: translate(0, -1px); }
+        98%, 100%       { transform: translate(0, 0); }
+      }
+
+      @keyframes arm-l-idle {
+        0%, 28%         { transform: translate(0, 0) rotate(0deg); }
+        31%, 34%        { transform: translate(-0.5px, 0) rotate(-5deg); }
+        38%, 74%        { transform: translate(0, 0) rotate(0deg); }
+        77%, 79%        { transform: translate(-0.5px, 0) rotate(-5deg); }
+        82%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes arm-r-smoke {
+        0%, 8%          { transform: translate(0, 0) rotate(0deg); }
+        10%             { transform: translate(0, 0) rotate(3deg); }
+        14%, 26%        { transform: translate(-5px, 2px) rotate(-10deg); }
+        32%             { transform: translate(0, 0.5px) rotate(5deg); }
+        34%, 54%        { transform: translate(0, 0) rotate(0deg); }
+        56%             { transform: translate(0, 0) rotate(3deg); }
+        60%, 72%        { transform: translate(-5px, 2px) rotate(-10deg); }
+        78%             { transform: translate(0, 0.5px) rotate(5deg); }
+        80%, 100%       { transform: translate(0, 0) rotate(0deg); }
+      }
+
+      @keyframes cig-glow {
+        0%, 12%         { opacity: 0.4; }
+        16%, 26%        { opacity: 1; }
+        30%, 58%        { opacity: 0.4; }
+        62%, 72%        { opacity: 1; }
+        76%, 100%       { opacity: 0.4; }
+      }
+
+      /* --- Tip trail: subtle wisps always rising from lit end --- */
+
+      @keyframes tip-trail-1 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        10%             { transform: translate(0, -0.5px); opacity: 0.3; }
+        50%             { transform: translate(-0.5px, -3px); opacity: 0.15; }
+        100%            { transform: translate(-1px, -6px); opacity: 0; }
+      }
+
+      @keyframes tip-trail-2 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        10%             { transform: translate(0.3px, -0.5px); opacity: 0.25; }
+        50%             { transform: translate(0.5px, -3.5px); opacity: 0.12; }
+        100%            { transform: translate(1px, -7px); opacity: 0; }
+      }
+
+      @keyframes tip-trail-3 {
+        0%              { transform: translate(0, 0); opacity: 0; }
+        10%             { transform: translate(-0.3px, -0.3px); opacity: 0.2; }
+        50%             { transform: translate(-1px, -2.5px); opacity: 0.1; }
+        100%            { transform: translate(-1.5px, -5px); opacity: 0; }
+      }
+
+      /* --- Exhale burst: 6 particles, staggered cascade after each puff --- */
+
+      /* sp1: fast center-left, first to appear */
+      @keyframes exhale-1 {
+        0%, 28%         { transform: translate(0, 0); opacity: 0; }
+        29%             { transform: translate(0, 0); opacity: 0.55; }
+        36%             { transform: translate(-2px, -5px); opacity: 0.4; }
+        44%             { transform: translate(-4px, -12px); opacity: 0; }
+        45%, 74%        { transform: translate(0, 0); opacity: 0; }
+        75%             { transform: translate(0, 0); opacity: 0.55; }
+        82%             { transform: translate(-2px, -5px); opacity: 0.4; }
+        90%             { transform: translate(-4px, -12px); opacity: 0; }
+        91%, 100%       { transform: translate(0, 0); opacity: 0; }
+      }
+
+      /* sp2: right drift, slight delay */
+      @keyframes exhale-2 {
+        0%, 30%         { transform: translate(0, 0); opacity: 0; }
+        31%             { transform: translate(0.5px, -0.5px); opacity: 0.45; }
+        38%             { transform: translate(2px, -6px); opacity: 0.3; }
+        46%             { transform: translate(4px, -14px); opacity: 0; }
+        47%, 76%        { transform: translate(0, 0); opacity: 0; }
+        77%             { transform: translate(0.5px, -0.5px); opacity: 0.45; }
+        84%             { transform: translate(2px, -6px); opacity: 0.3; }
+        92%             { transform: translate(4px, -14px); opacity: 0; }
+        93%, 100%       { transform: translate(0, 0); opacity: 0; }
+      }
+
+      /* sp3: slow wide left, wispy */
+      @keyframes exhale-3 {
+        0%, 31%         { transform: translate(0, 0) scale(1); opacity: 0; }
+        33%             { transform: translate(-0.5px, -1px) scale(1); opacity: 0.4; }
+        40%             { transform: translate(-1.5px, -5px) scale(1.4); opacity: 0.25; }
+        50%             { transform: translate(-3px, -11px) scale(1.8); opacity: 0; }
+        51%, 77%        { transform: translate(0, 0) scale(1); opacity: 0; }
+        79%             { transform: translate(-0.5px, -1px) scale(1); opacity: 0.4; }
+        86%             { transform: translate(-1.5px, -5px) scale(1.4); opacity: 0.25; }
+        96%             { transform: translate(-3px, -11px) scale(1.8); opacity: 0; }
+        97%, 100%       { transform: translate(0, 0) scale(1); opacity: 0; }
+      }
+
+      /* sp4: center, rises straight up, thick */
+      @keyframes exhale-4 {
+        0%, 30%         { transform: translate(0, 0) scale(1); opacity: 0; }
+        32%             { transform: translate(0, -0.5px) scale(1.1); opacity: 0.5; }
+        39%             { transform: translate(0.5px, -7px) scale(1.3); opacity: 0.3; }
+        48%             { transform: translate(0, -15px) scale(1.6); opacity: 0; }
+        49%, 76%        { transform: translate(0, 0) scale(1); opacity: 0; }
+        78%             { transform: translate(0, -0.5px) scale(1.1); opacity: 0.5; }
+        85%             { transform: translate(0.5px, -7px) scale(1.3); opacity: 0.3; }
+        94%             { transform: translate(0, -15px) scale(1.6); opacity: 0; }
+        95%, 100%       { transform: translate(0, 0) scale(1); opacity: 0; }
+      }
+
+      /* sp5: far left, slow floater */
+      @keyframes exhale-5 {
+        0%, 32%         { transform: translate(0, 0); opacity: 0; }
+        34%             { transform: translate(-1px, -0.5px); opacity: 0.35; }
+        42%             { transform: translate(-4px, -4px); opacity: 0.2; }
+        52%             { transform: translate(-6px, -10px); opacity: 0; }
+        53%, 78%        { transform: translate(0, 0); opacity: 0; }
+        80%             { transform: translate(-1px, -0.5px); opacity: 0.35; }
+        88%             { transform: translate(-4px, -4px); opacity: 0.2; }
+        98%             { transform: translate(-6px, -10px); opacity: 0; }
+        99%, 100%       { transform: translate(0, 0); opacity: 0; }
+      }
+
+      /* sp6: far right, lazy drift */
+      @keyframes exhale-6 {
+        0%, 33%         { transform: translate(0, 0); opacity: 0; }
+        35%             { transform: translate(1px, -0.5px); opacity: 0.3; }
+        44%             { transform: translate(5px, -5px); opacity: 0.18; }
+        54%             { transform: translate(7px, -11px); opacity: 0; }
+        55%, 79%        { transform: translate(0, 0); opacity: 0; }
+        81%             { transform: translate(1px, -0.5px); opacity: 0.3; }
+        90%             { transform: translate(5px, -5px); opacity: 0.18; }
+        99%             { transform: translate(7px, -11px); opacity: 0; }
+        100%            { transform: translate(0, 0); opacity: 0; }
+      }
+    </style>
+  </defs>
+
+  <!-- Layer 0: Ground Shadow -->
+  <rect class="shadow-anim" x="3" y="15" width="9" height="1" fill="#000000" opacity="0.5"/>
+
+  <!-- Layer 1: Static Legs -->
+  <g id="legs" fill="#DE886D">
+    <rect x="3" y="12" width="1" height="3"/>
+    <rect x="5" y="12" width="1" height="3"/>
+    <rect x="9" y="12" width="1" height="3"/>
+    <rect x="11" y="12" width="1" height="3"/>
+  </g>
+
+  <!-- Layer 2: Animated Upper Body (action > breathe nesting) -->
+  <g class="action-body">
+    <g class="breathe-anim">
+
+      <!-- Torso -->
+      <rect id="torso" x="2" y="6" width="11" height="7" fill="#DE886D"/>
+
+      <!-- Left Arm -->
+      <g class="arm-l">
+        <rect x="0" y="9" width="2" height="2" fill="#DE886D"/>
+      </g>
+
+      <!-- Right Arm + Cigarette + Tip Smoke -->
+      <g class="arm-r">
+        <rect x="13" y="9" width="2" height="2" fill="#DE886D"/>
+        <!-- Cigarette body -->
+        <rect x="15" y="9" width="2" height="1" fill="#F5F5DC"/>
+        <!-- Cigarette tip -->
+        <rect class="cig-glow" x="17" y="9" width="1" height="1" fill="#FF5252"/>
+        <!-- Tip trail smoke (follows cigarette, always present) -->
+        <rect class="tp1" x="17.5" y="8" width="0.6" height="0.6" fill="#90A4AE"/>
+        <rect class="tp2" x="18" y="8.3" width="0.5" height="0.5" fill="#90A4AE"/>
+        <rect class="tp3" x="17" y="7.5" width="0.7" height="0.5" fill="#90A4AE"/>
+      </g>
+
+      <!-- Eyes: look direction > blink/squint -->
+      <g class="eyes-look" fill="#000000">
+        <g class="eyes-blink">
+          <rect x="4" y="8" width="1" height="2"/>
+          <rect x="10" y="8" width="1" height="2"/>
+        </g>
+      </g>
+
+    </g>
+  </g>
+
+  <!-- Layer 3: Exhale smoke (6 particles, mouth area, synced to puff timing) -->
+  <rect class="sp1" x="8" y="5" width="1" height="1" fill="#90A4AE"/>
+  <rect class="sp2" x="10" y="5.5" width="1.2" height="1" fill="#90A4AE"/>
+  <rect class="sp3" x="6" y="4.5" width="0.8" height="0.8" fill="#90A4AE"/>
+  <rect class="sp4" x="9" y="5" width="1" height="1" fill="#90A4AE"/>
+  <rect class="sp5" x="7" y="5" width="1.2" height="1.2" fill="#B0BEC5"/>
+  <rect class="sp6" x="11" y="5.5" width="0.8" height="0.8" fill="#B0BEC5"/>
+</svg>

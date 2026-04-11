@@ -21,6 +21,7 @@ final class PetViewPipelineTests: XCTestCase {
         "clawd-idle-look.svg",
         "clawd-idle-music.svg",
         "clawd-idle-reading.svg",
+        "clawd-idle-smoking.svg",
         "clawd-idle-yawn.svg",
         "clawd-mini-alert.svg",
         "clawd-mini-crabwalk.svg",

@@ -179,6 +179,7 @@ final class StateMachine {
         ("clawd-idle-reading.svg", 14_000),
         ("clawd-idle-living.svg", 16_000),
         ("clawd-idle-music.svg", 12_000),
+        ("clawd-idle-smoking.svg", 16_000),
         ("clawd-crab-walking.svg", 8_000),
     ]
 
@@ -188,7 +189,7 @@ final class StateMachine {
     private static let workingStaleInterval: TimeInterval = 300
     private static let pointerPollInterval: TimeInterval = 0.2
     private static let idleAnimationDelay: TimeInterval = 20
-    private static let yawnDelay: TimeInterval = 60
+    private static let yawnDelay: TimeInterval = 180
     private static let dozingDelay: TimeInterval = 3.8
     private static let deepSleepDelay: TimeInterval = 600
     private static let collapseDelay: TimeInterval = 0.8

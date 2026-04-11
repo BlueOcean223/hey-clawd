@@ -22,6 +22,7 @@ SVGS=(
   "clawd-idle-look.svg"
   "clawd-idle-reading.svg"
   "clawd-idle-music.svg"
+  "clawd-idle-smoking.svg"
   # --- 工作状态 ---
   "clawd-working-thinking.svg"
   "clawd-working-typing.svg"

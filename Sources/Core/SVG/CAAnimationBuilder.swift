@@ -167,11 +167,18 @@ enum CAAnimationBuilder {
         animation.keyTimes = keyTimes
         animation.values = values
         animation.duration = binding.duration
-        animation.timingFunction = mediaTimingFunction(from: binding.timingFunction)
         animation.repeatCount = repeatCount(from: binding.iterationCount)
         animation.autoreverses = (binding.direction == .alternate || binding.direction == .alternateReverse)
         animation.fillMode = caFillMode(from: binding.fillMode)
         animation.isRemovedOnCompletion = shouldRemoveOnCompletion(binding.fillMode)
+
+        // CSS animation-timing-function applies per-segment (between each pair of
+        // keyframes), not to the overall timeline. Use timingFunctions (plural) to
+        // match CSS semantics; the singular timingFunction would warp the global
+        // timeline, causing later keyframes to fire earlier than expected.
+        let segmentCount = max(keyTimes.count - 1, 1)
+        let tf = mediaTimingFunction(from: binding.timingFunction)
+        animation.timingFunctions = Array(repeating: tf, count: segmentCount)
 
         if binding.delay > 0 {
             animation.beginTime = CACurrentMediaTime() + binding.delay
