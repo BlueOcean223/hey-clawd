@@ -322,12 +322,13 @@ final class HTTPServer: @unchecked Sendable {
 
         let permissionTracker = ConnectionPermissionTracker()
 
-        connection.stateUpdateHandler = { [weak self] state in
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
             switch state {
             case .failed, .cancelled:
                 permissionTracker.cancelPendingPermission()
-                self?.lock.withLock {
-                    self?.activeConnections.removeAll { $0 === connection }
+                if let connection {
+                    self?.removeActiveConnection(connection)
+                    connection.stateUpdateHandler = nil
                 }
             default:
                 break
@@ -345,10 +346,10 @@ final class HTTPServer: @unchecked Sendable {
     /// 每个连接只处理一个请求，响应后关闭。
     private func processConnection(_ connection: NWConnection, permissionTracker: ConnectionPermissionTracker) async {
         defer {
+            permissionTracker.cancelPendingPermission()
+            connection.stateUpdateHandler = nil
             connection.cancel()
-            lock.withLock {
-                activeConnections.removeAll { $0 === connection }
-            }
+            removeActiveConnection(connection)
         }
 
         var buffer = Data()
@@ -383,6 +384,12 @@ final class HTTPServer: @unchecked Sendable {
             }
         } catch {
             print("http server connection error: \(error)")
+        }
+    }
+
+    private func removeActiveConnection(_ connection: NWConnection) {
+        lock.withLock {
+            activeConnections.removeAll { $0 === connection }
         }
     }
 
@@ -568,10 +575,14 @@ final class HTTPServer: @unchecked Sendable {
     /// 在 /permission 挂起期间主动读取连接，检测客户端断连（EOF/RST）。
     /// TCP 半关闭不会让 NWConnection 转到 .failed，但 receive 会收到 isComplete=true。
     private func monitorDisconnect(connection: NWConnection, tracker: ConnectionPermissionTracker) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self] _, _, isComplete, error in
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 1) { [weak self, weak connection] _, _, isComplete, error in
             if error != nil || isComplete {
                 tracker.cancelPendingPermission()
             } else {
+                guard let connection else {
+                    tracker.cancelPendingPermission()
+                    return
+                }
                 self?.monitorDisconnect(connection: connection, tracker: tracker)
             }
         }

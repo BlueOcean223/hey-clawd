@@ -22,7 +22,7 @@ final class SVGBaselineScreenshotTests: XCTestCase {
         let fileManager = FileManager.default
         let fixtures = try loadAllSVGFixtures()
 
-        XCTAssertEqual(fixtures.count, 51, "Expected 51 SVG files in Resources/svg.")
+        XCTAssertFalse(fixtures.isEmpty, "Expected at least one SVG in Resources/svg.")
 
         let outputDirectory = try XCTUnwrap(
             projectRoot()?

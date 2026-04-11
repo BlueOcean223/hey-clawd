@@ -103,7 +103,7 @@ final class PetView: NSView {
             return
         }
 
-        mountedRootLayer?.removeFromSuperlayer()
+        removeHostSublayers(from: hostLayer)
 
         hostLayer.addSublayer(newRootLayer)
         mountedRootLayer = newRootLayer
@@ -130,13 +130,8 @@ final class PetView: NSView {
             return
         }
 
-        // 先清理上次转场残留的孤儿图层。
-        // 当窗口被遮挡时 rootLayer.speed=0，CATransaction completionBlock 不会触发，
-        // 旧图层树就会一直挂着，造成内存持续增长。
-        for sublayer in hostLayer.sublayers ?? [] where sublayer !== oldRoot {
-            removeAllAnimationsRecursively(from: sublayer)
-            sublayer.removeFromSuperlayer()
-        }
+        // 清理上次转场残留的孤儿图层，同时保留这次要淡出的旧根层。
+        removeHostSublayers(from: hostLayer, preserving: oldRoot)
 
         newRootLayer.opacity = 0
 
@@ -427,6 +422,13 @@ final class PetView: NSView {
 
         for sublayer in layer.sublayers ?? [] {
             removeAllAnimationsRecursively(from: sublayer)
+        }
+    }
+
+    private func removeHostSublayers(from hostLayer: CALayer, preserving preservedLayer: CALayer? = nil) {
+        for sublayer in hostLayer.sublayers ?? [] where sublayer !== preservedLayer {
+            removeAllAnimationsRecursively(from: sublayer)
+            sublayer.removeFromSuperlayer()
         }
     }
 

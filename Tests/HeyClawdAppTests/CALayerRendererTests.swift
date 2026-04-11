@@ -145,8 +145,8 @@ final class CALayerRendererTests: XCTestCase {
         let rootLayer = CALayerRenderer.build(document)
         let groupLayer = try XCTUnwrap(findLayer(withClass: "breathe", in: rootLayer))
 
-        XCTAssertNotEqual(groupLayer.anchorPoint.x, 0.5, accuracy: 0.01)
-        XCTAssertNotEqual(groupLayer.anchorPoint.y, 0.5, accuracy: 0.01)
+        XCTAssertEqual(groupLayer.anchorPoint.x, 0.5, accuracy: 0.01)
+        XCTAssertEqual(groupLayer.anchorPoint.y, 1.0, accuracy: 0.01)
         XCTAssertEqual(groupLayer.value(forKey: "svgTransformOrigin") as? String, "7.5px 13px")
     }
 

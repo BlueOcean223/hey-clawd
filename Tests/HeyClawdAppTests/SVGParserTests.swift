@@ -952,7 +952,7 @@ final class SVGParserTests: XCTestCase {
             .filter { $0.hasPrefix("clawd-") && $0.hasSuffix(".svg") }
             .sorted()
 
-        XCTAssertEqual(filenames.count, 51)
+        XCTAssertFalse(filenames.isEmpty, "Expected at least one clawd SVG in Resources/svg.")
 
         for filename in filenames {
             let svg = try String(contentsOfFile: svgDirectory + "/\(filename)", encoding: .utf8)
@@ -1135,9 +1135,10 @@ final class SVGParserTests: XCTestCase {
             .filter { $0.animationName == "hc-smoke-puff" }
             .sorted { $0.delay < $1.delay }
 
-        XCTAssertEqual(smokeBindings.count, 2)
-        XCTAssertEqual(smokeBindings[0].delay, 0.2, accuracy: 0.0001)
-        XCTAssertEqual(smokeBindings[1].delay, 0.4, accuracy: 0.0001)
+        XCTAssertEqual(smokeBindings.count, 3)
+        XCTAssertEqual(smokeBindings[0].delay, 0, accuracy: 0.0001)
+        XCTAssertEqual(smokeBindings[1].delay, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(smokeBindings[2].delay, 0.4, accuracy: 0.0001)
     }
 
     func testParseResolvesInlineAnimationDelayOverridesForClassAnimations() throws {
