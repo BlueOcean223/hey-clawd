@@ -475,7 +475,7 @@ final class MiniMode {
         let fixedY = miniSnap?.minY ?? startFrame.minY
 
         let timer = Timer.scheduledTimer(withTimeInterval: Self.animationFrameInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self else {
                     return
                 }
@@ -519,7 +519,7 @@ final class MiniMode {
         let duration = max(duration, Self.animationFrameInterval)
 
         let timer = Timer.scheduledTimer(withTimeInterval: Self.animationFrameInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self else {
                     return
                 }

@@ -112,7 +112,7 @@ final class BubbleStack {
             object: petWindow,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.repositionBubbles()
             }
         }
@@ -121,7 +121,7 @@ final class BubbleStack {
             object: petWindow,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.repositionBubbles()
             }
         }

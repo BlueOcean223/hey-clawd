@@ -515,7 +515,7 @@ final class StateMachine {
         lastPointerMovedAt = Date()
 
         let timer = Timer.scheduledTimer(withTimeInterval: Self.pointerPollInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.pollSleepSequence()
             }
         }
@@ -527,7 +527,7 @@ final class StateMachine {
     private func startStaleCleanup() {
         staleCleanupTimer?.invalidate()
         staleCleanupTimer = Timer.scheduledTimer(withTimeInterval: Self.staleCleanupInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.pruneStaleSessions(shouldTransition: true)
             }
         }
@@ -735,7 +735,7 @@ final class StateMachine {
         cancelSleepStageTimer()
 
         let timer = Timer.scheduledTimer(withTimeInterval: delay, repeats: false) { _ in
-            Task { @MainActor in
+            MainActor.assumeIsolated {
                 action()
             }
         }
@@ -887,7 +887,7 @@ final class StateMachine {
             autoReturnTimer = nil
 
             let timer = Timer.scheduledTimer(withTimeInterval: remaining, repeats: false) { [weak self] _ in
-                Task { @MainActor [weak self] in
+                MainActor.assumeIsolated {
                     guard let self else {
                         return
                     }
@@ -968,7 +968,7 @@ final class StateMachine {
 
         // 一次性状态展示结束后，不记住它本身，而是回到当前会话集合算出来的结果。
         let timer = Timer.scheduledTimer(withTimeInterval: Double(autoReturnMs) / 1000.0, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self else {
                     return
                 }

@@ -47,7 +47,7 @@ final class PetView: NSView {
         layer?.backgroundColor = NSColor.clear.cgColor
         layerContentsRedrawPolicy = .never
         mouseRecoveryTimer.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.recoverMouseTrackingIfNeeded()
             }
         }
@@ -177,17 +177,12 @@ final class PetView: NSView {
         playReaction(svgFilename: Self.dragReactionSVG)
     }
 
-    func prepareDragReaction() {
-        _ = ensureSVGDocumentCached(for: Self.dragReactionSVG)
-    }
-
     func playReaction(svgFilename: String) {
         loadSVG(svgFilename)
     }
 
     func resumeFromReaction(svgFilename: String) {
         switchSVG(svgFilename)
-        prepareDragReaction()
     }
 
     func setMiniLeft(_ enabled: Bool) {
@@ -363,7 +358,7 @@ final class PetView: NSView {
             return nil
         }
 
-        let rootLayer = CALayerRenderer.build(document)
+        let rootLayer = autoreleasepool { CALayerRenderer.build(document) }
         CAAnimationBuilder.apply(document, to: rootLayer)
         applyScaling(to: rootLayer)
         return (rootLayer, filename)
@@ -379,7 +374,8 @@ final class PetView: NSView {
             return nil
         }
 
-        let parsed = SVGParser.parse(markup)
+        // XMLParser 产生大量临时 ObjC 对象，显式 autoreleasepool 确保解析完立即释放。
+        let parsed = autoreleasepool { SVGParser.parse(markup) }
         SVGDocumentCache.shared.set(filename, parsed)
         return parsed
     }

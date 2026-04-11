@@ -38,7 +38,7 @@ final class EyeTracker {
         self.timer = timer
 
         timer.setEventHandler { [weak self] in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.tick()
             }
         }

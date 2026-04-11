@@ -34,7 +34,9 @@ actor CodexMonitor {
         var cwd: String?
         var lastEventAt = Date()
         var lastState: PetState?
+        var lastEvent: String?
         var hadToolUse = false
+        var shouldDiscardFirstLine = false
 
         init(
             sessionId: String,
@@ -53,9 +55,11 @@ actor CodexMonitor {
     private static let readDebounce: TimeInterval = 1.5
     private static let staleInterval: TimeInterval = 300
     private static let recentFileWindow: TimeInterval = 120
+    private static let historicalLookbackDays = 2
     private static let maxTrackedFiles = 50
     private static let maxSavedStates = 200
     private static let maxPartialBytes = 65_536
+    private static let maxInitialReadBytes: UInt64 = 256 * 1024
     // DispatchSource runs on a utility queue, then hops back into the actor for debounced reads.
     private static let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor", qos: .utility)
     private static let eventMap: [String: EventMapping] = [
@@ -89,15 +93,10 @@ actor CodexMonitor {
             return
         }
 
-        scanForSessionFiles()
+        let now = Date()
+        scanForSessionFiles(referenceTime: now)
         scanTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64(Self.scanInterval * 1_000_000_000))
-                guard !Task.isCancelled else {
-                    break
-                }
-                await self?.scanForSessionFiles()
-            }
+            await self?.runScanLoop()
         }
     }
 
@@ -115,23 +114,50 @@ actor CodexMonitor {
         onStateUpdate = handler
     }
 
+    func scan(referenceTime: Date = Date()) {
+        scanForSessionFiles(referenceTime: referenceTime)
+    }
+
+    func expireStaleFiles(referenceTime: Date = Date()) {
+        cleanStaleFiles(referenceTime: referenceTime)
+    }
+
     private var baseDirectoryURL: URL {
         homeDirectoryURL
             .appendingPathComponent(".codex", isDirectory: true)
             .appendingPathComponent("sessions", isDirectory: true)
     }
 
-    private func scanForSessionFiles() {
+    private func runScanLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: UInt64(Self.scanInterval * 1_000_000_000))
+            guard !Task.isCancelled else {
+                break
+            }
+
+            let now = Date()
+            scanForSessionFiles(referenceTime: now)
+        }
+    }
+
+    private func scanForSessionFiles(referenceTime now: Date) {
         let fileManager = FileManager.default
-        let now = Date()
 
         for directoryURL in candidateSessionDirectories(relativeTo: now) {
-            guard let fileNames = try? fileManager.contentsOfDirectory(atPath: directoryURL.path) else {
+            guard let fileURLs = try? fileManager.contentsOfDirectory(
+                at: directoryURL,
+                includingPropertiesForKeys: [.contentModificationDateKey],
+                options: [.skipsHiddenFiles]
+            ) else {
                 continue
             }
 
-            for fileName in fileNames where isRolloutLog(named: fileName) {
-                let fileURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
+            for fileURL in fileURLs {
+                let fileName = fileURL.lastPathComponent
+                guard isRolloutLog(named: fileName) else {
+                    continue
+                }
+
                 if trackedFiles[fileURL] != nil {
                     continue
                 }
@@ -157,8 +183,9 @@ actor CodexMonitor {
 
     private func candidateSessionDirectories(relativeTo now: Date) -> [URL] {
         let calendar = Calendar(identifier: .gregorian)
+        let dayRange = 0 ... Self.historicalLookbackDays
 
-        return (0 ... 2).compactMap { daysAgo in
+        return dayRange.compactMap { daysAgo in
             guard let date = calendar.date(byAdding: .day, value: -daysAgo, to: now) else {
                 return nil
             }
@@ -185,8 +212,8 @@ actor CodexMonitor {
 
     private func shouldTrackNewFile(at fileURL: URL, referenceTime: Date) -> Bool {
         guard
-            let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
-            let modifiedAt = attributes[.modificationDate] as? Date
+            let values = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]),
+            let modifiedAt = values.contentModificationDate
         else {
             return false
         }
@@ -209,7 +236,7 @@ actor CodexMonitor {
             return
         }
 
-        // 新 rollout 文件先补读当前内容，后续再用 vnode write 追踪增量。
+        // 新 rollout 文件先补读尾部上下文，后续再用 vnode write 追踪增量。
         let source = DispatchSource.makeFileSystemObjectSource(
             fileDescriptor: watchFD,
             eventMask: .write,
@@ -222,11 +249,14 @@ actor CodexMonitor {
             fileHandle: fileHandle,
             source: source
         )
-        if let savedState = previouslyTrackedStates[fileURL] {
+        let restoredSavedState = previouslyTrackedStates.removeValue(forKey: fileURL)
+        if let savedState = restoredSavedState {
             tracked.offset = savedState.offset
             tracked.partial = savedState.partial
             tracked.cwd = savedState.cwd
             tracked.hadToolUse = savedState.hadToolUse
+        } else {
+            bootstrapExistingFile(tracked)
         }
 
         source.setEventHandler { [weak self] in
@@ -244,7 +274,9 @@ actor CodexMonitor {
 
         trackedFiles[fileURL] = tracked
         source.resume()
-        readNewLines(from: fileURL)
+        if restoredSavedState != nil {
+            readNewLines(from: fileURL)
+        }
     }
 
     private func scheduleRead(for fileURL: URL) {
@@ -274,6 +306,7 @@ actor CodexMonitor {
             tracked.cwd = nil
             tracked.hadToolUse = false
             tracked.lastState = nil
+            tracked.shouldDiscardFirstLine = false
             return
         }
 
@@ -288,13 +321,19 @@ actor CodexMonitor {
             try tracked.fileHandle.seek(toOffset: tracked.offset)
             let data = tracked.fileHandle.readDataToEndOfFile()
             tracked.offset = fileSize
-            consume(data: data, tracked: tracked)
+            consume(data: data, tracked: tracked, discardingFirstLine: tracked.shouldDiscardFirstLine)
+            tracked.shouldDiscardFirstLine = false
         } catch {
             stopTracking(fileURL: fileURL, emitSessionEnd: false)
         }
     }
 
-    private func consume(data: Data, tracked: TrackedFile) {
+    private func consume(
+        data: Data,
+        tracked: TrackedFile,
+        discardingFirstLine: Bool = false,
+        emitUpdates: Bool = true
+    ) {
         let text = tracked.partial + String(decoding: data, as: UTF8.self)
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
 
@@ -305,29 +344,28 @@ actor CodexMonitor {
             tracked.partial = ""
         }
 
-        for line in lines.dropLast() where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            process(line: String(line), tracked: tracked)
+        let completeLines = discardingFirstLine ? lines.dropLast().dropFirst() : lines.dropLast()
+        for line in completeLines where !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            process(line: String(line), tracked: tracked, emitUpdates: emitUpdates)
         }
     }
 
-    private func process(line: String, tracked: TrackedFile) {
-        guard
-            let data = line.data(using: .utf8),
-            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-            let type = object["type"] as? String
-        else {
+    private struct ParsedLine {
+        let type: String
+        let key: String
+        let payload: [String: Any]?
+    }
+
+    private func process(line: String, tracked: TrackedFile, emitUpdates: Bool = true) {
+        guard let parsedLine = parse(line: line) else {
             return
         }
 
-        let payload = object["payload"] as? [String: Any]
-        let subtype = payload?["type"] as? String
-        let key = subtype.flatMap { $0.isEmpty ? nil : "\(type):\($0)" } ?? type
-
-        if type == "session_meta" {
-            tracked.cwd = payload?["cwd"] as? String
+        if parsedLine.type == "session_meta" {
+            tracked.cwd = parsedLine.payload?["cwd"] as? String
         }
 
-        guard let mapping = Self.eventMap[key] else {
+        guard let mapping = Self.eventMap[parsedLine.key] else {
             return
         }
 
@@ -335,31 +373,43 @@ actor CodexMonitor {
         case .ignored:
             return
         case .direct(let state):
-            if key == "event_msg:task_started" {
+            if parsedLine.key == "event_msg:task_started" {
                 tracked.hadToolUse = false
             }
             // 只要这一轮真的发起过工具调用，task_complete 就该落到 attention。
-            if key == "response_item:function_call" ||
-                key == "response_item:custom_tool_call" ||
-                key == "response_item:web_search_call"
+            if parsedLine.key == "response_item:function_call" ||
+                parsedLine.key == "response_item:custom_tool_call" ||
+                parsedLine.key == "response_item:web_search_call"
             {
                 tracked.hadToolUse = true
             }
-            emit(state: state, event: key, tracked: tracked)
+            emit(state: state, event: parsedLine.key, tracked: tracked, notify: emitUpdates)
         case .turnEnd:
             let resolvedState: PetState = tracked.hadToolUse ? .attention : .idle
             tracked.hadToolUse = false
-            emit(state: resolvedState, event: key, tracked: tracked)
+            emit(state: resolvedState, event: parsedLine.key, tracked: tracked, notify: emitUpdates)
         }
     }
 
-    private func emit(state: PetState, event: String, tracked: TrackedFile) {
+    private func emit(state: PetState, event: String, tracked: TrackedFile, notify: Bool = true) {
         if state == .working, tracked.lastState == .working {
             return
         }
 
         tracked.lastState = state
+        tracked.lastEvent = event
         tracked.lastEventAt = Date()
+        guard notify else {
+            return
+        }
+        publishCurrentState(for: tracked)
+    }
+
+    private func publishCurrentState(for tracked: TrackedFile) {
+        guard let state = tracked.lastState, let event = tracked.lastEvent else {
+            return
+        }
+
         let update = CodexStateUpdate(
             state: state,
             sessionId: tracked.sessionId,
@@ -371,6 +421,96 @@ actor CodexMonitor {
         Task { @MainActor in
             callback?(update)
         }
+    }
+
+    private func bootstrapExistingFile(_ tracked: TrackedFile) {
+        let fileSize = currentFileSize(for: tracked.fileURL)
+        guard fileSize > 0 else {
+            return
+        }
+
+        let startOffset = initialBootstrapOffset(for: tracked, fileSize: fileSize)
+
+        do {
+            try tracked.fileHandle.seek(toOffset: startOffset)
+            let data = tracked.fileHandle.readDataToEndOfFile()
+            consume(
+                data: data,
+                tracked: tracked,
+                discardingFirstLine: startOffset > 0,
+                emitUpdates: false
+            )
+            tracked.offset = fileSize
+            tracked.shouldDiscardFirstLine = false
+            publishCurrentState(for: tracked)
+        } catch {
+            tracked.offset = fileSize
+            tracked.partial = ""
+            tracked.hadToolUse = false
+            tracked.shouldDiscardFirstLine = false
+        }
+    }
+
+    private func initialBootstrapOffset(for tracked: TrackedFile, fileSize: UInt64) -> UInt64 {
+        guard fileSize > Self.maxInitialReadBytes else {
+            return 0
+        }
+
+        var startOffset = fileSize - Self.maxInitialReadBytes
+
+        while true {
+            guard let data = try? readData(from: tracked.fileHandle, offset: startOffset) else {
+                return 0
+            }
+
+            if containsTaskStartedBoundary(in: data, discardingFirstLine: startOffset > 0) {
+                return startOffset
+            }
+
+            guard startOffset > 0 else {
+                return 0
+            }
+
+            startOffset = startOffset > Self.maxInitialReadBytes ? startOffset - Self.maxInitialReadBytes : 0
+        }
+    }
+
+    private func readData(from fileHandle: FileHandle, offset: UInt64) throws -> Data {
+        try fileHandle.seek(toOffset: offset)
+        return fileHandle.readDataToEndOfFile()
+    }
+
+    private func containsTaskStartedBoundary(in data: Data, discardingFirstLine: Bool) -> Bool {
+        let text = String(decoding: data, as: UTF8.self)
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        let completeLines = discardingFirstLine ? lines.dropLast().dropFirst() : lines.dropLast()
+
+        for line in completeLines.reversed() {
+            guard !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                continue
+            }
+
+            if parse(line: String(line))?.key == "event_msg:task_started" {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func parse(line: String) -> ParsedLine? {
+        guard
+            let data = line.data(using: .utf8),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let type = object["type"] as? String
+        else {
+            return nil
+        }
+
+        let payload = object["payload"] as? [String: Any]
+        let subtype = payload?["type"] as? String
+        let key = subtype.flatMap { $0.isEmpty ? nil : "\(type):\($0)" } ?? type
+        return ParsedLine(type: type, key: key, payload: payload)
     }
 
     private func cleanStaleFiles(referenceTime: Date) {

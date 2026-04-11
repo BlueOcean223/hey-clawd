@@ -72,7 +72,6 @@ import QuartzCore
         )
         // 先接默认 idle SVG，后续状态机会改这里。
         petView.loadSVG("clawd-idle-follow.svg")
-        petView.prepareDragReaction()
     }
 
     deinit {
@@ -391,7 +390,7 @@ import QuartzCore
     private func startClickWindow() {
         clickWindowTimer?.invalidate()
         clickWindowTimer = Timer.scheduledTimer(withTimeInterval: Self.clickWindow, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 self?.finishClickWindow()
             }
         }
@@ -428,7 +427,7 @@ import QuartzCore
 
         // 点击反应是一次性覆盖层，到时后始终回到状态机最新结果。
         reactionTimer = Timer.scheduledTimer(withTimeInterval: duration, repeats: false) { [weak self] _ in
-            Task { @MainActor [weak self] in
+            MainActor.assumeIsolated {
                 guard let self else {
                     return
                 }

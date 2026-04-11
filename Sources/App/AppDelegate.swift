@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let sparkleUpdaterEnabledKey = "ClawdEnableSparkleUpdater"
+    private static let alertIconImage = makeAlertIconImage()
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
@@ -330,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             source.setEventHandler { [weak self] in
                 self?.httpServerTask?.cancel()
                 self?.httpServer?.stop()
-                Task { @MainActor in
+                MainActor.assumeIsolated {
                     NSApp.terminate(nil)
                 }
             }
@@ -359,6 +360,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow?.contentView as? PetView
     }
 
+    private func makeAlert(style: NSAlert.Style? = nil) -> NSAlert {
+        let alert = NSAlert()
+        if let style {
+            alert.alertStyle = style
+        }
+        alert.icon = Self.alertIconImage
+        return alert
+    }
+
+    private static func makeAlertIconImage() -> NSImage {
+        let imageSize: CGFloat = 64
+        let pixelSize: CGFloat = 3
+        let origin = CGPoint(x: 9.5, y: 8)
+
+        let image = NSImage(size: NSSize(width: imageSize, height: imageSize), flipped: true) { _ in
+            NSColor(red: 222 / 255, green: 136 / 255, blue: 109 / 255, alpha: 1).setFill()
+
+            func fill(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
+                NSRect(
+                    x: origin.x + x * pixelSize,
+                    y: origin.y + y * pixelSize,
+                    width: w * pixelSize,
+                    height: h * pixelSize
+                ).fill()
+            }
+
+            fill(2, 3, 11, 2)
+            fill(2, 5, 2, 2)
+            fill(5, 5, 5, 2)
+            fill(11, 5, 2, 2)
+            fill(2, 7, 11, 3)
+            fill(0, 6, 2, 2)
+            fill(13, 6, 2, 2)
+            fill(3, 10, 1, 2)
+            fill(5, 10, 1, 2)
+            fill(9, 10, 1, 2)
+            fill(11, 10, 1, 2)
+
+            NSColor.black.withAlphaComponent(0.75).setFill()
+            fill(4, 5, 1, 2)
+            fill(10, 5, 1, 2)
+            return true
+        }
+        image.isTemplate = false
+        return image
+    }
+
     private func applySizePercent(_ percent: Int) {
         preferences.windowSizePercent = percent
         petWindow?.applySizePercent(percent)
@@ -371,33 +419,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showCustomSizeDialog() {
-        let alert = NSAlert()
+        let alert = makeAlert()
         alert.messageText = appLanguage == .zh ? "自定义大小" : "Custom Size"
-        alert.informativeText = appLanguage == .zh ? "输入百分比 (25-400):" : "Enter percentage (25-400):"
+        alert.informativeText = appLanguage == .zh ? "调整百分比 (25-400):" : "Adjust percentage (25-400):"
         alert.addButton(withTitle: appLanguage == .zh ? "确定" : "OK")
         alert.addButton(withTitle: appLanguage == .zh ? "取消" : "Cancel")
 
-        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 100, height: 24))
-        textField.stringValue = "\(petWindow?.sizePercent ?? 100)"
-        alert.accessoryView = textField
-        alert.window.initialFirstResponder = textField
+        let initialPercent = petWindow?.sizePercent ?? 100
+        let accessoryView = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 56))
+        let valueLabel = NSTextField(labelWithString: "")
+        valueLabel.alignment = .center
+        valueLabel.font = .monospacedDigitSystemFont(ofSize: 14, weight: .medium)
+        valueLabel.frame = NSRect(x: 0, y: 34, width: 260, height: 18)
+
+        let slider = NSSlider(value: Double(initialPercent), minValue: 25, maxValue: 400, target: nil, action: nil)
+        slider.frame = NSRect(x: 0, y: 4, width: 210, height: 24)
+
+        let stepper = NSStepper(frame: NSRect(x: 224, y: 2, width: 20, height: 28))
+        stepper.minValue = 25
+        stepper.maxValue = 400
+        stepper.increment = 1
+        stepper.integerValue = min(max(initialPercent, 25), 400)
+
+        let coordinator = CustomSizeControlCoordinator(
+            slider: slider,
+            stepper: stepper,
+            valueLabel: valueLabel,
+            initialValue: initialPercent
+        )
+        slider.target = coordinator
+        slider.action = #selector(CustomSizeControlCoordinator.sliderChanged(_:))
+        stepper.target = coordinator
+        stepper.action = #selector(CustomSizeControlCoordinator.stepperChanged(_:))
+
+        accessoryView.addSubview(valueLabel)
+        accessoryView.addSubview(slider)
+        accessoryView.addSubview(stepper)
+        alert.accessoryView = accessoryView
 
         let response = alert.runModal()
         guard response == .alertFirstButtonReturn else {
             return
         }
 
-        let trimmed = textField.stringValue.trimmingCharacters(in: .whitespaces)
-        guard let value = Int(trimmed), value >= 25, value <= 400 else {
-            let errorAlert = NSAlert()
-            errorAlert.alertStyle = .warning
-            errorAlert.messageText = appLanguage == .zh ? "无效输入" : "Invalid Input"
-            errorAlert.informativeText = appLanguage == .zh ? "请输入 25 到 400 之间的数字。" : "Please enter a number between 25 and 400."
-            errorAlert.runModal()
-            return
-        }
-
-        applySizePercent(value)
+        applySizePercent(coordinator.value)
     }
 
     private func togglePetVisibility() {
@@ -642,8 +707,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 result = HookInstaller.register()
             }
             await MainActor.run {
-                let alert = NSAlert()
-                alert.alertStyle = result.success ? .informational : .warning
+                let alert = self.makeAlert(style: result.success ? .informational : .warning)
                 alert.messageText = result.success ? "Hooks Registered" : "Registration Failed"
                 alert.informativeText = result.output
                 alert.runModal()
@@ -661,8 +725,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 result = HookInstaller.unregister()
             }
             await MainActor.run {
-                let alert = NSAlert()
-                alert.alertStyle = result.success ? .informational : .warning
+                let alert = self.makeAlert(style: result.success ? .informational : .warning)
                 alert.messageText = result.success ? "Hooks Cleaned" : "Clean Failed"
                 alert.informativeText = result.output
                 alert.runModal()
@@ -712,6 +775,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
     }
 
+}
+
+@MainActor
+private final class CustomSizeControlCoordinator: NSObject {
+    private let slider: NSSlider
+    private let stepper: NSStepper
+    private let valueLabel: NSTextField
+
+    private(set) var value: Int
+
+    init(slider: NSSlider, stepper: NSStepper, valueLabel: NSTextField, initialValue: Int) {
+        self.slider = slider
+        self.stepper = stepper
+        self.valueLabel = valueLabel
+        self.value = min(max(initialValue, 25), 400)
+        super.init()
+        updateControls(to: value)
+    }
+
+    @objc func sliderChanged(_ sender: NSSlider) {
+        updateControls(to: Int(sender.doubleValue.rounded()))
+    }
+
+    @objc func stepperChanged(_ sender: NSStepper) {
+        updateControls(to: sender.integerValue)
+    }
+
+    private func updateControls(to rawValue: Int) {
+        value = min(max(rawValue, 25), 400)
+        slider.integerValue = value
+        stepper.integerValue = value
+        valueLabel.stringValue = "\(value)%"
+    }
 }
 
 private enum SVGUpdate {

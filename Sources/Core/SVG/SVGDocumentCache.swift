@@ -6,7 +6,7 @@ final class SVGDocumentCache {
 
     private var cache: [String: SVGDocument] = [:]
     private var accessOrder: [String] = []
-    private let capacity = 5
+    private let capacity = 8
 
     private init() {}
 
