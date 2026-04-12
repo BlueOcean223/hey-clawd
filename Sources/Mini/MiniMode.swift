@@ -10,7 +10,7 @@ final class MiniMode {
 
     static let miniOffsetRatio: CGFloat = 0.486
     static let peekOffset: CGFloat = 25
-    static let snapTolerance: CGFloat = 30
+    static let snapTolerance: CGFloat = 10
     static let jumpPeakHeight: CGFloat = 40
     static let jumpDuration: TimeInterval = 0.35
     static let crabwalkSpeed: CGFloat = 0.12

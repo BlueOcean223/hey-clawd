@@ -74,6 +74,12 @@ import QuartzCore
         petView.loadSVG("clawd-idle-follow.svg")
     }
 
+    // 禁用系统默认的窗口位置约束，否则 macOS 会把无边框窗口的
+    // 顶部限制在 visibleFrame 内，导致拖拽时无法接近屏幕上方。
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
+
     deinit {
         NotificationCenter.default.removeObserver(self)
     }
@@ -100,6 +106,7 @@ import QuartzCore
         let workArea = nearestWorkArea(for: center)
         var clampedOrigin = frame.origin
         clampedOrigin.x = max(workArea.minX, min(clampedOrigin.x, workArea.maxX - frame.width))
+        // 拖拽过程中不做系统级约束，但最终落点还是要留在可视工作区内。
         clampedOrigin.y = max(workArea.minY, min(clampedOrigin.y, workArea.maxY - frame.height))
 
         guard clampedOrigin != frame.origin else {
