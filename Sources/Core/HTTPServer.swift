@@ -171,6 +171,11 @@ private struct RuntimeConfig: Codable, Sendable {
 /// 监听 127.0.0.1:23333-23337，绑定失败则依次尝试下一个端口，
 /// 全部失败则进入 idle-only 模式（不接收 hook 事件）。
 final class HTTPServer: @unchecked Sendable {
+    struct Configuration: Sendable {
+        var maxActiveConnections = 64
+        var maxPendingPermissionRequests = 8
+    }
+
     static let defaultPort = 23_333
     static let portRange = 23_333...23_337  // 5 个候选端口
 
@@ -182,14 +187,20 @@ final class HTTPServer: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "hey-clawd.http-server")
     private let lock = NSLock()
+    private let configuration: Configuration
 
     private var listener: NWListener?
     private var port: Int?
     private var activeConnections: [NWConnection] = []
+    private var pendingPermissionRequests = 0
     private var stateRequestHandler: ((Data) async -> HTTPResponse)?
     private var permissionRequestHandler: ((PendingPermissionRequest) -> Void)?
     private var debugSVGHandler: ((String) async -> HTTPResponse)?
     private var debugResetHandler: (() async -> HTTPResponse)?
+
+    init(configuration: Configuration = Configuration()) {
+        self.configuration = configuration
+    }
 
     var currentPort: Int? {
         lock.withLock { port }
@@ -316,8 +327,17 @@ final class HTTPServer: @unchecked Sendable {
     }
 
     private func accept(_ connection: NWConnection) {
-        lock.withLock {
+        let accepted = lock.withLock { () -> Bool in
+            guard activeConnections.count < configuration.maxActiveConnections else {
+                return false
+            }
             activeConnections.append(connection)
+            return true
+        }
+
+        guard accepted else {
+            connection.cancel()
+            return
         }
 
         let permissionTracker = ConnectionPermissionTracker()
@@ -441,6 +461,11 @@ final class HTTPServer: @unchecked Sendable {
                 return errorResponse(statusCode: 503, message: "permission handler unavailable")
             }
 
+            guard reservePermissionSlot() else {
+                return errorResponse(statusCode: 429, message: "too many pending permissions")
+            }
+            defer { releasePermissionSlot() }
+
             // 挂起当前连接，直到上层通过 PendingPermissionRequest.respond() 返回结果
             let result = await resolvePermission(body: request.body, permissionTracker: permissionTracker)
             return permissionResponse(result)
@@ -529,6 +554,22 @@ final class HTTPServer: @unchecked Sendable {
             "Content-Type": contentType,
             "x-clawd-server": Self.appName,
         ]
+    }
+
+    private func reservePermissionSlot() -> Bool {
+        lock.withLock {
+            guard pendingPermissionRequests < configuration.maxPendingPermissionRequests else {
+                return false
+            }
+            pendingPermissionRequests += 1
+            return true
+        }
+    }
+
+    private func releasePermissionSlot() {
+        lock.withLock {
+            pendingPermissionRequests = max(0, pendingPermissionRequests - 1)
+        }
     }
 
     private func resolvePermission(body: Data, permissionTracker: ConnectionPermissionTracker) async -> PermissionDecisionResult {

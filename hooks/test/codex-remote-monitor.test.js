@@ -1,10 +1,15 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const {
   cleanStaleFiles,
   createTrackedEntry,
+  pollFile,
   processLine,
+  tracked,
 } = require("../codex-remote-monitor");
 
 function emitCollector() {
@@ -60,4 +65,32 @@ test("treats agent_message as activity so stale cleanup does not cut off long te
   } finally {
     Date.now = originalNow;
   }
+});
+
+test("pollFile caps partial lines and reads large deltas without retaining the whole tail", (t) => {
+  tracked.clear();
+  t.after(() => tracked.clear());
+
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "clawd-codex-remote-"));
+  const filePath = path.join(
+    tempDir,
+    "rollout-2026-04-14T00-00-00-019d23d4-f1a9-7633-b9c7-758327137228.jsonl"
+  );
+  t.after(() => fs.rmSync(tempDir, { recursive: true, force: true }));
+
+  const hugePartial = "x".repeat(70000);
+  fs.writeFileSync(
+    filePath,
+    [
+      JSON.stringify({ type: "event_msg", payload: { type: "task_started" } }),
+      hugePartial,
+    ].join("\n")
+  );
+
+  pollFile(filePath, path.basename(filePath));
+
+  const entry = tracked.get(filePath);
+  assert.ok(entry);
+  assert.equal(entry.lastState, "thinking");
+  assert.equal(entry.partial, "");
 });

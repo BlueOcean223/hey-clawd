@@ -30,17 +30,8 @@ final class HTTPServerTests: XCTestCase {
         let socketFD = try makeSocket(port: port)
         defer { close(socketFD) }
 
-        let body = Data("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 30\"},\"session_id\":\"test-disconnect\"}".utf8)
-        let headerLines = [
-            "POST /permission HTTP/1.1",
-            "Host: 127.0.0.1",
-            "Content-Type: application/json",
-            "Content-Length: \(body.count)",
-            "",
-            "",
-        ]
-
-        var request = Data(headerLines.joined(separator: "\r\n").utf8)
+        let body = permissionBody(sessionId: "test-disconnect")
+        var request = makeHTTPRequest(path: "/permission", body: body)
         request.append(body)
 
         try writeAll(request, to: socketFD)
@@ -69,17 +60,8 @@ final class HTTPServerTests: XCTestCase {
         let socketFD = try makeSocket(port: port)
         defer { close(socketFD) }
 
-        let body = Data("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 30\"},\"session_id\":\"test-disconnect-extra\"}".utf8)
-        let headerLines = [
-            "POST /permission HTTP/1.1",
-            "Host: 127.0.0.1",
-            "Content-Type: application/json",
-            "Content-Length: \(body.count)",
-            "",
-            "",
-        ]
-
-        var request = Data(headerLines.joined(separator: "\r\n").utf8)
+        let body = permissionBody(sessionId: "test-disconnect-extra")
+        var request = makeHTTPRequest(path: "/permission", body: body)
         request.append(body)
         request.append(Data("X".utf8))
 
@@ -88,6 +70,42 @@ final class HTTPServerTests: XCTestCase {
 
         XCTAssertEqual(shutdown(socketFD, SHUT_WR), 0)
         await fulfillment(of: [disconnected], timeout: 2.0)
+    }
+
+    func testPermissionLimitRejectsExcessPendingRequests() async throws {
+        let server = HTTPServer(
+            configuration: .init(maxActiveConnections: 64, maxPendingPermissionRequests: 1)
+        )
+        defer { server.stop() }
+
+        let requestHandled = expectation(description: "first permission handler invoked")
+
+        server.setPermissionRequestHandler { _ in
+            requestHandled.fulfill()
+        }
+
+        let startedPort = await server.start()
+        let port = try XCTUnwrap(startedPort)
+
+        let firstSocketFD = try makeSocket(port: port)
+        defer { close(firstSocketFD) }
+
+        let firstBody = permissionBody(sessionId: "test-limit-first")
+        var firstRequest = makeHTTPRequest(path: "/permission", body: firstBody)
+        firstRequest.append(firstBody)
+        try writeAll(firstRequest, to: firstSocketFD)
+        await fulfillment(of: [requestHandled], timeout: 1.0)
+
+        let secondBody = permissionBody(sessionId: "test-limit-second")
+        var secondRequest = makeHTTPRequest(path: "/permission", body: secondBody)
+        secondRequest.append(secondBody)
+        let response = try await sendHTTPRequest(
+            to: port,
+            request: secondRequest
+        )
+
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 429"))
+        XCTAssertTrue(response.contains("too many pending permissions"))
     }
 
     private func makeSocket(port: Int) throws -> Int32 {
@@ -146,5 +164,45 @@ final class HTTPServerTests: XCTestCase {
 
     private func posixError() -> NSError {
         NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+    }
+
+    private func permissionBody(sessionId: String) -> Data {
+        Data("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 30\"},\"session_id\":\"\(sessionId)\"}".utf8)
+    }
+
+    private func makeHTTPRequest(path: String, body: Data) -> Data {
+        let headerLines = [
+            "POST \(path) HTTP/1.1",
+            "Host: 127.0.0.1",
+            "Content-Type: application/json",
+            "Content-Length: \(body.count)",
+            "",
+            "",
+        ]
+        return Data(headerLines.joined(separator: "\r\n").utf8)
+    }
+
+    private func sendHTTPRequest(to port: Int, request: Data) async throws -> String {
+        let socketFD = try makeSocket(port: port)
+        defer { close(socketFD) }
+
+        try writeAll(request, to: socketFD)
+        XCTAssertEqual(shutdown(socketFD, SHUT_WR), 0)
+
+        var response = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+
+        while true {
+            let readCount = Darwin.read(socketFD, &buffer, buffer.count)
+            guard readCount >= 0 else {
+                throw posixError()
+            }
+            if readCount == 0 {
+                break
+            }
+            response.append(buffer, count: readCount)
+        }
+
+        return String(decoding: response, as: UTF8.self)
     }
 }

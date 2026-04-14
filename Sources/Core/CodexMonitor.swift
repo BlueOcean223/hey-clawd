@@ -60,6 +60,7 @@ actor CodexMonitor {
     private static let maxSavedStates = 200
     private static let maxPartialBytes = 65_536
     private static let maxInitialReadBytes: UInt64 = 256 * 1024
+    private static let readChunkBytes = 64 * 1024
     // DispatchSource runs on a utility queue, then hops back into the actor for debounced reads.
     private static let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor", qos: .utility)
     private static let eventMap: [String: EventMapping] = [
@@ -315,13 +316,14 @@ actor CodexMonitor {
         }
 
         do {
-            // Blocking I/O on the actor's cooperative executor. Acceptable for small
-            // incremental reads of Codex JSONL logs. For large files, consider moving
-            // file reads to a DispatchQueue and bridging back via continuation.
-            try tracked.fileHandle.seek(toOffset: tracked.offset)
-            let data = tracked.fileHandle.readDataToEndOfFile()
-            tracked.offset = fileSize
-            consume(data: data, tracked: tracked, discardingFirstLine: tracked.shouldDiscardFirstLine)
+            tracked.offset = try consumeFileChunks(
+                from: tracked.fileHandle,
+                startingAt: tracked.offset,
+                endingAt: fileSize,
+                tracked: tracked,
+                discardingFirstLine: tracked.shouldDiscardFirstLine,
+                emitUpdates: true
+            )
             tracked.shouldDiscardFirstLine = false
         } catch {
             stopTracking(fileURL: fileURL, emitSessionEnd: false)
@@ -432,15 +434,14 @@ actor CodexMonitor {
         let startOffset = initialBootstrapOffset(for: tracked, fileSize: fileSize)
 
         do {
-            try tracked.fileHandle.seek(toOffset: startOffset)
-            let data = tracked.fileHandle.readDataToEndOfFile()
-            consume(
-                data: data,
+            tracked.offset = try consumeFileChunks(
+                from: tracked.fileHandle,
+                startingAt: startOffset,
+                endingAt: fileSize,
                 tracked: tracked,
                 discardingFirstLine: startOffset > 0,
                 emitUpdates: false
             )
-            tracked.offset = fileSize
             tracked.shouldDiscardFirstLine = false
             publishCurrentState(for: tracked)
         } catch {
@@ -459,7 +460,8 @@ actor CodexMonitor {
         var startOffset = fileSize - Self.maxInitialReadBytes
 
         while true {
-            guard let data = try? readData(from: tracked.fileHandle, offset: startOffset) else {
+            let readLength = min(Self.maxInitialReadBytes, fileSize - startOffset)
+            guard let data = try? readData(from: tracked.fileHandle, offset: startOffset, length: readLength) else {
                 return 0
             }
 
@@ -475,9 +477,43 @@ actor CodexMonitor {
         }
     }
 
-    private func readData(from fileHandle: FileHandle, offset: UInt64) throws -> Data {
+    private func readData(from fileHandle: FileHandle, offset: UInt64, length: UInt64) throws -> Data {
         try fileHandle.seek(toOffset: offset)
-        return fileHandle.readDataToEndOfFile()
+        let readCount = Int(min(length, UInt64(Int.max)))
+        return try fileHandle.read(upToCount: readCount) ?? Data()
+    }
+
+    private func consumeFileChunks(
+        from fileHandle: FileHandle,
+        startingAt startOffset: UInt64,
+        endingAt endOffset: UInt64,
+        tracked: TrackedFile,
+        discardingFirstLine: Bool,
+        emitUpdates: Bool
+    ) throws -> UInt64 {
+        try fileHandle.seek(toOffset: startOffset)
+
+        var nextOffset = startOffset
+        var shouldDiscardFirstLine = discardingFirstLine
+
+        while nextOffset < endOffset {
+            let remaining = endOffset - nextOffset
+            let readCount = Int(min(UInt64(Self.readChunkBytes), remaining))
+            guard let data = try fileHandle.read(upToCount: readCount), !data.isEmpty else {
+                break
+            }
+
+            nextOffset += UInt64(data.count)
+            consume(
+                data: data,
+                tracked: tracked,
+                discardingFirstLine: shouldDiscardFirstLine,
+                emitUpdates: emitUpdates
+            )
+            shouldDiscardFirstLine = false
+        }
+
+        return nextOffset
     }
 
     private func containsTaskStartedBoundary(in data: Data, discardingFirstLine: Bool) -> Bool {

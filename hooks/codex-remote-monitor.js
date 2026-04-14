@@ -23,6 +23,9 @@ const { postStateToRunningServer, readHostPrefix } = require("./server-config");
 
 const SESSION_DIR = path.join(os.homedir(), ".codex", "sessions");
 const POLL_INTERVAL_MS = 1500;
+const MAX_TRACKED_FILES = 50;
+const MAX_PARTIAL_BYTES = 65536;
+const READ_CHUNK_BYTES = 64 * 1024;
 
 // JSONL record type[:subtype] → pet state
 // ⚠️ Duplicated from agents/codex.js logEventMap (zero-dep requirement) — keep in sync
@@ -171,27 +174,43 @@ function pollFile(filePath, fileName) {
   if (!entry) {
     const sessionId = extractSessionId(fileName);
     if (!sessionId) return;
+    if (tracked.size >= MAX_TRACKED_FILES) {
+      cleanStaleFiles();
+      if (tracked.size >= MAX_TRACKED_FILES) return;
+    }
     entry = createTrackedEntry("codex:" + sessionId);
     tracked.set(filePath, entry);
   }
 
   if (stat.size <= entry.offset) return;
 
-  let buf;
+  let fd;
   try {
-    const fd = fs.openSync(filePath, "r");
-    const readLen = stat.size - entry.offset;
-    buf = Buffer.alloc(readLen);
-    fs.readSync(fd, buf, 0, readLen, entry.offset);
-    fs.closeSync(fd);
+    fd = fs.openSync(filePath, "r");
   } catch {
     return;
   }
-  entry.offset = stat.size;
 
+  try {
+    while (entry.offset < stat.size) {
+      const remaining = stat.size - entry.offset;
+      const readLen = Math.min(READ_CHUNK_BYTES, remaining);
+      const buf = Buffer.alloc(readLen);
+      const bytesRead = fs.readSync(fd, buf, 0, readLen, entry.offset);
+      if (bytesRead <= 0) break;
+      entry.offset += bytesRead;
+      consumeBuffer(buf.subarray(0, bytesRead), entry);
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function consumeBuffer(buf, entry) {
   const text = entry.partial + buf.toString("utf8");
   const lines = text.split("\n");
-  entry.partial = lines.pop() || "";
+  const remainder = lines.pop() || "";
+  entry.partial = remainder.length > MAX_PARTIAL_BYTES ? "" : remainder;
 
   for (const line of lines) {
     if (!line.trim()) continue;
