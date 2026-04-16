@@ -77,6 +77,11 @@ private struct PendingTransition {
     let triggeringSession: Session?
 }
 
+struct IdleAnimationSpec: Sendable {
+    let svg: String
+    let durationMs: Int
+}
+
 private enum SleepMode: Equatable {
     case awake
     case idleAnimation(String)
@@ -173,14 +178,14 @@ final class StateMachine {
         "clawd-working-wizard.svg",
     ]
 
-    static let idleAnims: [(svg: String, durationMs: Int)] = [
-        ("clawd-idle-look.svg", 6_500),
-        ("clawd-working-debugger.svg", 14_000),
-        ("clawd-idle-reading.svg", 14_000),
-        ("clawd-idle-living.svg", 16_000),
-        ("clawd-idle-music.svg", 12_000),
-        ("clawd-idle-smoking.svg", 16_000),
-        ("clawd-crab-walking.svg", 8_000),
+    static let idleAnims: [IdleAnimationSpec] = [
+        IdleAnimationSpec(svg: "clawd-idle-look.svg", durationMs: 10_000),
+        IdleAnimationSpec(svg: "clawd-working-debugger.svg", durationMs: 14_000),
+        IdleAnimationSpec(svg: "clawd-idle-reading.svg", durationMs: 14_000),
+        IdleAnimationSpec(svg: "clawd-idle-living.svg", durationMs: 16_000),
+        IdleAnimationSpec(svg: "clawd-idle-music.svg", durationMs: 9_600),
+        IdleAnimationSpec(svg: "clawd-idle-smoking.svg", durationMs: 16_000),
+        IdleAnimationSpec(svg: "clawd-crab-walking.svg", durationMs: 8_000),
     ]
 
     private static let maxSessions = 20
@@ -196,6 +201,7 @@ final class StateMachine {
     private static let dndCollapseDelay: TimeInterval = 3.6
     private static let wakingDelay: TimeInterval = 3.5
     private static let pointerMovementThreshold: CGFloat = 0.5
+    private static let softIdleReturnDelay: TimeInterval = 0.22
 
     private(set) var currentState: PetState = .idle
     private(set) var currentSvg: String = StateMachine.stateSVGs[.idle] ?? "clawd-idle-follow.svg"
@@ -251,6 +257,8 @@ final class StateMachine {
     private var stateChangedAt = Date()
     private var pendingTransition: PendingTransition?
     private var pendingTimer: Timer?
+    private var softIdleTimer: Timer?
+    private var softIdleTransition: PendingTransition?
     private var autoReturnTimer: Timer?
     private var staleCleanupTimer: Timer?
     /// 鼠标静止检测和唤醒都走这一套轮询，避免现在就把 Phase 3 的 EyeTracker 提前接进来。
@@ -271,16 +279,19 @@ final class StateMachine {
 
     func cleanup() {
         pendingTimer?.invalidate()
+        softIdleTimer?.invalidate()
         autoReturnTimer?.invalidate()
         staleCleanupTimer?.invalidate()
         sleepMonitorTimer?.invalidate()
         sleepStageTimer?.invalidate()
         pendingTimer = nil
+        softIdleTimer = nil
         autoReturnTimer = nil
         staleCleanupTimer = nil
         sleepMonitorTimer = nil
         sleepStageTimer = nil
         pendingTransition = nil
+        softIdleTransition = nil
     }
 
     func setMiniModeEnabled(_ enabled: Bool) {
@@ -644,6 +655,7 @@ final class StateMachine {
         pendingTimer?.invalidate()
         pendingTimer = nil
         pendingTransition = nil
+        cancelSoftIdleTransition()
         autoReturnTimer?.invalidate()
         autoReturnTimer = nil
     }
@@ -875,6 +887,10 @@ final class StateMachine {
             return
         }
 
+        if !shouldSoftDelayIdleTransition(to: effectiveState, svg: nextSvg) {
+            cancelSoftIdleTransition()
+        }
+
         let minDisplay = effectiveState.isSleepSequence ? 0 : (Self.minDisplayMs[currentState] ?? 0)
         let elapsed = Date().timeIntervalSince(stateChangedAt)
         let remaining = (Double(minDisplay) / 1000.0) - elapsed
@@ -916,7 +932,60 @@ final class StateMachine {
         pendingTimer?.invalidate()
         pendingTimer = nil
         pendingTransition = nil
+
+        if shouldSoftDelayIdleTransition(to: effectiveState, svg: nextSvg) {
+            scheduleSoftIdleTransition(
+                to: effectiveState,
+                svg: nextSvg,
+                triggeringSession: triggeringSession
+            )
+            return
+        }
+
         applyTransition(to: effectiveState, svg: nextSvg, triggeringSession: triggeringSession)
+    }
+
+    private func shouldSoftDelayIdleTransition(to state: PetState, svg: String) -> Bool {
+        !currentState.isSleepSequence &&
+            state == .idle &&
+            svg == Self.stateSVGs[.idle] &&
+            currentSvg != svg
+    }
+
+    private func scheduleSoftIdleTransition(to state: PetState, svg: String, triggeringSession: Session?) {
+        softIdleTimer?.invalidate()
+        softIdleTransition = PendingTransition(state: state, svg: svg, triggeringSession: triggeringSession)
+
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.softIdleReturnDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else {
+                    return
+                }
+
+                self.softIdleTimer = nil
+                let queued = self.softIdleTransition
+                self.softIdleTransition = nil
+
+                guard let queued else {
+                    return
+                }
+
+                self.applyTransition(
+                    to: queued.state,
+                    svg: queued.svg,
+                    triggeringSession: queued.triggeringSession
+                )
+            }
+        }
+
+        softIdleTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func cancelSoftIdleTransition() {
+        softIdleTimer?.invalidate()
+        softIdleTimer = nil
+        softIdleTransition = nil
     }
 
     private func isPendingOneShotStillRelevant(_ pending: PendingTransition) -> Bool {

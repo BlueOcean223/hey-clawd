@@ -17,6 +17,8 @@ final class PetView: NSView {
     private let mouseRecoveryTimer: DispatchSourceTimer
     private var isMouseRecoveryTimerStopped = false
     private var isMouseRecoveryTimerPaused = false
+    private var isCrossfading = false
+    private var crossfadeGeneration: UInt = 0
 
     private(set) var isTrackingPaused = false
     private(set) var isMirrored = false
@@ -53,6 +55,7 @@ final class PetView: NSView {
         }
         mouseRecoveryTimer.resume()
         _ = eyeTracker
+        syncEyeTrackingTimer()
     }
 
     @available(*, unavailable)
@@ -111,7 +114,9 @@ final class PetView: NSView {
         eyesLayer = findNamedLayer("eyes-js", in: newRootLayer)
         bodyLayer = findNamedLayer("body-js", in: newRootLayer)
         shadowLayer = findNamedLayer("shadow-js", in: newRootLayer)
-        eyeTracker.forceResend()
+        crossfadeGeneration &+= 1
+        isCrossfading = false
+        syncEyeTrackingTimer(forceResend: true)
     }
 
     func switchSVG(_ filename: String) {
@@ -130,9 +135,16 @@ final class PetView: NSView {
             return
         }
 
-        // 清理上次转场残留的孤儿图层，同时保留这次要淡出的旧根层。
-        removeHostSublayers(from: hostLayer, preserving: oldRoot)
+        let oldRootOpacity = oldRoot.presentation()?.opacity ?? oldRoot.opacity
 
+        // 清理上次转场残留的孤儿图层，同时保留还没淡完的旧根层。
+        removeHostSublayers(from: hostLayer, preserving: oldRoot, keepingVisibleFadingLayers: true)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        oldRoot.removeAnimation(forKey: "pet-switch-fade-in")
+        oldRoot.removeAnimation(forKey: "pet-switch-fade-out")
+        oldRoot.opacity = oldRootOpacity
         newRootLayer.opacity = 0
 
         hostLayer.addSublayer(newRootLayer)
@@ -145,17 +157,26 @@ final class PetView: NSView {
 
         let fadeDuration = 0.12
 
+        // 交叉淡入淡出期间禁止眼球追踪，避免切到 idle 时
+        // 眼球瞬间跳到光标位置造成闪烁。淡入结束后再恢复。
+        crossfadeGeneration &+= 1
+        let fadeGeneration = crossfadeGeneration
+        isCrossfading = true
+        syncEyeTrackingTimer()
+        CATransaction.commit()
+
         let fadeIn = CABasicAnimation(keyPath: "opacity")
         fadeIn.fromValue = 0
         fadeIn.toValue = 1
         fadeIn.duration = fadeDuration
 
         let fadeOut = CABasicAnimation(keyPath: "opacity")
-        fadeOut.fromValue = oldRoot.presentation()?.opacity ?? oldRoot.opacity
+        fadeOut.fromValue = oldRootOpacity
         fadeOut.toValue = 0
         fadeOut.duration = fadeDuration
 
         CATransaction.begin()
+        CATransaction.setDisableActions(true)
         newRootLayer.add(fadeIn, forKey: "pet-switch-fade-in")
         oldRoot.add(fadeOut, forKey: "pet-switch-fade-out")
         newRootLayer.opacity = 1
@@ -165,12 +186,15 @@ final class PetView: NSView {
         // 用定时清理替代 CATransaction.setCompletionBlock，
         // 后者在 layer speed=0（遮挡暂停）时不会触发。
         DispatchQueue.main.asyncAfter(deadline: .now() + fadeDuration + 0.05) { [weak oldRoot, weak self] in
-            guard let oldRoot else { return }
-            self?.removeAllAnimationsRecursively(from: oldRoot)
-            oldRoot.removeFromSuperlayer()
+            guard let self else { return }
+            if let oldRoot {
+                self.removeAllAnimationsRecursively(from: oldRoot)
+                oldRoot.removeFromSuperlayer()
+            }
+            guard self.crossfadeGeneration == fadeGeneration else { return }
+            self.isCrossfading = false
+            self.syncEyeTrackingTimer(forceResend: true)
         }
-
-        eyeTracker.forceResend()
     }
 
     func playDragReaction() {
@@ -197,14 +221,14 @@ final class PetView: NSView {
     func pauseTracking() {
         isTrackingPaused = true
         pauseMouseRecoveryTimer()
-        eyeTracker.pause()
+        syncEyeTrackingTimer()
         lastHitTestResult = false
     }
 
     func resumeTracking() {
         isTrackingPaused = false
         resumeMouseRecoveryTimer()
-        eyeTracker.resume()
+        syncEyeTrackingTimer(forceResend: true)
     }
 
     func shouldHandleMouse(at windowPoint: NSPoint) -> Bool {
@@ -278,11 +302,23 @@ final class PetView: NSView {
     }
 
     private var shouldTrackEyes: Bool {
-        guard !isTrackingPaused else {
+        guard !isTrackingPaused, !isCrossfading else {
             return false
         }
 
         return mountedSVGFilename == "clawd-idle-follow.svg" || mountedSVGFilename == "clawd-mini-idle.svg"
+    }
+
+    private func syncEyeTrackingTimer(forceResend: Bool = false) {
+        if forceResend {
+            eyeTracker.forceResend()
+        }
+
+        if shouldTrackEyes {
+            eyeTracker.resume()
+        } else {
+            eyeTracker.pause()
+        }
     }
 
     private var eyeScreenCenter: NSPoint? {
@@ -421,11 +457,30 @@ final class PetView: NSView {
         }
     }
 
-    private func removeHostSublayers(from hostLayer: CALayer, preserving preservedLayer: CALayer? = nil) {
+    private func removeHostSublayers(
+        from hostLayer: CALayer,
+        preserving preservedLayer: CALayer? = nil,
+        keepingVisibleFadingLayers: Bool = false
+    ) {
         for sublayer in hostLayer.sublayers ?? [] where sublayer !== preservedLayer {
+            if keepingVisibleFadingLayers,
+               isVisibleFadingLayer(sublayer) {
+                continue
+            }
+
             removeAllAnimationsRecursively(from: sublayer)
             sublayer.removeFromSuperlayer()
         }
+    }
+
+    private func isVisibleFadingLayer(_ layer: CALayer) -> Bool {
+        let opacity = layer.presentation()?.opacity ?? layer.opacity
+        guard opacity > 0.01 else {
+            return false
+        }
+
+        return layer.animation(forKey: "pet-switch-fade-out") != nil ||
+            layer.animation(forKey: "pet-switch-fade-in") != nil
     }
 
     private func updateHitTesting(with event: NSEvent) {
