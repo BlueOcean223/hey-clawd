@@ -44,7 +44,7 @@ Claude Code 进程
 | `UserPromptSubmit` | `.thinking` | 用户提交 prompt |
 | `PreToolUse` | `.working` | 工具即将执行 |
 | `PostToolUse` | `.working` | 工具执行完毕 |
-| `PostToolUseFailure` | `.error` | 工具执行失败 |
+| `PostToolUseFailure` | `.working` | 工具执行失败（中途失败由 agent 自适应处理，保持 working；真正任务失败走 `StopFailure`） |
 | `Stop` | `.attention` | 回合结束，等待输入 |
 | `StopFailure` | `.error` | 停止失败 |
 | `SubagentStart` | `.juggling` | 子代理启动 |
