@@ -73,10 +73,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         petWindow?.orderFront(nil)
 
         hotKeyManager.onAllow = { [weak self] in
-            self?.bubbleStack.allowLatestBubble()
+            self?.bubbleStack.allowLatestBubbleRestoringFocus()
         }
         hotKeyManager.onDeny = { [weak self] in
-            self?.bubbleStack.denyLatestBubble()
+            self?.bubbleStack.denyLatestBubbleRestoringFocus()
         }
         hotKeyManager.onToggleVisibility = { [weak self] in
             self?.togglePetVisibility()
@@ -507,7 +507,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        bubbleStack.enqueue(content: content, request: request)
+        let previous = captureFrontmostApp()
+        bubbleStack.enqueue(
+            content: content,
+            request: request,
+            previousApp: previous?.app,
+            previousAppBundleId: previous?.bundleId
+        )
+    }
+
+    private func captureFrontmostApp() -> (app: NSRunningApplication, bundleId: String?)? {
+        guard let front = NSWorkspace.shared.frontmostApplication else {
+            return nil
+        }
+
+        if front.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+            return nil
+        }
+
+        guard front.activationPolicy == .regular else {
+            return nil
+        }
+
+        return (front, front.bundleIdentifier)
     }
 
     private func restorePetWindowPositionIfNeeded() {

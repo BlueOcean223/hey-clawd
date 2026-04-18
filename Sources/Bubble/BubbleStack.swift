@@ -12,6 +12,8 @@ final class BubbleStack {
         let request: PendingPermissionRequest
         let content: PermissionBubbleContent
         let window: BubbleWindow
+        let previousApp: NSRunningApplication?
+        let previousAppBundleId: String?
     }
 
     private let petWindowProvider: @MainActor () -> PetWindow?
@@ -33,7 +35,12 @@ final class BubbleStack {
         !pendingPermissions.isEmpty
     }
 
-    func enqueue(content: PermissionBubbleContent, request: PendingPermissionRequest) {
+    func enqueue(
+        content: PermissionBubbleContent,
+        request: PendingPermissionRequest,
+        previousApp: NSRunningApplication? = nil,
+        previousAppBundleId: String? = nil
+    ) {
         guard request.isAwaitingDecision else {
             return
         }
@@ -63,7 +70,9 @@ final class BubbleStack {
                 id: id,
                 request: request,
                 content: content,
-                window: window
+                window: window,
+                previousApp: previousApp,
+                previousAppBundleId: previousAppBundleId ?? previousApp?.bundleIdentifier
             )
         )
 
@@ -174,12 +183,47 @@ final class BubbleStack {
         resolveBubble(id: latestBubble.id, decision: .deny)
     }
 
+    func allowLatestBubbleRestoringFocus() {
+        resolveLatestBubbleRestoringFocus(decision: .allow)
+    }
+
+    func denyLatestBubbleRestoringFocus() {
+        resolveLatestBubbleRestoringFocus(decision: .deny)
+    }
+
     private func resolveBubble(id: UUID, decision: PermissionDecision) {
         let result = PermissionDecisionResult(
             behavior: decision.behavior,
             suggestionPayloads: decision.suggestionPayloads
         )
         removeBubble(id: id, respondingWith: result)
+    }
+
+    private func resolveLatestBubbleRestoringFocus(decision: PermissionDecision) {
+        guard let latestBubble = pendingPermissions.last else {
+            return
+        }
+
+        let previousApp = latestBubble.previousApp
+        let previousAppBundleId = latestBubble.previousAppBundleId
+        resolveBubble(id: latestBubble.id, decision: decision)
+        scheduleFocusRestore(to: previousApp, bundleId: previousAppBundleId)
+    }
+
+    private func scheduleFocusRestore(to app: NSRunningApplication?, bundleId: String?) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if let app, !app.isTerminated {
+                app.activate(options: [])
+                return
+            }
+
+            if let bundleId,
+               let fallback = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleId)
+                .first(where: { !$0.isTerminated }) {
+                fallback.activate(options: [])
+            }
+        }
     }
 
     private func removeBubble(id: UUID, respondingWith result: PermissionDecisionResult?) {
