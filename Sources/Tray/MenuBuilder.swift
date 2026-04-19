@@ -270,6 +270,7 @@ enum MenuBuilder {
                 target: target
             )
             entry.representedObject = hookTarget
+            entry.image = hookTargetIconName(hookTarget).flatMap(loadAgentIcon(named:))
             registerSubmenu.addItem(entry)
         }
 
@@ -294,6 +295,7 @@ enum MenuBuilder {
                 target: target
             )
             entry.representedObject = hookTarget
+            entry.image = hookTargetIconName(hookTarget).flatMap(loadAgentIcon(named:))
             unregisterSubmenu.addItem(entry)
         }
 
@@ -343,6 +345,19 @@ enum MenuBuilder {
 
     private static func text(_ key: String, lang: AppLanguage) -> String {
         strings[lang]?[key] ?? key
+    }
+
+    private static func hookTargetIconName(_ target: HookInstaller.HookTarget) -> String? {
+        switch target {
+        case .claudeCode:
+            return "claude-code"
+        case .gemini:
+            return "gemini-cli"
+        case .cursor:
+            return "cursor-agent"
+        case .codeBuddy:
+            return nil
+        }
     }
 
     private static func agentIcon(for agentId: String?) -> NSImage? {
