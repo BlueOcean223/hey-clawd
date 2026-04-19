@@ -36,10 +36,32 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             ENABLE_HARDENED_RUNTIME=YES
 
-      - name: Re-sign embedded frameworks as ad-hoc
+      - name: Re-sign Sparkle components inside-out as ad-hoc
         run: |
           APP_PATH="${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications/hey-clawd.app"
-          codesign --force --deep --sign - --timestamp=none --options runtime "$APP_PATH"
+          FW="$APP_PATH/Contents/Frameworks/Sparkle.framework"
+          ENT="${{ runner.temp }}/hey-clawd.entitlements"
+
+          cat > "$ENT" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          codesign -f -s - -o runtime "$FW/Versions/B/XPCServices/Installer.xpc"
+          codesign -f -s - -o runtime --preserve-metadata=entitlements "$FW/Versions/B/XPCServices/Downloader.xpc"
+          codesign -f -s - -o runtime "$FW/Versions/B/Autoupdate"
+          if [ -d "$FW/Versions/B/Updater.app" ]; then
+            codesign -f -s - -o runtime "$FW/Versions/B/Updater.app"
+          fi
+          codesign -f -s - -o runtime "$FW/Versions/B/Sparkle"
+          codesign -f -s - -o runtime "$FW"
+          codesign -f -s - -o runtime --entitlements "$ENT" "$APP_PATH"
           codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 
       - name: Create zip
