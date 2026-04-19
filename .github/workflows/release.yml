@@ -36,6 +36,12 @@ jobs:
             CODE_SIGN_IDENTITY="-" \
             ENABLE_HARDENED_RUNTIME=YES
 
+      - name: Re-sign embedded frameworks as ad-hoc
+        run: |
+          APP_PATH="${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications/hey-clawd.app"
+          codesign --force --deep --sign - --timestamp=none --options runtime "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+
       - name: Create zip
         run: |
           cd "${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications"
