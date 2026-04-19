@@ -11,7 +11,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Extract version from tag
         id: version
@@ -41,6 +41,16 @@ jobs:
           cd "${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications"
           ditto -c -k --sequesterRsrc hey-clawd.app "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
 
+      - name: Create DMG
+        run: |
+          APP_PATH="${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications/hey-clawd.app"
+          DMG_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.dmg"
+          STAGE="${{ runner.temp }}/dmg-stage"
+          mkdir -p "$STAGE"
+          cp -R "$APP_PATH" "$STAGE/"
+          ln -s /Applications "$STAGE/Applications"
+          hdiutil create -volname "hey-clawd" -srcfolder "$STAGE" -ov -format UDZO "$DMG_PATH"
+
       - name: Download Sparkle
         run: |
           cd ${{ runner.temp }}
@@ -62,7 +72,9 @@ jobs:
         id: release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip
+          files: |
+            ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip
+            ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.dmg
           generate_release_notes: true
 
       - name: Generate appcast.xml
