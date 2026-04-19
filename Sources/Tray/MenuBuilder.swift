@@ -78,6 +78,14 @@ enum MenuBuilder {
     ]
 
     private static let sizePresets = [50, 75, 100, 125, 150, 200, 250]
+    private static let defaultAgentIconName = "claude-code"
+    private static let agentIconNames: Set<String> = [
+        "claude-code",
+        "codex",
+        "copilot-cli",
+        "cursor-agent",
+        "gemini-cli",
+    ]
 
     private static let enRelativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
@@ -210,6 +218,7 @@ enum MenuBuilder {
                 )
                 sessionItem.representedObject = session
                 sessionItem.isEnabled = session.sourcePid != nil || session.editor != nil
+                sessionItem.image = agentIcon(for: session.agentId)
                 submenu.addItem(sessionItem)
             }
         }
@@ -334,6 +343,65 @@ enum MenuBuilder {
 
     private static func text(_ key: String, lang: AppLanguage) -> String {
         strings[lang]?[key] ?? key
+    }
+
+    private static func agentIcon(for agentId: String?) -> NSImage? {
+        let iconName = normalizedAgentIconName(for: agentId)
+        return loadAgentIcon(named: iconName)
+            ?? (iconName == defaultAgentIconName ? nil : loadAgentIcon(named: defaultAgentIconName))
+    }
+
+    private static func normalizedAgentIconName(for agentId: String?) -> String {
+        let key = agentId?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        guard let key, agentIconNames.contains(key) else {
+            return defaultAgentIconName
+        }
+
+        return key
+    }
+
+    private static func loadAgentIcon(named iconName: String) -> NSImage? {
+        guard
+            let iconURL = agentIconURL(named: iconName),
+            let image = NSImage(contentsOf: iconURL)
+        else {
+            return nil
+        }
+
+        image.size = NSSize(width: 16, height: 16)
+        image.isTemplate = false
+        return image
+    }
+
+    private static func agentIconURL(named iconName: String) -> URL? {
+        let relativePath = "icons/agents/\(iconName).png"
+        let fileManager = FileManager.default
+
+        for resourceURL in bundledResourceCandidates() {
+            let iconURL = resourceURL.appendingPathComponent(relativePath)
+            if fileManager.fileExists(atPath: iconURL.path) {
+                return iconURL
+            }
+        }
+
+        return nil
+    }
+
+    private static func bundledResourceCandidates() -> [URL] {
+        var candidates = [
+            Bundle.main.resourceURL?.appendingPathComponent("Resources", isDirectory: true),
+            Bundle.main.resourceURL,
+        ]
+
+#if SWIFT_PACKAGE
+        candidates.insert(Bundle.module.resourceURL?.appendingPathComponent("Resources", isDirectory: true), at: 0)
+        candidates.insert(Bundle.module.resourceURL, at: 1)
+#endif
+
+        return candidates.compactMap { $0 }
     }
 
     private static func sessionTitle(_ session: SessionMenuSnapshot, lang: AppLanguage) -> String {

@@ -41,6 +41,7 @@ let package = Package(
             resources: [
                 .copy("Resources/svg"),
                 .copy("Resources/sounds"),
+                .copy("Resources/icons"),
                 .copy("hooks"),
                 .copy("AppIcon.icns"),
             ]
