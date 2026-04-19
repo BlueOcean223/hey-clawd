@@ -49,6 +49,7 @@
 | `clawd-idle-living.svg` | 16s | 日常生活微动作（看四周、挠头、打哈欠） |
 | `clawd-idle-music.svg` | 12s | 听音乐摇摆 |
 | `clawd-crab-walking.svg` | 8s | 横着走路 |
+| `clawd-idle-smoking.svg` | 16s | 抽烟摸鱼 |
 
 ---
 
