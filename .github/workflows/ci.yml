@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "Package.swift"
+      - "Sources/**"
+      - "Tests/**"
+      - "Resources/svg/**"
+      - "Resources/sounds/**"
+      - "Resources/icons/**"
+      - "AppIcon.icns"
+      - "Info.plist"
+      - "hey-clawd.xcodeproj/**"
+      - "hooks/**"
+      - "agents/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "Package.swift"
+      - "Sources/**"
+      - "Tests/**"
+      - "Resources/svg/**"
+      - "Resources/sounds/**"
+      - "Resources/icons/**"
+      - "AppIcon.icns"
+      - "Info.plist"
+      - "hey-clawd.xcodeproj/**"
+      - "hooks/**"
+      - "agents/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      swift: ${{ steps.filter.outputs.swift }}
+      hooks: ${{ steps.filter.outputs.hooks }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed areas
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            swift:
+              - 'Package.swift'
+              - 'Sources/**'
+              - 'Tests/**'
+              - 'Resources/svg/**'
+              - 'Resources/sounds/**'
+              - 'Resources/icons/**'
+              - 'AppIcon.icns'
+              - 'Info.plist'
+              - 'hey-clawd.xcodeproj/**'
+              - '.github/workflows/**'
+            hooks:
+              - 'hooks/**'
+              - 'agents/**'
+              - '.github/workflows/**'
+
+  swift:
+    name: Swift build + test
+    needs: changes
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+
+  hooks:
+    name: Hook tests
+    needs: changes
+    if: needs.changes.outputs.hooks == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run hook tests
+        run: cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
