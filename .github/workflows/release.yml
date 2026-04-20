@@ -3,7 +3,17 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to use for a manual dry run (for example 0.1.1)"
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -13,9 +23,21 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Extract version from tag
+      - name: Resolve release metadata
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          if [[ -z "$VERSION" ]]; then
+            echo "Version must not be empty" >&2
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set build version in Info.plist
         run: |
@@ -79,13 +101,38 @@ jobs:
           ln -s /Applications "$STAGE/Applications"
           hdiutil create -volname "hey-clawd" -srcfolder "$STAGE" -ov -format UDZO "$DMG_PATH"
 
+      - name: Smoke check packaged artifacts
+        run: |
+          APP_PATH="${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications/hey-clawd.app"
+          ZIP_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
+          DMG_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.dmg"
+
+          test -d "$APP_PATH"
+          test -s "$ZIP_PATH"
+          test -s "$DMG_PATH"
+          unzip -tq "$ZIP_PATH"
+          hdiutil verify "$DMG_PATH"
+
+      - name: Upload packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hey-clawd-${{ steps.version.outputs.VERSION }}-release-bundle
+          path: |
+            ${{ runner.temp }}/hey-clawd.xcarchive
+            ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip
+            ${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.dmg
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Download Sparkle
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         run: |
           cd ${{ runner.temp }}
           curl -L -O https://github.com/sparkle-project/Sparkle/releases/download/2.9.1/Sparkle-2.9.1.tar.xz
           tar xf Sparkle-2.9.1.tar.xz
 
       - name: Sign update with Sparkle
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
@@ -97,6 +144,7 @@ jobs:
           rm "${{ runner.temp }}/sparkle_key"
 
       - name: Create GitHub Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         id: release
         uses: softprops/action-gh-release@v2
         with:
@@ -106,6 +154,7 @@ jobs:
           generate_release_notes: true
 
       - name: Generate appcast.xml
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         run: |
           DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
           cat > appcast.xml << XMLEOF
@@ -124,10 +173,19 @@ jobs:
             </channel>
           </rss>
           XMLEOF
-          # Remove leading whitespace from heredoc
           sed -i '' 's/^          //' appcast.xml
 
+      - name: Upload appcast artifact
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: hey-clawd-${{ steps.version.outputs.VERSION }}-appcast
+          path: appcast.xml
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Commit appcast.xml
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
