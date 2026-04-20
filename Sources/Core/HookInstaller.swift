@@ -532,41 +532,108 @@ enum HookInstaller {
 
     // MARK: - Locate hooks directory
 
-    private static func findHooksDir() -> String? {
-        let fm = FileManager.default
+    static func findHooksDir() -> String? {
+        findHooksDir(
+            resourceURL: Bundle.main.resourceURL,
+            moduleResourceURL: moduleResourceURLOrNil(),
+            executablePath: Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments[0],
+            fileManager: .default
+        )
+    }
 
-        // Xcode .app bundle: Contents/Resources/hooks/
-        if let resourceURL = Bundle.main.resourceURL {
-            for sub in ["hooks", "Resources/hooks"] {
-                let path = resourceURL.appendingPathComponent(sub).path
-                if fm.fileExists(atPath: (path as NSString).appendingPathComponent("install.js")) {
-                    return path
-                }
-            }
+    static func findHooksDir(
+        resourceURL: URL?,
+        moduleResourceURL: URL?,
+        executablePath: String,
+        fileManager: FileManager
+    ) -> String? {
+        if let path = hooksDirFromDerivedData(resourceURL: resourceURL, fileManager: fileManager) {
+            return path
         }
 
+        if let path = bundledHooksDir(resourceURL: resourceURL, fileManager: fileManager) {
+            return path
+        }
+
+        if let path = bundledHooksDir(resourceURL: moduleResourceURL, fileManager: fileManager) {
+            return path
+        }
+
+        return hooksDirFromExecutable(executablePath: executablePath, fileManager: fileManager)
+    }
+
+    private static func moduleResourceURLOrNil() -> URL? {
         #if SWIFT_PACKAGE
-        if let moduleURL = Bundle.module.resourceURL {
-            for sub in ["hooks", "Resources/hooks"] {
-                let path = moduleURL.appendingPathComponent(sub).path
-                if fm.fileExists(atPath: (path as NSString).appendingPathComponent("install.js")) {
-                    return path
+        return Bundle.module.resourceURL
+        #else
+        return nil
+        #endif
+    }
+
+    private static func hooksDirFromDerivedData(resourceURL: URL?, fileManager: FileManager) -> String? {
+        guard var dir = resourceURL?.resolvingSymlinksInPath() else { return nil }
+
+        for _ in 0..<12 {
+            let plistURL = dir.appendingPathComponent("info.plist", isDirectory: false)
+            if let workspacePath = workspacePath(from: plistURL, fileManager: fileManager) {
+                let hooksURL = workspaceHooksURL(for: workspacePath)
+                if hasInstallScript(in: hooksURL, fileManager: fileManager) {
+                    return hooksURL.path
                 }
             }
-        }
-        #endif
 
-        // Dev build: walk up from executable to find project root.
-        let execPath = Bundle.main.executablePath ?? ProcessInfo.processInfo.arguments[0]
-        var dir = URL(fileURLWithPath: execPath).resolvingSymlinksInPath().deletingLastPathComponent()
+            let parent = dir.deletingLastPathComponent()
+            guard parent.path != dir.path else { break }
+            dir = parent
+        }
+
+        return nil
+    }
+
+    private static func workspacePath(from plistURL: URL, fileManager: FileManager) -> String? {
+        guard fileManager.fileExists(atPath: plistURL.path) else { return nil }
+        guard let data = try? Data(contentsOf: plistURL) else { return nil }
+        guard let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            return nil
+        }
+        return plist["WorkspacePath"] as? String
+    }
+
+    private static func workspaceHooksURL(for workspacePath: String) -> URL {
+        var workspaceURL = URL(fileURLWithPath: workspacePath).resolvingSymlinksInPath()
+        if workspaceURL.pathExtension == "xcodeproj" || workspaceURL.pathExtension == "xcworkspace" {
+            workspaceURL = workspaceURL.deletingLastPathComponent()
+        }
+        return workspaceURL.appendingPathComponent("hooks", isDirectory: true)
+    }
+
+    private static func bundledHooksDir(resourceURL: URL?, fileManager: FileManager) -> String? {
+        guard let resourceURL else { return nil }
+
+        for sub in ["hooks", "Resources/hooks"] {
+            let hooksURL = resourceURL.appendingPathComponent(sub, isDirectory: true)
+            if hasInstallScript(in: hooksURL, fileManager: fileManager) {
+                return hooksURL.path
+            }
+        }
+
+        return nil
+    }
+
+    private static func hooksDirFromExecutable(executablePath: String, fileManager: FileManager) -> String? {
+        var dir = URL(fileURLWithPath: executablePath).resolvingSymlinksInPath().deletingLastPathComponent()
         for _ in 0..<5 {
-            let candidate = dir.appendingPathComponent("hooks").path
-            if fm.fileExists(atPath: (candidate as NSString).appendingPathComponent("install.js")) {
-                return candidate
+            let hooksURL = dir.appendingPathComponent("hooks", isDirectory: true)
+            if hasInstallScript(in: hooksURL, fileManager: fileManager) {
+                return hooksURL.path
             }
             dir = dir.deletingLastPathComponent()
         }
 
         return nil
+    }
+
+    private static func hasInstallScript(in hooksURL: URL, fileManager: FileManager) -> Bool {
+        fileManager.fileExists(atPath: hooksURL.appendingPathComponent("install.js", isDirectory: false).path)
     }
 }
