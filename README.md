@@ -109,7 +109,7 @@ cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.tes
 Further docs:
 
 - [docs/svg-catalog.md](docs/svg-catalog.md) — every `PetState` → SVG mapping.
-- [Resources/SVG-ANIMATION-SPEC.md](Resources/SVG-ANIMATION-SPEC.md) — pixel grid and palette spec.
+- [docs/svg-animation-spec.md](docs/svg-animation-spec.md) — SVG animation, pixel-grid, and palette spec.
 
 
 ## License
