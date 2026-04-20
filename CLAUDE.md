@@ -80,7 +80,7 @@ States are declared by the `PetState` enum in `StateMachine.swift` with priority
 
 ### SVG Animations (`Resources/svg/`)
 
-Each state has a corresponding `clawd-*.svg` file, parsed once and cached in `SVGDocumentCache`, then rendered as a CALayer tree with Core Animation keyframes. See `Resources/SVG-ANIMATION-SPEC.md` for the pixel-grid spec and color palette, and `docs/rendering-system.md` for the renderer deep-dive.
+Each state has a corresponding `clawd-*.svg` file, parsed once and cached in `SVGDocumentCache`, then rendered as a CALayer tree with Core Animation keyframes. See `docs/svg-animation-spec.md` for the animation, pixel-grid, and color-palette spec, and `docs/rendering-system.md` for the renderer deep-dive.
 
 ## Release Process
 

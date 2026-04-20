@@ -109,7 +109,7 @@ cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.tes
 更多文档：
 
 - [docs/svg-catalog.md](docs/svg-catalog.md) —— 每个 `PetState` 对应的 SVG。
-- [Resources/SVG-ANIMATION-SPEC.md](Resources/SVG-ANIMATION-SPEC.md) —— 像素网格与调色板规范。
+- [docs/svg-animation-spec.md](docs/svg-animation-spec.md) —— SVG 动画、像素网格与调色板规范。
 
 
 ## 许可
