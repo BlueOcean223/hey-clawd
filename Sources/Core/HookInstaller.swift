@@ -19,11 +19,20 @@ enum HookInstaller {
         let permissionURLs: Set<String>
     }
 
+    private struct LocalDirectoryCleanupSpec {
+        let directoryPath: String
+        let markerFileName: String
+        let cleanedMessage: String
+        let missingMessage: String
+        let unmanagedMessage: String
+    }
+
     enum HookTarget: String, CaseIterable {
         case claudeCode = "install.js"
         case gemini = "gemini-install.js"
         case cursor = "cursor-install.js"
         case codeBuddy = "codebuddy-install.js"
+        case pi = "pi-install.js"
 
         var displayName: String {
             switch self {
@@ -31,6 +40,7 @@ enum HookInstaller {
             case .gemini: return "Gemini CLI"
             case .cursor: return "Cursor"
             case .codeBuddy: return "CodeBuddy"
+            case .pi: return "Pi"
             }
         }
     }
@@ -236,6 +246,10 @@ enum HookInstaller {
     }
 
     private static func cleanupLocalSettings(for target: HookTarget) -> (success: Bool, output: String) {
+        if target == .pi {
+            return cleanupLocalDirectory(for: localDirectoryCleanupSpec())
+        }
+
         let spec = localCleanupSpec(for: target)
         let settingsURL = URL(fileURLWithPath: spec.settingsPath)
 
@@ -351,6 +365,46 @@ enum HookInstaller {
                 commandMarkers: ["codebuddy-hook.js"],
                 permissionURLs: clawdPermissionURLs
             )
+        case .pi:
+            fatalError("Pi uses localDirectoryCleanupSpec(), not localCleanupSpec(for:)")
+        }
+    }
+
+    private static func localDirectoryCleanupSpec() -> LocalDirectoryCleanupSpec {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let directoryPath = "\(home)/.pi/agent/extensions/hey-clawd"
+        return LocalDirectoryCleanupSpec(
+            directoryPath: directoryPath,
+            markerFileName: ".clawd-managed.json",
+            cleanedMessage: "Clawd Pi extension cleaned from \(directoryPath)",
+            missingMessage: "No ~/.pi/agent/extensions/hey-clawd found — nothing to clean.",
+            unmanagedMessage: "Pi extension directory exists but is not managed by hey-clawd — skipping cleanup."
+        )
+    }
+
+    private static func cleanupLocalDirectory(for spec: LocalDirectoryCleanupSpec) -> (success: Bool, output: String) {
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: spec.directoryPath) else {
+            return (true, spec.missingMessage)
+        }
+
+        let markerPath = URL(fileURLWithPath: spec.directoryPath).appendingPathComponent(spec.markerFileName).path
+        guard
+            let markerData = try? Data(contentsOf: URL(fileURLWithPath: markerPath)),
+            let object = try? JSONSerialization.jsonObject(with: markerData) as? [String: Any],
+            let app = object["app"] as? String,
+            let integration = object["integration"] as? String,
+            app == "hey-clawd",
+            integration == "pi"
+        else {
+            return (true, spec.unmanagedMessage)
+        }
+
+        do {
+            try fileManager.removeItem(atPath: spec.directoryPath)
+            return (true, "\(spec.cleanedMessage)\n  Removed: 1 extension directory")
+        } catch {
+            return (false, "Failed to remove hey-clawd Pi extension: \(error.localizedDescription)")
         }
     }
 

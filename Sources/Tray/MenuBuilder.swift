@@ -85,6 +85,7 @@ enum MenuBuilder {
         "copilot-cli",
         "cursor-agent",
         "gemini-cli",
+        "pi",
     ]
 
     private static let enRelativeFormatter: RelativeDateTimeFormatter = {
@@ -357,6 +358,8 @@ enum MenuBuilder {
             return "cursor-agent"
         case .codeBuddy:
             return nil
+        case .pi:
+            return "pi"
         }
     }
 
