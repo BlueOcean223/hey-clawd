@@ -10,11 +10,11 @@
   <img src="Resources/gif/clawd-dump.gif" width="120" alt="dump" />
 </p>
 
-A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It hooks into Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI and CodeBuddy, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code and CodeBuddy it can also surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow".
+A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI, CodeBuddy and Pi, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code and CodeBuddy it can also surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow".
 
 ## Highlights
 
-- **Reacts to 6 AI coding tools** — Claude Code, CodeBuddy, Cursor, Gemini CLI, Copilot CLI via hooks; Codex CLI via JSONL log monitoring.
+- **Reacts to 7 AI coding tools** — Claude Code, CodeBuddy, Cursor, Gemini CLI, Copilot CLI via hooks; Pi via extension; Codex CLI via JSONL log monitoring.
 - **Permission bubbles** — approve or deny tool use for Claude Code / CodeBuddy without leaving your editor; passthrough tools (`TaskCreate`, `TaskUpdate`, …) auto-allow.
 - **Custom Core Animation SVG pipeline** — no WebView. 50+ hand-drawn states on a 15×16 pixel grid, cached via LRU.
 - **Lightweight & native** — Swift 6 + AppKit/Core Animation. No WebView, no embedded JS runtime. Low CPU and memory footprint.
@@ -25,7 +25,7 @@ A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI codin
 ## Requirements
 
 - macOS 12 (Monterey) or newer
-- Node.js (for hook installers to register into Claude Code / Cursor / Gemini / CodeBuddy config dirs on first launch)
+- Node.js (for bundled installers to register hooks/extensions into Claude Code / Cursor / Gemini / CodeBuddy / Pi on first launch)
 
 ## Install
 
@@ -33,7 +33,7 @@ A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI codin
 
 Grab the latest `.dmg` from [GitHub Releases](https://github.com/BlueOcean223/hey-clawd/releases), drag **hey-clawd.app** into `/Applications`, and launch. The app lives in the menu bar — right-click the Clawd icon to open the tray menu.
 
-On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Register Hooks**.
+On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks/extensions into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Register Hooks**.
 
 ### Build from source
 
@@ -59,19 +59,20 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Cursor       | hook           | one-way       | — | ✅ |
 | Copilot CLI  | hook           | one-way       | — | ✅ |
 | Codex CLI    | JSONL monitor  | read-only     | — | — |
+| Pi           | extension      | one-way       | — | ✅ |
 
 See [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md) for the full event-coverage matrix and per-tool deep dives in [docs/integrations/](docs/integrations/).
 
 ## How it works
 
 ```
-IDE hooks / CodexMonitor  →  HTTP POST /state  →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
-IDE hooks                 →  HTTP POST /permission  →  HTTPServer  →  BubbleStack  →  allow/deny
+IDE hooks / Pi extension / CodexMonitor  →  HTTP POST /state  →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
+IDE hooks                                →  HTTP POST /permission  →  HTTPServer  →  BubbleStack  →  allow/deny
 ```
 
 - **StateMachine** — priority-based aggregator (priority 0–8) across concurrent sessions. Higher-priority states override lower ones; one-shot states (attention, error, notification) play once then revert.
 - **SVG pipeline** — `SVGParser` → `SVGDocument` (LRU cache) → `CALayerRenderer` → `CAAnimationBuilder` (CSS keyframes → Core Animation). See [docs/rendering-system.md](docs/rendering-system.md).
-- **Hooks** (`hooks/`) — CommonJS handlers (`clawd-hook.js`, `cursor-hook.js`, `gemini-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`, `codex-remote-monitor.js`). Each maps tool lifecycle events to pet states and POSTs to the local HTTP server. Port discovery: `~/.clawd/runtime.json` first, then scans 23333–23337.
+- **Integration bridge** (`hooks/`) — CommonJS hook handlers (`clawd-hook.js`, `cursor-hook.js`, `gemini-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`), the Codex JSONL monitor (`codex-remote-monitor.js`), plus the Pi extension/installer pair (`pi-extension.ts`, `pi-install.js`). Each integration ultimately maps tool lifecycle events to pet states and POSTs to the local HTTP server. Port discovery: `~/.clawd/runtime.json` first, then scans 23333–23337.
 - **HTTP endpoints** — `/state`, `/permission`, `/status`, `/quit`, plus `/debug/svg` and `/debug/reset` for development.
 
 ## State gallery
@@ -103,7 +104,7 @@ swift test
 ./test-animations.sh
 
 # Hook-side Node tests
-cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
+cd hooks && node test/pi-install.test.js && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
 ```
 
 Further docs:
