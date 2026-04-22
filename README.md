@@ -120,5 +120,5 @@ Further docs:
 ## Acknowledgements
 
 - Form and architecture derived from [@rullerzhou-afk](https://github.com/rullerzhou-afk)'s [clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk).
-
+- Some art direction and animation inspiration was also referenced from [@marciogranzotto](https://github.com/marciogranzotto)'s [clawd-tank](https://github.com/marciogranzotto/clawd-tank). Thank you for the lovely Clawd worldbuilding and pixel-art ideas.
 - Shared with the [LINUX DO](https://linux.do/) community.

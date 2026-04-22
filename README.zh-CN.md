@@ -120,6 +120,6 @@ cd hooks && node test/pi-install.test.js && node test/codex-remote-monitor.test.
 ## 鸣谢
 
 - 本项目的形态、架构等承袭自 [@rullerzhou-afk](https://github.com/rullerzhou-afk) 的 [clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk)。
-
+- 部分美术风格、场景气质与动画灵感也参考了 [@marciogranzotto](https://github.com/marciogranzotto) 的 [clawd-tank](https://github.com/marciogranzotto/clawd-tank)，感谢其提供的 Clawd 视觉设定与像素动画灵感。
 - 该项目分享在 [LINUX DO](https://linux.do/) 社区中
 
