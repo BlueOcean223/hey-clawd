@@ -6,50 +6,51 @@
 
 ## 能力矩阵
 
-| 能力 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI | Codex CLI |
-|------|:-----------:|:---------:|:----------:|:------:|:-----------:|:---------:|
-| **集成方式** | hook | hook | hook | hook | hook | JSONL 监控 |
-| **数据方向** | 双向 | 双向 | 单向 | 单向 | 单向 | 单向只读 |
-| **权限气泡** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
-| **终端跳转** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
-| **编辑器检测** | ✅ | ✅ | ✅ | ✅ (默认 cursor) | ✅ | ❌ |
-| **远程模式** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
-| **自动注册** | ✅ | ✅ | ✅ | ✅ | ❌ | N/A |
-| **headless 检测** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| **工具级 SVG 提示** | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| 能力 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI | Codex CLI | Pi |
+|------|:-----------:|:---------:|:----------:|:------:|:-----------:|:---------:|:--:|
+| **集成方式** | hook | hook | hook | hook | hook | JSONL 监控 | extension |
+| **数据方向** | 双向 | 双向 | 单向 | 单向 | 单向 | 单向只读 | 单向 |
+| **权限气泡** | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **终端跳转** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| **编辑器检测** | ✅ | ✅ | ✅ | ✅ (默认 cursor) | ✅ | ❌ | ✅ |
+| **远程模式** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **自动注册** | ✅ | ✅ | ✅ | ✅ | ❌ | N/A | ✅ |
+| **headless 检测** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| **工具级 SVG 提示** | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
 ## 事件覆盖度
 
-| 事件类别 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI | Codex CLI |
-|---------|:-----------:|:---------:|:----------:|:------:|:-----------:|:---------:|
-| 会话开始/结束 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 用户提交 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 工具执行（前/后） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 工具执行失败 | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
-| 回合结束 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 停止失败 | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ |
-| 子代理启停 | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
-| 上下文压缩 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 压缩完成 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| 权限请求 | ✅ (HTTP) | ✅ (HTTP) | ❌ | ❌ | ❌ | ❌ |
-| 通知 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 工作树创建 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| 代理思考 | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| 事件类别 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI | Codex CLI | Pi |
+|---------|:-----------:|:---------:|:----------:|:------:|:-----------:|:---------:|:--:|
+| 会话开始/结束 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 用户提交 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 工具执行（前/后） | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 工具执行失败 | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ✅ |
+| 回合结束 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 停止失败 | ✅ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
+| 子代理启停 | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+| 上下文压缩 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 压缩完成 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| 权限请求 | ✅ (HTTP) | ✅ (HTTP) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 通知 | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| 工作树创建 | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| 代理思考 | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
 
 ---
 
 ## 配置文件与格式
 
-| 平台 | 配置文件 | Hook 格式 |
-|------|---------|-----------|
+| 平台 | 配置文件 | Hook / Extension 格式 |
+|------|---------|-----------------------|
 | Claude Code | `~/.claude/settings.json` | 嵌套 `{ matcher, hooks: [{ type, command }] }` + HTTP hook |
 | CodeBuddy | `~/.codebuddy/settings.json` | 同 Claude Code（嵌套格式） |
 | Gemini CLI | `~/.gemini/settings.json` | 扁平 `{ type: "command", command, name }` |
 | Cursor | `~/.cursor/hooks.json` | 扁平 `{ command }` |
 | Copilot CLI | 手动配置 | 扁平（通过 argv 传事件名） |
 | Codex CLI | N/A | 无 hook，被动读取 `~/.codex/sessions/` JSONL |
+| Pi | `~/.pi/agent/extensions/hey-clawd/` | 自包含 `index.ts` + marker（`.clawd-managed.json`） |
 
 ---
 
@@ -57,14 +58,14 @@
 
 各平台使用不同的事件名风格，hook 脚本内部统一映射到 Clawd 内部事件名（PascalCase）：
 
-| 语义 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI |
-|------|-------------|-----------|------------|--------|-------------|
-| 会话开始 | `SessionStart` | `SessionStart` | `SessionStart` | `sessionStart` | `sessionStart` |
-| 用户提交 | `UserPromptSubmit` | `UserPromptSubmit` | `BeforeAgent` | `beforeSubmitPrompt` | `userPromptSubmitted` |
-| 工具执行前 | `PreToolUse` | `PreToolUse` | `BeforeTool` | `preToolUse` | `preToolUse` |
-| 工具执行后 | `PostToolUse` | `PostToolUse` | `AfterTool` | `postToolUse` | `postToolUse` |
-| 回合结束 | `Stop` | `Stop` | `AfterAgent` | `stop` | `agentStop` |
-| 错误 | `PostToolUseFailure` | — | — | `postToolUseFailure` | `errorOccurred` |
+| 语义 | Claude Code | CodeBuddy | Gemini CLI | Cursor | Copilot CLI | Pi |
+|------|-------------|-----------|------------|--------|-------------|----|
+| 会话开始 | `SessionStart` | `SessionStart` | `SessionStart` | `sessionStart` | `sessionStart` | `session_start` |
+| 用户提交 | `UserPromptSubmit` | `UserPromptSubmit` | `BeforeAgent` | `beforeSubmitPrompt` | `userPromptSubmitted` | `before_agent_start` |
+| 工具执行前 | `PreToolUse` | `PreToolUse` | `BeforeTool` | `preToolUse` | `preToolUse` | `tool_call` |
+| 工具执行后 | `PostToolUse` | `PostToolUse` | `AfterTool` | `postToolUse` | `postToolUse` | `tool_result` |
+| 回合结束 | `Stop` | `Stop` | `AfterAgent` | `stop` | `agentStop` | `agent_end` |
+| 错误 | `PostToolUseFailure` | — | — | `postToolUseFailure` | `errorOccurred` | `tool_result(isError=true)` |
 
 ---
 
@@ -84,6 +85,7 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应
 | Cursor | 权限管理在编辑器 UI 内处理，hook 系统无 HTTP 类型 |
 | Copilot CLI | hook 系统无 HTTP 类型 |
 | Codex CLI | 单向只读 JSONL 监控，无回路；JSONL 不记录审批事件 |
+| Pi | 本次集成明确只做 extension 单向状态同步，不代理 Pi 的工具审批体验 |
 
 ---
 
@@ -94,8 +96,8 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应
 - **进程树遍历**：所有 hook 脚本都实现了 `getStablePid()`，向上遍历 8 层找到宿主终端 PID，覆盖 macOS / Linux / Windows 的主流终端
 - **stdin 超时**：400ms 内 stdin 未结束则以默认值发送，防止 hook 进程挂死
 - **端口发现**：`server-config.js` 先查 `~/.clawd/runtime.json`，再扫描 23333–23337 端口范围
-- **安装检测**：每个安装器检测对应工具目录（`~/.claude/`、`~/.gemini/` 等），未安装时静默跳过
-- **路径自愈**：安装器检测到已注册 hook 的 node/script 路径过期时自动更新
+- **安装检测**：每个安装器检测对应工具目录（`~/.claude/`、`~/.gemini/`、`~/.pi/agent/` 等），未安装时静默跳过
+- **路径自愈**：安装器检测到已注册 hook 的 node/script 路径过期时自动更新；Pi 采用自包含 extension，不依赖 bundle 内脚本路径
 
 ### 权限气泡（Claude Code / CodeBuddy）
 

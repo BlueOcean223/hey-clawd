@@ -274,6 +274,51 @@ function postStateToRunningServer(body, options, callback) {
   tryDirect();
 }
 
+function parseVersionParts(name) {
+  return name
+    .replace(/^v/i, "")
+    .split(".")
+    .map((part) => {
+      const match = part.match(/^\d+/);
+      return match ? Number.parseInt(match[0], 10) : 0;
+    });
+}
+
+function compareVersionNamesDesc(a, b) {
+  const left = parseVersionParts(a);
+  const right = parseVersionParts(b);
+  const length = Math.max(left.length, right.length);
+  for (let i = 0; i < length; i++) {
+    const leftPart = left[i] ?? 0;
+    const rightPart = right[i] ?? 0;
+    if (leftPart !== rightPart) return rightPart - leftPart;
+  }
+  return b.localeCompare(a);
+}
+
+function findNvmNode(homeDir, options = {}) {
+  const access = options.accessSync || fs.accessSync;
+  const readdir = options.readdirSync || fs.readdirSync;
+  const versionsDir = path.join(homeDir, ".nvm", "versions", "node");
+
+  try {
+    const versions = readdir(versionsDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort(compareVersionNamesDesc);
+
+    for (const version of versions) {
+      const candidate = path.join(versionsDir, version, "bin", "node");
+      try {
+        access(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {}
+    }
+  } catch {}
+
+  return null;
+}
+
 /**
  * Resolve the absolute path to the Node.js binary for hook commands.
  * On macOS/Linux, Claude Code runs hooks with a minimal PATH (/usr/bin:/bin)
@@ -307,13 +352,16 @@ function resolveNodeBin(options = {}) {
   // Electron on macOS/Linux: need to find system node
   const homeDir = options.homeDir || os.homedir();
   const access = options.accessSync || fs.accessSync;
+  const nvmNode = findNvmNode(homeDir, options);
 
   // Strategy 1: Check well-known paths (fast, no shell spawn)
   const candidates = [
+    path.join(homeDir, ".volta", "bin", "node"),       // Volta
+    path.join(homeDir, ".nvm", "current", "bin", "node"), // nvm current symlink
+    ...(nvmNode ? [nvmNode] : []),                     // newest installed nvm node
+    path.join(homeDir, ".local", "bin", "node"),       // pipx-style / manual
     "/opt/homebrew/bin/node",                          // Homebrew ARM Mac
     "/usr/local/bin/node",                             // Homebrew Intel Mac / official .pkg
-    path.join(homeDir, ".volta", "bin", "node"),       // Volta
-    path.join(homeDir, ".local", "bin", "node"),       // pipx-style / manual
     "/usr/bin/node",                                   // system package manager
   ];
 

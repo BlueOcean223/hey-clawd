@@ -15,12 +15,13 @@ docs/
 ├── svg-animation-spec.md  ← SVG 动画规范、像素网格、配色与动画分层约定
 ├── svg-catalog.md         ← 所有 clawd-*.svg 动画的出场方式与状态映射
 └── integrations/          ← 各 AI 编码工具的集成原理
-    ├── platform-comparison.md        ← 六种工具的能力/事件覆盖度对比矩阵
+    ├── platform-comparison.md        ← 七种工具的能力/事件覆盖度对比矩阵
     ├── claude-code-integration.md    ← Claude Code（含权限气泡完整链路）
     ├── codebuddy-integration.md      ← CodeBuddy（含权限气泡）
     ├── codex-integration.md          ← Codex CLI（JSONL 日志监控，唯一非 hook 方案）
     ├── cursor-integration.md         ← Cursor Agent
     ├── gemini-cli-integration.md     ← Gemini CLI
+    ├── pi-integration.md             ← Pi（extension 单向状态同步）
     └── copilot-cli-integration.md    ← GitHub Copilot CLI
 ```
 
@@ -38,6 +39,7 @@ docs/
 2. 选一个最接近的范式作为模板：
    - **hook 双向（含权限）** → `claude-code-integration.md` / `codebuddy-integration.md`
    - **hook 单向（仅状态）** → `cursor-integration.md` / `gemini-cli-integration.md` / `copilot-cli-integration.md`
+   - **extension 单向（仅状态）** → `pi-integration.md`
    - **日志监控（无 hook 能力）** → `codex-integration.md`
 3. 实现时同步更新 `hooks/`、`agents/`、`docs/integrations/` 三处，避免事件映射漂移
 
