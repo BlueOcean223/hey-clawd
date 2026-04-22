@@ -9,6 +9,7 @@ const { resolveNodeBin } = require("./server-config");
 const EXTENSION_DIR_NAME = "hey-clawd";
 const MARKER_FILE = ".clawd-managed.json";
 const EXTENSION_FILE = "index.ts";
+const CORE_FILE = "pi-extension-core.js";
 
 function writeTextAtomic(filePath, content) {
   const dir = path.dirname(filePath);
@@ -39,6 +40,13 @@ function resolveExtensionDir(options = {}) {
 function resolveSourceExtensionPath(options = {}) {
   if (options.sourceExtensionPath) return options.sourceExtensionPath;
   let sourcePath = path.resolve(__dirname, "pi-extension.ts").replace(/\\/g, "/");
+  sourcePath = sourcePath.replace("app.asar/", "app.asar.unpacked/");
+  return sourcePath;
+}
+
+function resolveSourceCorePath(options = {}) {
+  if (options.sourceCorePath) return options.sourceCorePath;
+  let sourcePath = path.resolve(__dirname, "pi-extension-core.js").replace(/\\/g, "/");
   sourcePath = sourcePath.replace("app.asar/", "app.asar.unpacked/");
   return sourcePath;
 }
@@ -108,7 +116,9 @@ function registerPiExtension(options = {}) {
   const agentDir = resolvePiAgentDir(options);
   const extensionDir = resolveExtensionDir(options);
   const sourceExtensionPath = resolveSourceExtensionPath(options);
+  const sourceCorePath = resolveSourceCorePath(options);
   const extensionPath = path.join(extensionDir, EXTENSION_FILE);
+  const corePath = path.join(extensionDir, CORE_FILE);
   const markerPath = path.join(extensionDir, MARKER_FILE);
   const agentDirExists = fs.existsSync(agentDir);
   const piCommandAvailable = hasPiCommand(options);
@@ -128,24 +138,41 @@ function registerPiExtension(options = {}) {
   }
 
   let extensionSource;
+  let coreSource;
   try {
     extensionSource = fs.readFileSync(sourceExtensionPath, "utf8");
   } catch (err) {
     throw new Error(`Failed to read pi-extension.ts: ${err.message}`);
   }
+  try {
+    coreSource = fs.readFileSync(sourceCorePath, "utf8");
+  } catch (err) {
+    throw new Error(`Failed to read pi-extension-core.js: ${err.message}`);
+  }
 
   const previousExtension = fs.existsSync(extensionPath)
     ? fs.readFileSync(extensionPath, "utf8")
     : null;
-  const updated = previousExtension !== null && previousExtension !== extensionSource;
+  const previousCore = fs.existsSync(corePath)
+    ? fs.readFileSync(corePath, "utf8")
+    : null;
+  const repairedManagedInstall =
+    extensionDirExists &&
+    isManagedMarker(loadMarker(markerPath)) &&
+    (previousExtension === null || previousCore === null);
+  const updated =
+    repairedManagedInstall ||
+    (previousExtension !== null && previousExtension !== extensionSource) ||
+    (previousCore !== null && previousCore !== coreSource);
 
   fs.mkdirSync(extensionDir, { recursive: true });
-  writeTextAtomic(extensionPath, extensionSource);
   writeJsonAtomic(markerPath, buildMarker());
+  writeTextAtomic(corePath, coreSource);
+  writeTextAtomic(extensionPath, extensionSource);
 
   if (!options.silent) {
     console.log(`Clawd Pi extension → ${extensionDir}`);
-    console.log(`  ${updated ? "Updated" : "Installed"}: ${EXTENSION_FILE}`);
+    console.log(`  ${updated ? "Updated" : "Installed"}: ${EXTENSION_FILE}, ${CORE_FILE}`);
   }
 
   return { installed: true, skipped: false, updated };
@@ -182,6 +209,7 @@ function unregisterPiExtension(options = {}) {
 }
 
 module.exports = {
+  CORE_FILE,
   EXTENSION_DIR_NAME,
   EXTENSION_FILE,
   MARKER_FILE,
@@ -190,6 +218,7 @@ module.exports = {
   loadMarker,
   registerPiExtension,
   resolveExtensionDir,
+  resolveSourceCorePath,
   resolvePiAgentDir,
   unregisterPiExtension,
 };

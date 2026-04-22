@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as http from "node:http";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as core from "./pi-extension-core.js";
 
 const CLAWD_SERVER_ID = "hey-clawd";
 const CLAWD_SERVER_HEADER = "x-clawd-server";
@@ -41,6 +42,13 @@ type ProcessMetadata = {
 	editor?: "code" | "cursor";
 };
 
+type ExtensionContextLike = {
+	cwd?: string;
+	sessionManager?: { getSessionId?: () => string | undefined };
+};
+
+type ExtensionContextWithUI = ExtensionContextLike & { hasUI?: boolean };
+
 const TERMINAL_NAMES_WIN = new Set([
 	"windowsterminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
 	"code.exe", "cursor.exe", "alacritty.exe", "wezterm-gui.exe", "mintty.exe",
@@ -65,26 +73,29 @@ const EDITOR_MAP_WIN: Record<string, "code" | "cursor"> = { "code.exe": "code", 
 const EDITOR_MAP_MAC: Record<string, "code" | "cursor"> = { "code": "code", "cursor": "cursor" };
 const EDITOR_MAP_LINUX: Record<string, "code" | "cursor"> = { "code": "code", "cursor": "cursor", "code-insiders": "code" };
 
-let cachedProcessMetadata: ProcessMetadata | null = null;
-
-function parseMode(argv = process.argv): "interactive" | "print" | "json" | "rpc" {
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i];
-		if (arg === "-p" || arg === "--print") return "print";
-		if (arg === "--mode") {
-			const next = argv[i + 1];
-			if (next === "json") return "json";
-			if (next === "rpc") return "rpc";
+const { shouldReport: shouldReportCore, buildPayload: buildPayloadCore, attach: attachCore } = core as {
+	shouldReport: (
+		ctx: { hasUI?: boolean } | undefined,
+		runtime?: { argv?: string[]; stdinIsTTY?: boolean; stdoutIsTTY?: boolean }
+	) => boolean;
+	buildPayload: (input: {
+		state: ClawdState;
+		event: ClawdEvent;
+		ctx?: ExtensionContextLike;
+		metadata?: ProcessMetadata;
+		agentPid?: number;
+	}) => StatePayload;
+	attach: (
+		pi: ExtensionAPI,
+		deps: {
+			shouldReport: (ctx: unknown) => boolean;
+			buildPayload: (state: ClawdState, event: ClawdEvent, ctx: unknown) => StatePayload;
+			postState: (payload: StatePayload) => Promise<boolean>;
 		}
-		if (arg === "--mode=json") return "json";
-		if (arg === "--mode=rpc") return "rpc";
-	}
-	return "interactive";
-}
+	) => void;
+};
 
-function isInteractiveMode(): boolean {
-	return parseMode() === "interactive" && !!process.stdin.isTTY && !!process.stdout.isTTY;
-}
+let cachedProcessMetadata: ProcessMetadata | null = null;
 
 function normalizePort(value: unknown): number | null {
 	const port = Number(value);
@@ -247,74 +258,17 @@ function getProcessMetadata(): ProcessMetadata {
 	return cachedProcessMetadata;
 }
 
-function buildPayload(
-	state: ClawdState,
-	event: ClawdEvent,
-	ctx: { cwd?: string; sessionManager?: { getSessionId?: () => string | undefined } }
-): StatePayload {
-	const metadata = getProcessMetadata();
-	const rawSessionId = ctx.sessionManager?.getSessionId?.() || "default";
-	const sessionId = rawSessionId.trim() || "default";
-	const payload: StatePayload = {
-		state,
-		session_id: `pi:${sessionId}`,
-		event,
-		agent_id: "pi",
-		agent_pid: process.pid,
-	};
-
-	if (ctx.cwd) payload.cwd = ctx.cwd;
-	if (metadata.sourcePid) payload.source_pid = metadata.sourcePid;
-	if (metadata.editor) payload.editor = metadata.editor;
-	return payload;
-}
-
-function sendState(
-	state: ClawdState,
-	event: ClawdEvent,
-	ctx: { cwd?: string; sessionManager?: { getSessionId?: () => string | undefined } },
-	awaitDelivery = false
-): Promise<void> | void {
-	const promise = postState(buildPayload(state, event, ctx)).then(() => undefined, () => undefined);
-	if (awaitDelivery) return promise;
-	void promise;
-}
-
 export default function (pi: ExtensionAPI) {
-	if (!isInteractiveMode()) return;
-
-	pi.on("session_start", async (_event, ctx) => {
-		sendState("idle", "SessionStart", ctx);
-	});
-
-	pi.on("before_agent_start", async (_event, ctx) => {
-		sendState("thinking", "UserPromptSubmit", ctx);
-	});
-
-	pi.on("tool_call", async (_event, ctx) => {
-		sendState("working", "PreToolUse", ctx);
-		return undefined;
-	});
-
-	pi.on("tool_result", async (event, ctx) => {
-		sendState("working", event.isError ? "PostToolUseFailure" : "PostToolUse", ctx);
-		return undefined;
-	});
-
-	pi.on("agent_end", async (_event, ctx) => {
-		sendState("attention", "Stop", ctx);
-	});
-
-	pi.on("session_before_compact", async (_event, ctx) => {
-		sendState("sweeping", "PreCompact", ctx);
-		return undefined;
-	});
-
-	pi.on("session_compact", async (_event, ctx) => {
-		sendState("attention", "PostCompact", ctx);
-	});
-
-	pi.on("session_shutdown", async (_event, ctx) => {
-		await sendState("sleeping", "SessionEnd", ctx, true);
+	attachCore(pi, {
+		shouldReport: (ctx: unknown) => shouldReportCore(ctx as ExtensionContextWithUI | undefined),
+		buildPayload: (state: ClawdState, event: ClawdEvent, ctx: unknown) =>
+			buildPayloadCore({
+				state,
+				event,
+				ctx: ctx as ExtensionContextLike,
+				metadata: getProcessMetadata(),
+				agentPid: process.pid,
+			}),
+		postState,
 	});
 }

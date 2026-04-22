@@ -13,6 +13,7 @@ module.exports = {
     PreToolUse: "working",
     PostToolUse: "working",
     PostToolUseFailure: "working",
+    // Stop 的上游来源是 Pi extension 的 agent_end（once per user prompt）。
     Stop: "attention",
     PreCompact: "sweeping",
     PostCompact: "attention",

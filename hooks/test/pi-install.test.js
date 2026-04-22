@@ -5,6 +5,7 @@ const os = require("os");
 const path = require("path");
 
 const {
+  CORE_FILE,
   EXTENSION_FILE,
   MARKER_FILE,
   registerPiExtension,
@@ -27,11 +28,14 @@ function readJson(filePath) {
 test("registerPiExtension skips when neither ~/.pi/agent nor pi command exists", () => {
   const root = makeTempDir("pi-install-skip");
   const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
   writeText(sourcePath, "export default function () {}\n");
+  writeText(sourceCorePath, "module.exports = {};\n");
 
   const result = registerPiExtension({
     agentDir: path.join(root, ".pi", "agent"),
     sourceExtensionPath: sourcePath,
+    sourceCorePath,
     hasPiCommand: false,
     silent: true,
   });
@@ -39,25 +43,33 @@ test("registerPiExtension skips when neither ~/.pi/agent nor pi command exists",
   assert.deepEqual(result, { installed: false, skipped: true, updated: false });
 });
 
-test("registerPiExtension installs self-contained index.ts and marker", () => {
+test("registerPiExtension installs index.ts, pi-extension-core.js and marker", () => {
   const root = makeTempDir("pi-install-add");
   const agentDir = path.join(root, ".pi", "agent");
   const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
   writeText(sourcePath, "export default function () { console.log('pi'); }\n");
+  writeText(sourceCorePath, "module.exports = { buildPayload() { return {}; }, shouldReport() { return true; } };\n");
 
   const result = registerPiExtension({
     agentDir,
     sourceExtensionPath: sourcePath,
+    sourceCorePath,
     hasPiCommand: true,
     silent: true,
   });
 
   const extensionDir = path.join(agentDir, "extensions", "hey-clawd");
   const extensionPath = path.join(extensionDir, EXTENSION_FILE);
+  const corePath = path.join(extensionDir, CORE_FILE);
   const markerPath = path.join(extensionDir, MARKER_FILE);
 
   assert.deepEqual(result, { installed: true, skipped: false, updated: false });
   assert.equal(fs.readFileSync(extensionPath, "utf8"), "export default function () { console.log('pi'); }\n");
+  assert.equal(
+    fs.readFileSync(corePath, "utf8"),
+    "module.exports = { buildPayload() { return {}; }, shouldReport() { return true; } };\n"
+  );
 
   const marker = readJson(markerPath);
   assert.equal(marker.app, "hey-clawd");
@@ -66,27 +78,60 @@ test("registerPiExtension installs self-contained index.ts and marker", () => {
   assert.equal(typeof marker.installedAt, "string");
 });
 
-test("registerPiExtension updates existing managed index.ts in place", () => {
+test("registerPiExtension updates existing managed index.ts and pi-extension-core.js in place", () => {
   const root = makeTempDir("pi-install-update");
   const agentDir = path.join(root, ".pi", "agent");
   const extensionDir = path.join(agentDir, "extensions", "hey-clawd");
   const extensionPath = path.join(extensionDir, EXTENSION_FILE);
+  const corePath = path.join(extensionDir, CORE_FILE);
   const markerPath = path.join(extensionDir, MARKER_FILE);
   const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
 
-  writeText(extensionPath, "old content\n");
+  writeText(extensionPath, "same content\n");
+  writeText(corePath, "old core\n");
   writeText(markerPath, JSON.stringify({ app: "hey-clawd", integration: "pi", version: 1 }, null, 2));
-  writeText(sourcePath, "new content\n");
+  writeText(sourcePath, "same content\n");
+  writeText(sourceCorePath, "new core\n");
 
   const result = registerPiExtension({
     agentDir,
     sourceExtensionPath: sourcePath,
+    sourceCorePath,
     hasPiCommand: true,
     silent: true,
   });
 
   assert.deepEqual(result, { installed: true, skipped: false, updated: true });
-  assert.equal(fs.readFileSync(extensionPath, "utf8"), "new content\n");
+  assert.equal(fs.readFileSync(extensionPath, "utf8"), "same content\n");
+  assert.equal(fs.readFileSync(corePath, "utf8"), "new core\n");
+});
+
+test("registerPiExtension treats managed partial install recovery as updated", () => {
+  const root = makeTempDir("pi-install-repair");
+  const agentDir = path.join(root, ".pi", "agent");
+  const extensionDir = path.join(agentDir, "extensions", "hey-clawd");
+  const corePath = path.join(extensionDir, CORE_FILE);
+  const markerPath = path.join(extensionDir, MARKER_FILE);
+  const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
+
+  writeText(corePath, "same core\n");
+  writeText(markerPath, JSON.stringify({ app: "hey-clawd", integration: "pi", version: 1 }, null, 2));
+  writeText(sourcePath, "new extension\n");
+  writeText(sourceCorePath, "same core\n");
+
+  const result = registerPiExtension({
+    agentDir,
+    sourceExtensionPath: sourcePath,
+    sourceCorePath,
+    hasPiCommand: true,
+    silent: true,
+  });
+
+  assert.deepEqual(result, { installed: true, skipped: false, updated: true });
+  assert.equal(fs.readFileSync(path.join(extensionDir, EXTENSION_FILE), "utf8"), "new extension\n");
+  assert.equal(fs.readFileSync(corePath, "utf8"), "same core\n");
 });
 
 test("registerPiExtension skips existing unmanaged extension directory", () => {
@@ -95,19 +140,48 @@ test("registerPiExtension skips existing unmanaged extension directory", () => {
   const extensionDir = path.join(agentDir, "extensions", "hey-clawd");
   const extensionPath = path.join(extensionDir, EXTENSION_FILE);
   const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
 
   writeText(extensionPath, "user managed\n");
   writeText(sourcePath, "new content\n");
+  writeText(sourceCorePath, "new core\n");
 
   const result = registerPiExtension({
     agentDir,
     sourceExtensionPath: sourcePath,
+    sourceCorePath,
     hasPiCommand: true,
     silent: true,
   });
 
   assert.deepEqual(result, { installed: false, skipped: true, updated: false });
   assert.equal(fs.readFileSync(extensionPath, "utf8"), "user managed\n");
+});
+
+test("installed pi-extension-core.js can be required", () => {
+  const root = makeTempDir("pi-install-require");
+  const agentDir = path.join(root, ".pi", "agent");
+  const sourcePath = path.join(root, "pi-extension.ts");
+  const sourceCorePath = path.join(root, "pi-extension-core.js");
+
+  writeText(sourcePath, "export default function () {}\n");
+  writeText(
+    sourceCorePath,
+    "module.exports = { shouldReport() { return true; }, buildPayload() { return {}; } };\n"
+  );
+
+  registerPiExtension({
+    agentDir,
+    sourceExtensionPath: sourcePath,
+    sourceCorePath,
+    hasPiCommand: true,
+    silent: true,
+  });
+
+  const extensionDir = path.join(agentDir, "extensions", "hey-clawd");
+  const installedCore = require(path.join(extensionDir, CORE_FILE));
+  assert.equal(typeof installedCore.shouldReport, "function");
+  assert.equal(typeof installedCore.buildPayload, "function");
 });
 
 test("unregisterPiExtension removes only marker-managed extension directory", () => {
