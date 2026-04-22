@@ -152,6 +152,17 @@ function postState(payload: StatePayload, timeoutMs = 120): Promise<boolean> {
 			}
 
 			const port = ports[index++];
+			let settled = false;
+			const finish = (ok: boolean) => {
+				if (settled) return;
+				settled = true;
+				if (ok) {
+					resolve(true);
+					return;
+				}
+				tryNext();
+			};
+
 			const req = http.request(
 				{
 					hostname: "127.0.0.1",
@@ -171,19 +182,15 @@ function postState(payload: StatePayload, timeoutMs = 120): Promise<boolean> {
 						if (responseBody.length < 256) responseBody += chunk;
 					});
 					res.on("end", () => {
-						if (isClawdResponse(res, responseBody)) {
-							resolve(true);
-							return;
-						}
-						tryNext();
+						finish(isClawdResponse(res, responseBody));
 					});
 				}
 			);
 
-			req.on("error", tryNext);
+			req.on("error", () => finish(false));
 			req.on("timeout", () => {
 				req.destroy();
-				tryNext();
+				finish(false);
 			});
 			req.end(body);
 		};
