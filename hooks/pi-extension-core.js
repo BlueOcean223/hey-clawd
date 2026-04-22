@@ -24,7 +24,6 @@ function isInteractiveMode(runtime = {}) {
 
 function shouldReport(ctx, runtime) {
   if (typeof ctx?.hasUI === "boolean") return ctx.hasUI;
-  if (ctx !== undefined) return false;
   return isInteractiveMode(runtime);
 }
 

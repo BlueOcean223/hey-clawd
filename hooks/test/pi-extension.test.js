@@ -35,9 +35,13 @@ test("shouldReport prefers ctx.hasUI when present", () => {
   assert.equal(shouldReport({ hasUI: false }), false);
 });
 
-test("shouldReport treats ctx without hasUI as non-UI", () => {
+test("shouldReport falls back to interactive mode when ctx lacks hasUI", () => {
   assert.equal(
     shouldReport({}, { argv: ["node", "pi"], stdinIsTTY: true, stdoutIsTTY: true }),
+    true
+  );
+  assert.equal(
+    shouldReport({}, { argv: ["node", "pi", "--mode", "json"], stdinIsTTY: true, stdoutIsTTY: true }),
     false
   );
 });

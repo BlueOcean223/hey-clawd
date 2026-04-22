@@ -168,13 +168,16 @@ enum HookInstaller {
     private static func resolveNodeBin() -> String? {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.path
-        let candidates = [
+        let nvmNode = findNvmNode(home: home, fileManager: fm)
+        var candidates = [
+            "\(home)/.volta/bin/node",
+            "\(home)/.nvm/current/bin/node",
+            nvmNode,
+            "\(home)/.local/bin/node",
             "/opt/homebrew/bin/node",
             "/usr/local/bin/node",
-            "\(home)/.volta/bin/node",
-            "\(home)/.local/bin/node",
             "/usr/bin/node",
-        ]
+        ].compactMap { $0 }
 
         for path in candidates where fm.isExecutableFile(atPath: path) {
             return path
@@ -205,6 +208,51 @@ enum HookInstaller {
         }
 
         return nil
+    }
+
+    private static func findNvmNode(home: String, fileManager: FileManager) -> String? {
+        let versionsDir = "\(home)/.nvm/versions/node"
+        guard
+            let entries = try? fileManager.contentsOfDirectory(atPath: versionsDir)
+        else {
+            return nil
+        }
+
+        let sorted = entries.sorted { compareVersionNamesDescending($0, $1) }
+        for entry in sorted {
+            let candidate = "\(versionsDir)/\(entry)/bin/node"
+            if fileManager.isExecutableFile(atPath: candidate) {
+                return candidate
+            }
+        }
+
+        return nil
+    }
+
+    private static func compareVersionNamesDescending(_ lhs: String, _ rhs: String) -> Bool {
+        let left = parseVersionParts(lhs)
+        let right = parseVersionParts(rhs)
+        let count = max(left.count, right.count)
+
+        for index in 0..<count {
+            let leftPart = index < left.count ? left[index] : 0
+            let rightPart = index < right.count ? right[index] : 0
+            if leftPart != rightPart {
+                return leftPart > rightPart
+            }
+        }
+
+        return lhs.localizedStandardCompare(rhs) == .orderedDescending
+    }
+
+    private static func parseVersionParts(_ value: String) -> [Int] {
+        value
+            .replacingOccurrences(of: #"^[Vv]"#, with: "", options: .regularExpression)
+            .split(separator: ".")
+            .map { component -> Int in
+                let digits = component.prefix { $0.isNumber }
+                return Int(digits) ?? 0
+            }
     }
 
     // MARK: - Local cleanup fallback
