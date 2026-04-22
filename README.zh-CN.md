@@ -33,6 +33,14 @@
 
 从 [GitHub Releases](https://github.com/BlueOcean223/hey-clawd/releases) 下载最新 `.dmg`，把 **hey-clawd.app** 拖进 `/Applications` 后启动。应用只住在菜单栏——右击clawd图标打开托盘菜单。
 
+如果 macOS Gatekeeper 阻止启动，先尝试 **右键 → 打开** 一次；如果出现 **“应用已损坏”**、**“无法验证开发者”**，或者应用就是打不开，可以手动移除隔离属性：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/hey-clawd.app
+```
+
+然后再重新启动应用。
+
 首次启动会在 `127.0.0.1:23333` 开一个本地 HTTP 服务（端口冲突时回退到 23334–23337），并执行内置的 installer 脚本，把 hook / extension 注册到检测到的 AI 工具里。未安装的工具会被跳过。托盘菜单 → **Register Hooks** 可以随时重跑注册（比如 `cc-switch` 切换 profile 之后）。
 
 ### 从源码构建
@@ -120,6 +128,6 @@ cd hooks && node test/pi-install.test.js && node test/codex-remote-monitor.test.
 ## 鸣谢
 
 - 本项目的形态、架构等承袭自 [@rullerzhou-afk](https://github.com/rullerzhou-afk) 的 [clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk)。
-
+- 部分美术风格、场景气质与动画灵感也参考了 [@marciogranzotto](https://github.com/marciogranzotto) 的 [clawd-tank](https://github.com/marciogranzotto/clawd-tank)，感谢其提供的 Clawd 视觉设定与像素动画灵感。
 - 该项目分享在 [LINUX DO](https://linux.do/) 社区中
 

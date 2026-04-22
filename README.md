@@ -33,6 +33,14 @@ A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI codin
 
 Grab the latest `.dmg` from [GitHub Releases](https://github.com/BlueOcean223/hey-clawd/releases), drag **hey-clawd.app** into `/Applications`, and launch. The app lives in the menu bar — right-click the Clawd icon to open the tray menu.
 
+If macOS Gatekeeper blocks launch, first try **right-click → Open** once. If you see messages like **“app is damaged”**, **“Apple could not verify”**, or the app simply refuses to open, remove the quarantine flag manually:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/hey-clawd.app
+```
+
+Then launch the app again.
+
 On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks/extensions into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Register Hooks**.
 
 ### Build from source
@@ -120,5 +128,5 @@ Further docs:
 ## Acknowledgements
 
 - Form and architecture derived from [@rullerzhou-afk](https://github.com/rullerzhou-afk)'s [clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk).
-
+- Some art direction and animation inspiration was also referenced from [@marciogranzotto](https://github.com/marciogranzotto)'s [clawd-tank](https://github.com/marciogranzotto/clawd-tank). Thank you for the lovely Clawd worldbuilding and pixel-art ideas.
 - Shared with the [LINUX DO](https://linux.do/) community.
