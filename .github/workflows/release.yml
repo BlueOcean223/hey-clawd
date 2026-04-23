@@ -89,7 +89,7 @@ jobs:
       - name: Create zip
         run: |
           cd "${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications"
-          ditto -c -k --sequesterRsrc hey-clawd.app "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent hey-clawd.app "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
 
       - name: Create DMG
         run: |
@@ -103,14 +103,25 @@ jobs:
 
       - name: Smoke check packaged artifacts
         run: |
+          set -euo pipefail
+
           APP_PATH="${{ runner.temp }}/hey-clawd.xcarchive/Products/Applications/hey-clawd.app"
           ZIP_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
           DMG_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.dmg"
+          ZIP_CHECK_DIR="${{ runner.temp }}/zip-check"
 
           test -d "$APP_PATH"
           test -s "$ZIP_PATH"
           test -s "$DMG_PATH"
           unzip -tq "$ZIP_PATH"
+          zipinfo -1 "$ZIP_PATH" | grep -qx "hey-clawd.app/Contents/Info.plist"
+          if zipinfo -1 "$ZIP_PATH" | grep -qx "Contents/Info.plist"; then
+            echo "Release zip is missing the hey-clawd.app parent directory" >&2
+            exit 1
+          fi
+          rm -rf "$ZIP_CHECK_DIR"
+          ditto -x -k "$ZIP_PATH" "$ZIP_CHECK_DIR"
+          codesign --verify --deep --strict --verbose=2 "$ZIP_CHECK_DIR/hey-clawd.app"
           hdiutil verify "$DMG_PATH"
 
       - name: Upload packaged artifacts
