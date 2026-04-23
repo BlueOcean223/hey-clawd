@@ -136,12 +136,25 @@ jobs:
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
-          echo "$SPARKLE_PRIVATE_KEY" > "${{ runner.temp }}/sparkle_key"
-          SIGNATURE=$(${{ runner.temp }}/bin/sign_update "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip" --ed-key-file "${{ runner.temp }}/sparkle_key" | grep "sparkle:edSignature" | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
-          LENGTH=$(stat -f%z "${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip")
+          set -euo pipefail
+
+          if [[ -z "${SPARKLE_PRIVATE_KEY:-}" ]]; then
+            echo "SPARKLE_PRIVATE_KEY is not configured" >&2
+            exit 1
+          fi
+
+          ZIP_PATH="${{ runner.temp }}/hey-clawd-${{ steps.version.outputs.VERSION }}.zip"
+          SIGNATURE=$(printf '%s\n' "$SPARKLE_PRIVATE_KEY" | "${{ runner.temp }}/bin/sign_update" -p --ed-key-file - "$ZIP_PATH" | tr -d '\r\n')
+          LENGTH=$(stat -f%z "$ZIP_PATH")
+
+          if [[ -z "$SIGNATURE" ]]; then
+            echo "Failed to generate Sparkle signature" >&2
+            exit 1
+          fi
+
+          echo "Signature length: ${#SIGNATURE}"
           echo "SIGNATURE=$SIGNATURE" >> "$GITHUB_ENV"
           echo "LENGTH=$LENGTH" >> "$GITHUB_ENV"
-          rm "${{ runner.temp }}/sparkle_key"
 
       - name: Create GitHub Release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
