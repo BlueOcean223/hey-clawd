@@ -3,12 +3,12 @@
   <channel>
     <title>hey-clawd</title>
     <item>
-      <title>Version 0.2.0</title>
-      <pubDate>Wed, 22 Apr 2026 16:19:36 +0000</pubDate>
-      <sparkle:version>6</sparkle:version>
-      <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+      <title>Version 0.2.1</title>
+      <pubDate>Thu, 23 Apr 2026 01:30:11 +0000</pubDate>
+      <sparkle:version>7</sparkle:version>
+      <sparkle:shortVersionString>0.2.1</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>12.0</sparkle:minimumSystemVersion>
-      <enclosure url="https://github.com/BlueOcean223/hey-clawd/releases/download/v0.2.0/hey-clawd-0.2.0.zip" length="3407261" type="application/octet-stream" sparkle:edSignature="" />
+      <enclosure url="https://github.com/BlueOcean223/hey-clawd/releases/download/v0.2.1/hey-clawd-0.2.1.zip" length="3407265" type="application/octet-stream" sparkle:edSignature="KkKW6XW1xSK8Dq0YmTOUiZ4A54D3EYh8uYGjkQYNF99lNA4l580mHgwr75T+OVmelfq4jEs4fLXgoFqbBRyQDQ==" />
     </item>
   </channel>
 </rss>
