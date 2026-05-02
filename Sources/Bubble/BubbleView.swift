@@ -17,7 +17,7 @@ enum PermissionDecision {
         }
     }
 
-    /// 选中 suggestion 时需要把原始 payload 透传回 Claude Code 作为 updatedPermissions。
+    /// Session-level "always allow" returns normalized updatedPermissions entries.
     var suggestionPayloads: [Data] {
         switch self {
         case .suggestion(let suggestion):
@@ -31,14 +31,13 @@ enum PermissionDecision {
 struct PermissionSuggestion: Identifiable, Equatable {
     enum Kind: String {
         case addRules
-        case setMode
     }
 
     let id = UUID()
     let kind: Kind
     let behavior: PermissionBehavior
     let label: String
-    /// 按照 Claude Code 要求格式化的 suggestion 数据，序列化为 JSON Data。
+    /// Normalized updatedPermissions entries serialized as JSON Data.
     let resolvedPayloads: [Data]
 
     static func == (lhs: PermissionSuggestion, rhs: PermissionSuggestion) -> Bool {
@@ -74,9 +73,8 @@ struct PermissionBubbleContent {
     }
 
     var estimatedHeight: CGFloat {
-        // Suggestions are in HStack, so they only add one row of height if present.
+        // The session-level suggestion is a single extra button.
         // Base: ~160 for tool pill + input preview + button row + padding.
-        // Add one extra row (~37px) only if suggestions cause wrapping.
         let baseHeight: CGFloat = 170
         let suggestionRowHeight: CGFloat = suggestions.isEmpty ? 0 : 37
         return baseHeight + suggestionRowHeight
@@ -87,13 +85,13 @@ struct PermissionBubbleContent {
             return []
         }
 
-        var seenPayloads = Set<Data>()
-        var suggestions: [PermissionSuggestion] = []
+        var seenRules = Set<Data>()
+        var sessionRules: [[String: Any]] = []
 
         for rawSuggestion in rawSuggestions {
             guard
                 let type = rawSuggestion["type"] as? String,
-                let kind = PermissionSuggestion.Kind(rawValue: type),
+                type == PermissionSuggestion.Kind.addRules.rawValue,
                 let rawBehavior = rawSuggestion["behavior"] as? String,
                 let behavior = PermissionBehavior(rawValue: rawBehavior),
                 behavior == .allow
@@ -101,143 +99,65 @@ struct PermissionBubbleContent {
                 continue
             }
 
-            guard let resolvedPayload = resolveSuggestionEntry(kind: kind, behavior: behavior, raw: rawSuggestion) else {
-                continue
-            }
-
-            guard let payloadData = try? JSONSerialization.data(withJSONObject: resolvedPayload) else {
-                continue
-            }
-            guard seenPayloads.insert(payloadData).inserted else {
-                continue
-            }
-
-            suggestions.append(
-                PermissionSuggestion(
-                    kind: kind,
-                    behavior: behavior,
-                    label: suggestionLabel(for: kind, behavior: behavior, payload: resolvedPayload),
-                    resolvedPayloads: [payloadData]
-                )
-            )
-        }
-
-        return suggestions
-    }
-
-    /// 按照 Claude Code 要求的 updatedPermissions 格式规范化 suggestion 原始数据。
-    private static func resolveSuggestionEntry(
-        kind: PermissionSuggestion.Kind,
-        behavior: PermissionBehavior,
-        raw: [String: Any]
-    ) -> [String: Any]? {
-        var resolved: [String: Any]
-
-        switch kind {
-        case .addRules:
-            let rules: [[String: Any]]
-            if let rawRules = raw["rules"] as? [[String: Any]] {
-                rules = rawRules
-            } else if let toolName = raw["toolName"] as? String {
-                rules = [["toolName": toolName, "ruleContent": raw["ruleContent"] ?? ""]]
-            } else {
-                rules = []
-            }
-
-            resolved = [
-                "type": "addRules",
-                "destination": (raw["destination"] as? String) ?? "localSettings",
-                "behavior": behavior.rawValue,
-                "rules": rules,
-            ]
-
-        case .setMode:
-            resolved = [
-                "type": "setMode",
-                "destination": (raw["destination"] as? String) ?? "localSettings",
-            ]
-            if let mode = raw["mode"] {
-                resolved["mode"] = mode
-            }
-        }
-
-        return resolved
-    }
-
-    private static func suggestionLabel(
-        for kind: PermissionSuggestion.Kind,
-        behavior: PermissionBehavior,
-        payload: [String: Any]
-    ) -> String {
-        switch kind {
-        case .addRules:
-            let rules = (payload["rules"] as? [[String: Any]]) ?? []
-            let baseLabel = addRulesLabel(for: rules)
-            return decorateLabel(baseLabel, destination: payload["destination"] as? String)
-        case .setMode:
-            if let mode = normalizedString(payload["mode"] as? String) {
-                return decorateLabel("Mode: \(mode)", destination: payload["destination"] as? String)
-            }
-            return decorateLabel("Allow in Mode", destination: payload["destination"] as? String)
-        }
-    }
-
-    private static func addRulesLabel(for rules: [[String: Any]]) -> String {
-        guard let firstRule = rules.first else {
-            return "Always Allow"
-        }
-
-        let toolName = normalizedString(firstRule["toolName"] as? String)
-        let ruleContent = normalizedString(firstRule["ruleContent"] as? String)
-
-        let baseLabel: String
-        if let ruleContent {
-            if ruleContent.contains("**") {
-                let dir = ruleContent
-                    .components(separatedBy: "**")
-                    .first?
-                    .replacingOccurrences(of: "\\", with: "/")
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                    .split(separator: "/")
-                    .last
-                    .map(String.init)
-                if let toolName, let dir, !dir.isEmpty {
-                    baseLabel = "Allow \(toolName) in \(dir)/"
-                } else if let dir, !dir.isEmpty {
-                    baseLabel = "Allow in \(dir)/"
-                } else {
-                    baseLabel = "Always Allow"
+            for rule in normalizedAddRules(from: rawSuggestion) {
+                guard let ruleData = canonicalJSONData(rule),
+                      seenRules.insert(ruleData).inserted else {
+                    continue
                 }
-            } else {
-                let shortRule = ruleContent.count > 30 ? String(ruleContent.prefix(29)) + "…" : ruleContent
-                if let toolName {
-                    baseLabel = "Allow \(toolName) `\(shortRule)`"
-                } else {
-                    baseLabel = "Always Allow `\(shortRule)`"
-                }
+                sessionRules.append(rule)
             }
-        } else if let toolName {
-            baseLabel = "Allow \(toolName)"
-        } else {
-            baseLabel = "Always Allow"
         }
 
-        if rules.count > 1 {
-            return "\(baseLabel) +\(rules.count - 1)"
+        guard !sessionRules.isEmpty else {
+            return []
         }
 
-        return baseLabel
+        let resolvedPayload: [String: Any] = [
+            "type": "addRules",
+            "destination": "session",
+            "behavior": PermissionBehavior.allow.rawValue,
+            "rules": sessionRules,
+        ]
+
+        guard let payloadData = canonicalJSONData(resolvedPayload) else {
+            return []
+        }
+
+        return [
+            PermissionSuggestion(
+                kind: .addRules,
+                behavior: .allow,
+                label: "Always allow in this session",
+                resolvedPayloads: [payloadData]
+            ),
+        ]
     }
 
-    private static func decorateLabel(_ label: String, destination: String?) -> String {
-        switch normalizedString(destination) {
-        case "projectSettings":
-            return "\(label) (Project)"
-        case "localSettings", nil:
-            return label
-        case let value?:
-            return "\(label) (\(value))"
+    private static func normalizedAddRules(from raw: [String: Any]) -> [[String: Any]] {
+        if let rawRules = raw["rules"] as? [[String: Any]] {
+            return rawRules.compactMap(normalizedRule)
         }
+
+        return normalizedRule(raw).map { [$0] } ?? []
+    }
+
+    private static func normalizedRule(_ rawRule: [String: Any]) -> [String: Any]? {
+        guard let toolName = normalizedString(rawRule["toolName"] as? String) else {
+            return nil
+        }
+
+        var rule: [String: Any] = ["toolName": toolName]
+        if let ruleContent = normalizedString(rawRule["ruleContent"] as? String) {
+            rule["ruleContent"] = ruleContent
+        }
+        return rule
+    }
+
+    private static func canonicalJSONData(_ value: Any) -> Data? {
+        guard JSONSerialization.isValidJSONObject(value) else {
+            return nil
+        }
+        return try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
     }
 
     private static func previewJSONString(_ value: Any?) -> String {

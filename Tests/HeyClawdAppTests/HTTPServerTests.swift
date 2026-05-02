@@ -108,6 +108,36 @@ final class HTTPServerTests: XCTestCase {
         XCTAssertTrue(response.contains("too many pending permissions"))
     }
 
+    func testPermissionAllowResponseIncludesUpdatedPermissions() async throws {
+        let updatedPermission = Data("""
+        {
+          "behavior": "allow",
+          "destination": "session",
+          "rules": [
+            {"ruleContent": "npm test", "toolName": "Bash"}
+          ],
+          "type": "addRules"
+        }
+        """.utf8)
+
+        let body = try XCTUnwrap(
+            HTTPServer.testPermissionResponseBody(
+                for: PermissionDecisionResult(
+                    behavior: .allow,
+                    suggestionPayloads: [updatedPermission]
+                )
+            )
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let output = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        XCTAssertEqual(output["hookEventName"] as? String, "PermissionRequest")
+        let decision = try XCTUnwrap(output["decision"] as? [String: Any])
+        XCTAssertEqual(decision["behavior"] as? String, "allow")
+        let updatedPermissions = try XCTUnwrap(decision["updatedPermissions"] as? [[String: Any]])
+        XCTAssertEqual(updatedPermissions.count, 1)
+        XCTAssertEqual(updatedPermissions[0]["destination"] as? String, "session")
+    }
+
     private func makeSocket(port: Int) throws -> Int32 {
         let socketFD = socket(AF_INET, SOCK_STREAM, 0)
         guard socketFD >= 0 else {

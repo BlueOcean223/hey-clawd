@@ -681,6 +681,12 @@ final class HTTPServer: @unchecked Sendable {
 }
 
 #if DEBUG
+extension HTTPServer {
+    static func testPermissionResponseBody(for result: PermissionDecisionResult) -> Data? {
+        HTTPServer().permissionResponse(result).body
+    }
+}
+
 enum HTTPServerTestSupport {
     static func attachAfterDisconnectResult() async -> (behavior: PermissionBehavior, disconnectHandlerCalled: Bool) {
         let tracker = ConnectionPermissionTracker()

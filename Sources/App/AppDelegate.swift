@@ -650,29 +650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return Self.errorResponse(statusCode: 400, message: "invalid svg payload")
         }
 
-        // 用户在终端处理了权限后，Claude Code 不一定关闭 /permission 连接，
-        // 导致 monitorDisconnect 无法触发、气泡残留。
-        // 当同一 session 收到"权限阶段已过"的事件时，主动清除残留气泡。
-        autoDismissStaleBubbles(sessionId: normalizedSessionId, event: event)
-
         return Self.okResponse(["ok": true])
-    }
-
-    /// 会话推进时自动清除残留的权限气泡。
-    /// 只对明确表示"工具已执行/用户已操作/会话已结束"的事件生效，
-    /// 避免 Notification/Elicitation 等并发事件误清。
-    private static let bubbleDismissEvents: Set<String> = [
-        "PreToolUse", "PostToolUse", "PostToolUseFailure",
-        "UserPromptSubmit", "Stop", "StopFailure", "SessionEnd",
-    ]
-
-    private func autoDismissStaleBubbles(sessionId: String, event: String?) {
-        guard let event, Self.bubbleDismissEvents.contains(event),
-              bubbleStack.hasVisibleBubbles else {
-            return
-        }
-
-        bubbleStack.dismissBubbles(forSession: sessionId)
     }
 
     private static func normalizedPID(_ value: Any?) -> pid_t? {
