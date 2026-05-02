@@ -156,17 +156,6 @@ final class BubbleStack {
         dismissAll(respondingWith: .undecided)
     }
 
-    /// 用户在终端处理权限后，/state 事件表明会话已推进，清除该会话的残留气泡。
-    /// 回 undecided（503）让 Claude Code 忽略这个迟到的响应。
-    func dismissBubbles(forSession sessionId: String) {
-        let ids = pendingPermissions
-            .filter { $0.content.sessionId == sessionId }
-            .map(\.id)
-        for id in ids {
-            removeBubble(id: id, respondingWith: .simple(.undecided))
-        }
-    }
-
     func allowLatestBubble() {
         guard let latestBubble = pendingPermissions.last else {
             return

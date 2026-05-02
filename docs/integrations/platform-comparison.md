@@ -103,9 +103,10 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应
 
 - **Passthrough 自动批准**：TaskCreate/TaskUpdate 等无风险工具直接放行
 - **断连检测**：TCP 连接关闭时自动撤掉气泡（`monitorDisconnect` 循环 receive）
-- **生命周期事件清理**：PostToolUse/Stop/SessionEnd 等事件触发时按 session_id 清理残留气泡
-- **DND 模式**：勿扰模式下所有权限请求直接 deny，不弹气泡
-- **手动关闭按钮**：气泡右上角 × 按钮，覆盖终端批准后连接不断开导致气泡残留的场景（计划中）
+- **明确关闭路径**：用户决策、手动关闭、HTTP 断连；不再按 `session_id` 批量清理
+- **Session allow**：多个 `addRules` suggestion 聚合为一个 `Always allow in this session` 按钮，只写 `destination: "session"`
+- **DND 模式**：勿扰模式下返回 `undecided`，让 Claude Code / CodeBuddy 回退到终端审批
+- **手动关闭按钮**：气泡右上角 × 按钮，覆盖终端批准后连接不断开导致气泡残留的场景
 
 ### Codex CLI 特有
 

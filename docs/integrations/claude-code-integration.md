@@ -25,7 +25,7 @@ Claude Code 进程
 - `Sources/Core/HTTPServer.swift` — HTTP 服务器，处理 /state 和 /permission
 - `Sources/Bubble/BubbleStack.swift` — 气泡队列管理、显示和清理
 - `Sources/Bubble/BubbleView.swift` — 气泡 UI（SwiftUI）
-- `Sources/App/AppDelegate.swift` — 事件路由和生命周期事件 dismiss
+- `Sources/App/AppDelegate.swift` — 事件路由和权限气泡入口
 
 ---
 
@@ -83,10 +83,10 @@ Claude Code 进程
 4. monitorDisconnect 启动 → 循环 receive 监听 TCP EOF/RST
 5. AppDelegate.presentPermissionBubble(request)
    ├─ passthrough 检测 → TaskCreate/TaskUpdate 等直接 auto-allow
-   ├─ DND 模式 → 直接 deny
-   ├─ 隐藏气泡 → 静默（不 deny，保持挂起）
+   ├─ DND 模式 → undecided，让 Claude Code 回退到终端提示
+   ├─ 隐藏气泡 → undecided，让 Claude Code 回退到终端提示
    └─ 正常 → BubbleStack.enqueue → 创建 BubbleWindow 展示气泡
-6. 用户点击 Allow/Deny/Suggestion
+6. 用户点击 Allow / Deny / Always allow in this session
    → resolveBubble → removeBubble(关窗 + 回传决策)
    → PendingPermissionRequest.respond → resume continuation
    → HTTP 响应以 hookSpecificOutput 格式返回给 Claude Code
@@ -110,11 +110,12 @@ Claude Code 进程
 
 ## 气泡清理机制
 
-气泡有两条关闭路径：
+气泡有三条关闭路径：
 
 | 路径 | 触发条件 | 代码位置 |
 |------|----------|----------|
-| **用户点击** | 点击 Allow / Deny / Suggestion 按钮 | `BubbleStack.resolveBubble` → `removeBubble(respondingWith: result)` |
+| **用户决策** | 点击 Allow / Deny / Always allow in this session | `BubbleStack.resolveBubble` → `removeBubble(respondingWith: result)` |
+| **手动关闭** | 点击右上角 X，交回 Claude Code 终端侧决策 | `BubbleStack.enqueue` → `removeBubble(respondingWith: .undecided)` |
 | **断连检测** | Claude Code 关闭 /permission TCP 连接 | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
 ### Passthrough 工具
 
@@ -143,7 +144,7 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **与 d153dee 的关系**：`d153dee` 修复的是 `ConnectionPermissionTracker` 的 check-then-act 竞态——断连信号在 `attach()` 之前到达导致气泡变孤儿。那个问题已解决。此处的问题是**断连根本没有发生**，属于不同的缺口。
 
-**兜底策略**：在气泡右上角添加手动关闭按钮（×），用户可以自行 dismiss 不再需要的气泡。不发送 HTTP 响应（与断连处理一致），不影响 Claude Code 工具执行。
+**兜底策略**：在气泡右上角保留手动关闭按钮（×）。手动关闭返回 `undecided`，HTTP 层表现为 503；Claude Code 的 HTTP hook 语义把非 2xx 当作 non-blocking error，因此终端侧已有决策仍是事实来源。
 
 ### 2. 启发式事件 dismiss 的正确性风险
 
@@ -156,21 +157,33 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **决策**：移除按 `session_id` 批量生命周期清理。正确性 > 便利性。
 
-### 3. 响应格式陷阱
+### 3. Session always allow
+
+气泡只暴露三个主动作：Allow、Deny、Always allow in this session。`permission_suggestions` 仍会被解析，但不会逐条展示成多个按钮。
+
+- Allow：只批准本次请求，不带 `updatedPermissions`
+- Deny：拒绝本次请求
+- Always allow in this session：把有效 `addRules` 聚合成一个 `destination: "session"` 的 `updatedPermissions` 条目
+
+对于 `curl | python3` 这类 compound Bash，Claude Code 可能给多个 `addRules` suggestion。hey-clawd 会把它们合并到一个 session-only allow 动作里，不写 `localSettings` / `projectSettings` / `userSettings`。
+
+`setMode`、空 `rules`、非 allow 行为不会进入这个按钮，避免把"本会话总是允许"误变成权限模式切换或无效持久化。
+
+### 4. 响应格式陷阱
 
 **历史 bug**（`367413e`）：最初权限响应直接返回 `{"behavior":"allow"}`，但 Claude Code hook 系统要求 `hookSpecificOutput` 包装。格式不匹配导致 Claude Code 忽略整个响应，用户点了 Allow 但实际无效。
 
 **同一 bug 的连带问题**：suggestion 按钮（Always Allow、Mode 等）只保留了 `label` 用于显示，原始 payload 丢失，即使格式正确也无数据可传。
 
-**修法**：`PermissionDecisionResult` 结构体打包 behavior + suggestionPayloads，`resolveSuggestionEntry()` 按 Claude Code 要求规范化，`permissionResponse()` 按 `hookSpecificOutput` 格式组装。
+**当前修法**：`PermissionDecisionResult` 结构体打包 behavior + suggestionPayloads；`BubbleView` 将有效 `addRules` 规范化为 session-only `updatedPermissions`；`permissionResponse()` 按 `hookSpecificOutput` 格式组装。
 
-### 4. 首次点击被吞
+### 5. 首次点击被吞
 
 **历史 bug**（`367413e`）：`BubbleWindow`（NSPanel, nonactivatingPanel）的 NSHostingView `acceptsFirstMouse` 默认返回 false，macOS 将第一次点击消耗在"激活窗口"上。
 
 **修法**：`ClickThroughHostingView` 覆写 `acceptsFirstMouse` 返回 `true`。
 
-### 5. 断连检测竞态
+### 6. 断连检测竞态
 
 **历史 bug**（`d153dee`）：`ConnectionPermissionTracker` 的 `monitorDisconnect` 注册的 receive 回调可能在 `attach(request)` 之前触发，`pendingPermission` 为 nil 导致断连信号丢失，气泡成孤儿。
 
