@@ -25,7 +25,7 @@ Claude Code 进程
 - `Sources/Core/HTTPServer.swift` — HTTP 服务器，处理 /state 和 /permission
 - `Sources/Bubble/BubbleStack.swift` — 气泡队列管理、显示和清理
 - `Sources/Bubble/BubbleView.swift` — 气泡 UI（SwiftUI）
-- `Sources/App/AppDelegate.swift` — 事件路由和生命周期事件 dismiss
+- `Sources/App/AppDelegate.swift` — 事件路由和权限气泡入口
 
 ---
 
