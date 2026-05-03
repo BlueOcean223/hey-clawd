@@ -618,6 +618,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let event = payload["event"] as? String
         let svgUpdate = Self.extractSVGUpdate(from: payload)
         let sourcePid = Self.normalizedPID(payload["source_pid"])
+        let agentPid = Self.normalizedAgentPID(from: payload)
+        let pidChain = Self.normalizedPIDChain(payload["pid_chain"])
         let cwd = Self.normalizedString(payload["cwd"] as? String)
         let editor = Self.normalizedEditor(payload["editor"] as? String)
         let agentId = Self.normalizedString(payload["agent_id"] as? String)
@@ -633,6 +635,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 svg: nil,
                 svgWasProvided: false,
                 sourcePid: sourcePid,
+                agentPid: agentPid,
+                pidChain: pidChain,
                 cwd: cwd,
                 editor: editor,
                 agentId: agentId,
@@ -646,6 +650,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 svg: svg,
                 svgWasProvided: true,
                 sourcePid: sourcePid,
+                agentPid: agentPid,
+                pidChain: pidChain,
                 cwd: cwd,
                 editor: editor,
                 agentId: agentId,
@@ -713,6 +719,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return pid_t(number.intValue)
+    }
+
+    private static func normalizedAgentPID(from payload: [String: Any]) -> pid_t? {
+        normalizedPID(
+            payload["agent_pid"] ??
+                payload["claude_pid"] ??
+                payload["cursor_pid"] ??
+                payload["codebuddy_pid"] ??
+                payload["gemini_pid"] ??
+                payload["copilot_pid"]
+        )
+    }
+
+    private static func normalizedPIDChain(_ value: Any?) -> [pid_t]? {
+        guard let values = value as? [Any] else {
+            return nil
+        }
+
+        let normalized = values.compactMap { normalizedPID($0) }
+        return normalized.isEmpty ? nil : normalized
     }
 
     private static func normalizedString(_ value: String?) -> String? {

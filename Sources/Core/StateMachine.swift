@@ -223,7 +223,7 @@ final class StateMachine {
             return nil
         }
 
-        return TerminalFocusTarget(pid: session.sourcePid, editor: session.editor)
+        return session.focusTarget
     }
     var activeSessionSnapshots: [SessionMenuSnapshot] {
         sessions.values
@@ -235,6 +235,10 @@ final class StateMachine {
                     state: $0.state,
                     updatedAt: $0.updatedAt,
                     sourcePid: $0.sourcePid,
+                    sourceProcessIdentity: $0.sourceProcessIdentity,
+                    sourcePidVerified: $0.sourcePidVerified,
+                    agentPid: $0.agentPid,
+                    pidChain: $0.pidChain,
                     cwd: $0.cwd,
                     editor: $0.editor,
                     agentId: $0.agentId
@@ -271,8 +275,10 @@ final class StateMachine {
     private var isPointerPollingSuspended = false
     private var oneShotSourcePid: pid_t?
     private var oneShotFocusTarget: TerminalFocusTarget?
+    private let processInspector: ProcessInspecting
 
-    init() {
+    init(processInspector: ProcessInspecting = SystemProcessInspector.shared) {
+        self.processInspector = processInspector
         startStaleCleanup()
         startSleepMonitor()
     }
@@ -293,6 +299,12 @@ final class StateMachine {
         pendingTransition = nil
         softIdleTransition = nil
     }
+
+#if DEBUG
+    func pruneStaleSessionsForTesting() {
+        pruneStaleSessions(shouldTransition: false)
+    }
+#endif
 
     func setMiniModeEnabled(_ enabled: Bool) {
         miniModeEnabled = enabled
@@ -401,6 +413,8 @@ final class StateMachine {
         svg: String? = nil,
         svgWasProvided: Bool = false,
         sourcePid: pid_t? = nil,
+        agentPid: pid_t? = nil,
+        pidChain: [pid_t]? = nil,
         cwd: String? = nil,
         editor: FocusEditor? = nil,
         agentId: String? = nil,
@@ -419,6 +433,19 @@ final class StateMachine {
         let normalizedSessionId = sessionId.isEmpty ? "default" : sessionId
         let existing = sessions[normalizedSessionId]
         let nextSourcePid = sourcePid ?? existing?.sourcePid
+        let nextAgentPid = agentPid ?? existing?.agentPid
+        let nextPidChain = normalizedPIDChain(pidChain) ?? existing?.pidChain
+        let nextSourceProcessIdentity = sourceProcessIdentity(
+            incomingSourcePid: sourcePid,
+            resolvedSourcePid: nextSourcePid,
+            existing: existing
+        )
+        let nextSourcePidVerified = sourcePidVerified(
+            resolvedSourcePid: nextSourcePid,
+            resolvedAgentPid: nextAgentPid,
+            existing: existing,
+            shouldRefresh: sourcePid != nil || agentPid != nil || pidChain != nil
+        )
         let nextCwd = normalizedString(cwd) ?? existing?.cwd
         let nextEditor = editor ?? existing?.editor
         let nextAgentId = normalizedString(agentId) ?? existing?.agentId
@@ -457,6 +484,10 @@ final class StateMachine {
                 updatedAt: Date(),
                 displaySvg: nil,
                 sourcePid: nextSourcePid,
+                sourceProcessIdentity: nextSourceProcessIdentity,
+                sourcePidVerified: nextSourcePidVerified,
+                agentPid: nextAgentPid,
+                pidChain: nextPidChain,
                 cwd: nextCwd,
                 editor: nextEditor,
                 agentId: nextAgentId,
@@ -477,6 +508,10 @@ final class StateMachine {
                 svgWasProvided: svgWasProvided
             )
             updated.sourcePid = nextSourcePid
+            updated.sourceProcessIdentity = nextSourceProcessIdentity
+            updated.sourcePidVerified = nextSourcePidVerified
+            updated.agentPid = nextAgentPid
+            updated.pidChain = nextPidChain
             updated.cwd = nextCwd
             updated.editor = nextEditor
             updated.agentId = nextAgentId
@@ -494,6 +529,10 @@ final class StateMachine {
                     svgWasProvided: svgWasProvided
                 ),
                 sourcePid: nextSourcePid,
+                sourceProcessIdentity: nextSourceProcessIdentity,
+                sourcePidVerified: nextSourcePidVerified,
+                agentPid: nextAgentPid,
+                pidChain: nextPidChain,
                 cwd: nextCwd,
                 editor: nextEditor,
                 agentId: nextAgentId,
@@ -562,6 +601,55 @@ final class StateMachine {
 
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizedPIDChain(_ value: [pid_t]?) -> [pid_t]? {
+        guard let value else {
+            return nil
+        }
+
+        let normalized = value.filter { $0 > 0 }
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func sourceProcessIdentity(
+        incomingSourcePid: pid_t?,
+        resolvedSourcePid: pid_t?,
+        existing: Session?
+    ) -> FocusProcessIdentity? {
+        if let incomingSourcePid {
+            return processInspector.captureApplicationIdentity(for: incomingSourcePid)
+        }
+
+        guard resolvedSourcePid == existing?.sourcePid else {
+            return nil
+        }
+
+        return existing?.sourceProcessIdentity
+    }
+
+    private func sourcePidVerified(
+        resolvedSourcePid: pid_t?,
+        resolvedAgentPid: pid_t?,
+        existing: Session?,
+        shouldRefresh: Bool
+    ) -> Bool {
+        guard let resolvedSourcePid else {
+            return false
+        }
+
+        if !shouldRefresh, resolvedSourcePid == existing?.sourcePid {
+            return existing?.sourcePidVerified ?? false
+        }
+
+        guard
+            let resolvedAgentPid,
+            processInspector.isProcessAlive(resolvedAgentPid)
+        else {
+            return resolvedSourcePid == existing?.sourcePid && existing?.sourcePidVerified == true
+        }
+
+        return processInspector.isAncestor(resolvedSourcePid, of: resolvedAgentPid)
     }
 
     /// 睡眠序列只在“当前没有高优先级会话占住屏幕”时运行。
@@ -789,6 +877,21 @@ final class StateMachine {
         for (id, session) in sessions {
             let age = now.timeIntervalSince(session.updatedAt)
 
+            if let agentPid = session.agentPid,
+               !processInspector.isProcessAlive(agentPid) {
+                sessions.removeValue(forKey: id)
+                didChange = true
+                continue
+            }
+
+            if let sourcePid = session.sourcePid,
+               session.sourceProcessIdentity != nil,
+               !processInspector.isProcessAlive(sourcePid) {
+                sessions.removeValue(forKey: id)
+                didChange = true
+                continue
+            }
+
             if age > Self.sessionStaleInterval {
                 sessions.removeValue(forKey: id)
                 didChange = true
@@ -1008,10 +1111,7 @@ final class StateMachine {
         if state.isOneShot {
             oneShotSourcePid = triggeringSession?.sourcePid
             if let triggeringSession {
-                oneShotFocusTarget = TerminalFocusTarget(
-                    pid: triggeringSession.sourcePid,
-                    editor: triggeringSession.editor
-                )
+                oneShotFocusTarget = triggeringSession.focusTarget
             } else {
                 oneShotFocusTarget = nil
             }

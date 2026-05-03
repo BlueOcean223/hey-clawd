@@ -218,7 +218,7 @@ enum MenuBuilder {
                     target: target
                 )
                 sessionItem.representedObject = session
-                sessionItem.isEnabled = session.sourcePid != nil || session.editor != nil
+                sessionItem.isEnabled = session.focusTarget.isFocusable
                 sessionItem.image = agentIcon(for: session.agentId)
                 submenu.addItem(sessionItem)
             }
