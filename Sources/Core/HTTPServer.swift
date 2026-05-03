@@ -34,6 +34,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
         case pending
         case completed
         case disconnected
+        case timedOut
     }
 
     init(
@@ -71,7 +72,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
 
     func setDisconnectHandler(_ handler: @escaping @Sendable () -> Void) {
         let shouldInvokeImmediately = lock.withLock { () -> Bool in
-            if status == .disconnected {
+            if status == .disconnected || status == .timedOut {
                 return true
             }
 
@@ -118,6 +119,30 @@ final class PendingPermissionRequest: @unchecked Sendable {
         result.1?()
     }
 
+    private func cancelDueToTimeout() {
+        let result = lock.withLock { () -> (
+            CheckedContinuation<PermissionDecisionResult, Never>?,
+            (@Sendable () -> Void)?,
+            DispatchWorkItem?
+        ) in
+            guard status == .pending else {
+                return (nil, nil, nil)
+            }
+
+            status = .timedOut
+            defer {
+                self.continuation = nil
+                self.disconnectHandler = nil
+                self.timeoutWorkItem = nil
+            }
+            return (continuation, disconnectHandler, timeoutWorkItem)
+        }
+
+        result.2?.cancel()
+        result.0?.resume(returning: .simple(.undecided))
+        result.1?()
+    }
+
     private func scheduleTimeout(after timeoutSeconds: TimeInterval) {
         guard timeoutSeconds > 0 else {
             return
@@ -127,7 +152,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
             guard let self, self.isAwaitingDecision else {
                 return
             }
-            self.respond(with: .simple(.undecided))
+            self.cancelDueToTimeout()
         }
 
         lock.withLock {
@@ -215,7 +240,7 @@ final class HTTPServer: @unchecked Sendable {
     private static let appName = "hey-clawd"
     private static let listenHost = NWEndpoint.Host("127.0.0.1")
     private static let maxRequestBytes = 532_480    // 520 KB，为 512 KB body + 头部留余量
-    private static let statePayloadLimit = 1_024    // POST /state body 上限
+    private static let statePayloadLimit = 8_192    // POST /state body 上限，容纳批量工具元数据
     private static let permissionPayloadLimit = 524_288  // POST /permission body 上限 (512 KB)
     private static let pendingPermissionTimeoutSeconds: TimeInterval = 5 * 60
 

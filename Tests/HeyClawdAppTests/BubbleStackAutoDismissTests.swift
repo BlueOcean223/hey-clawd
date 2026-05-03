@@ -129,6 +129,34 @@ final class BubbleStackAutoDismissTests: XCTestCase {
         XCTAssertEqual(result.behavior.rawValue, PermissionBehavior.undecided.rawValue)
     }
 
+    func testTimedOutRequestRemovesBubble() async throws {
+        let stack = makeStack()
+        let fixture = try makeFixture(sessionId: "session-1", toolName: "Bash", command: "sleep 30")
+        let pending = makePendingRequest(body: fixture.body, timeoutSeconds: 0.05)
+
+        stack.enqueue(content: fixture.content, request: pending.request)
+        XCTAssertEqual(stack.pendingCount, 1)
+
+        let result = await pending.resultTask.value
+        XCTAssertEqual(result.behavior.rawValue, PermissionBehavior.undecided.rawValue)
+        await waitForPendingCount(0, in: stack)
+    }
+
+    private func waitForPendingCount(
+        _ expected: Int,
+        in stack: BubbleStack,
+        timeout: TimeInterval = 1.0,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while stack.pendingCount != expected && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(stack.pendingCount, expected, file: file, line: line)
+    }
+
     private func makeStack() -> BubbleStack {
         _ = NSApplication.shared
         return BubbleStack(
@@ -147,12 +175,17 @@ final class BubbleStackAutoDismissTests: XCTestCase {
     }
 
     private func makePendingRequest(
-        body: Data
+        body: Data,
+        timeoutSeconds: TimeInterval = 5 * 60
     ) -> (request: PendingPermissionRequest, resultTask: Task<PermissionDecisionResult, Never>) {
         let box = PendingPermissionRequestBox()
         let resultTask = Task.detached {
             await withCheckedContinuation { continuation in
-                let request = PendingPermissionRequest(body: body, continuation: continuation)
+                let request = PendingPermissionRequest(
+                    body: body,
+                    continuation: continuation,
+                    timeoutSeconds: timeoutSeconds
+                )
                 box.store(request)
             }
         }

@@ -114,6 +114,30 @@ final class HTTPServerTests: XCTestCase {
         XCTAssertTrue(response.contains("too many pending permissions"))
     }
 
+    func testStatePayloadAcceptsCompactPostToolBatchMetadata() async throws {
+        let server = HTTPServer()
+        defer { server.stop() }
+
+        server.setStateRequestHandler { _ in
+            HTTPResponse(
+                statusCode: 200,
+                headers: ["Content-Type": "application/json"],
+                body: Data("{\"ok\":true}".utf8)
+            )
+        }
+
+        let startedPort = await server.start()
+        let port = try XCTUnwrap(startedPort)
+        let body = try postToolBatchBody(callCount: 8)
+        XCTAssertGreaterThan(body.count, 1_024)
+
+        var request = makeHTTPRequest(path: "/state", body: body)
+        request.append(body)
+        let response = try await sendHTTPRequest(to: port, request: request)
+
+        XCTAssertTrue(response.hasPrefix("HTTP/1.1 200"))
+    }
+
     func testPermissionAllowResponseIncludesUpdatedPermissions() async throws {
         let updatedPermission = Data("""
         {
@@ -221,6 +245,25 @@ final class HTTPServerTests: XCTestCase {
 
     private func permissionBody(sessionId: String) -> Data {
         Data("{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"sleep 30\"},\"session_id\":\"\(sessionId)\"}".utf8)
+    }
+
+    private func postToolBatchBody(callCount: Int) throws -> Data {
+        let calls = (0..<callCount).map { index in
+            [
+                "tool_name": "Bash",
+                "tool_use_id": "toolu_batch_\(index)_abcdefghijklmnopqrstuvwxyz",
+                "tool_input_hash": "sha256:v1:\(String(repeating: "\(index)", count: 64))",
+            ]
+        }
+
+        let payload: [String: Any] = [
+            "state": "working",
+            "event": "PostToolBatch",
+            "session_id": "test-batch",
+            "agent_id": "claude-code",
+            "tool_calls": calls,
+        ]
+        return try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     }
 
     private func makeHTTPRequest(path: String, body: Data) -> Data {
