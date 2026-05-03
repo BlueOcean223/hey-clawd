@@ -112,7 +112,7 @@ swift test
 ./test-animations.sh
 
 # Hook-side Node tests
-cd hooks && node test/pi-install.test.js && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
+cd hooks && node test/index.js
 ```
 
 Further docs:

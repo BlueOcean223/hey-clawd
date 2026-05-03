@@ -5,6 +5,11 @@ import Foundation
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let sparkleUpdaterEnabledKey = "ClawdEnableSparkleUpdater"
     private static let alertIconImage = makeAlertIconImage()
+    private static let terminalApprovalEvents: Set<String> = [
+        "PostToolUse",
+        "PostToolUseFailure",
+        "PostToolBatch",
+    ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
@@ -650,7 +655,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return Self.errorResponse(statusCode: 400, message: "invalid svg payload")
         }
 
+        autoDismissBubbleIfTerminalApproved(
+            payload: payload,
+            event: event,
+            sessionId: normalizedSessionId,
+            agentId: agentId
+        )
+
         return Self.okResponse(["ok": true])
+    }
+
+    private func autoDismissBubbleIfTerminalApproved(
+        payload: [String: Any],
+        event: String?,
+        sessionId: String,
+        agentId: String?
+    ) {
+        guard
+            let event,
+            Self.terminalApprovalEvents.contains(event),
+            agentId == "claude-code"
+        else {
+            return
+        }
+
+        if event == "PostToolBatch" {
+            let toolCalls = payload["tool_calls"] as? [[String: Any]] ?? []
+            for toolCall in toolCalls {
+                dismissBubbleMatchingToolPayload(toolCall, sessionId: sessionId)
+            }
+            return
+        }
+
+        dismissBubbleMatchingToolPayload(payload, sessionId: sessionId)
+    }
+
+    private func dismissBubbleMatchingToolPayload(_ payload: [String: Any], sessionId: String) {
+        guard
+            let toolName = payload["tool_name"] as? String,
+            !toolName.isEmpty,
+            let toolInputHash = payload["tool_input_hash"] as? String,
+            !toolInputHash.isEmpty
+        else {
+            return
+        }
+
+        bubbleStack.dismissBubbleMatchingTerminalApproval(
+            sessionId: sessionId,
+            toolName: toolName,
+            toolInputHash: toolInputHash
+        )
     }
 
     private static func normalizedPID(_ value: Any?) -> pid_t? {

@@ -31,6 +31,7 @@ enum PermissionDecision {
 struct PermissionSuggestion: Identifiable, Equatable {
     enum Kind: String {
         case addRules
+        case addDirectories
     }
 
     let id = UUID()
@@ -49,6 +50,7 @@ struct PermissionBubbleContent {
     let sessionId: String
     let toolName: String
     let toolInput: String
+    let toolInputHash: String?
     let suggestions: [PermissionSuggestion]
 
     static func decode(from body: Data) -> PermissionBubbleContent? {
@@ -62,12 +64,20 @@ struct PermissionBubbleContent {
         let sessionId = normalizedString(payload["session_id"] as? String) ?? "default"
         let toolName = normalizedString(rawToolName) ?? "Unknown"
         let toolInput = previewJSONString(payload["tool_input"])
+        let toolInputHash: String? = {
+            guard let raw = payload["tool_input"] else {
+                return nil
+            }
+            let data = (try? JSONSerialization.data(withJSONObject: raw, options: [.fragmentsAllowed])) ?? Data()
+            return PermissionMatchKey.hashRawJSON(data)
+        }()
         let suggestions = decodeSuggestions(from: payload["permission_suggestions"])
 
         return PermissionBubbleContent(
             sessionId: sessionId,
             toolName: toolName,
             toolInput: toolInput,
+            toolInputHash: toolInputHash,
             suggestions: suggestions
         )
     }
@@ -85,50 +95,84 @@ struct PermissionBubbleContent {
             return []
         }
 
+        var seenPayloads = Set<Data>()
+        var resolvedPayloads: [Data] = []
         var seenRules = Set<Data>()
         var sessionRules: [[String: Any]] = []
+        var seenDirectories = Set<String>()
+        var sessionDirectories: [String] = []
 
         for rawSuggestion in rawSuggestions {
-            guard
-                let type = rawSuggestion["type"] as? String,
-                type == PermissionSuggestion.Kind.addRules.rawValue,
-                let rawBehavior = rawSuggestion["behavior"] as? String,
-                let behavior = PermissionBehavior(rawValue: rawBehavior),
-                behavior == .allow
-            else {
+            guard let type = rawSuggestion["type"] as? String else {
                 continue
             }
 
-            for rule in normalizedAddRules(from: rawSuggestion) {
-                guard let ruleData = canonicalJSONData(rule),
-                      seenRules.insert(ruleData).inserted else {
+            switch type {
+            case PermissionSuggestion.Kind.addRules.rawValue:
+                guard
+                    let rawBehavior = rawSuggestion["behavior"] as? String,
+                    let behavior = PermissionBehavior(rawValue: rawBehavior),
+                    behavior == .allow
+                else {
                     continue
                 }
-                sessionRules.append(rule)
+
+                for rule in normalizedAddRules(from: rawSuggestion) {
+                    guard let ruleData = canonicalJSONData(rule),
+                          seenRules.insert(ruleData).inserted else {
+                        continue
+                    }
+                    sessionRules.append(rule)
+                }
+            case PermissionSuggestion.Kind.addDirectories.rawValue:
+                if let rawBehavior = rawSuggestion["behavior"] as? String,
+                   PermissionBehavior(rawValue: rawBehavior) != .allow {
+                    continue
+                }
+
+                for directory in normalizedDirectories(from: rawSuggestion) where seenDirectories.insert(directory).inserted {
+                    sessionDirectories.append(directory)
+                }
+            default:
+                continue
             }
         }
 
-        guard !sessionRules.isEmpty else {
-            return []
+        if !sessionRules.isEmpty {
+            let resolvedPayload: [String: Any] = [
+                "type": PermissionSuggestion.Kind.addRules.rawValue,
+                "destination": "session",
+                "behavior": PermissionBehavior.allow.rawValue,
+                "rules": sessionRules,
+            ]
+            if let payloadData = canonicalJSONData(resolvedPayload),
+               seenPayloads.insert(payloadData).inserted {
+                resolvedPayloads.append(payloadData)
+            }
         }
 
-        let resolvedPayload: [String: Any] = [
-            "type": "addRules",
-            "destination": "session",
-            "behavior": PermissionBehavior.allow.rawValue,
-            "rules": sessionRules,
-        ]
+        if !sessionDirectories.isEmpty {
+            let resolvedPayload: [String: Any] = [
+                "type": PermissionSuggestion.Kind.addDirectories.rawValue,
+                "destination": "session",
+                "directories": sessionDirectories,
+            ]
+            if let payloadData = canonicalJSONData(resolvedPayload),
+               seenPayloads.insert(payloadData).inserted {
+                resolvedPayloads.append(payloadData)
+            }
+        }
 
-        guard let payloadData = canonicalJSONData(resolvedPayload) else {
+        guard !resolvedPayloads.isEmpty else {
             return []
         }
 
         return [
             PermissionSuggestion(
-                kind: .addRules,
+                kind: sessionRules.isEmpty ? .addDirectories : .addRules,
                 behavior: .allow,
                 label: "Always allow in this session",
-                resolvedPayloads: [payloadData]
+                resolvedPayloads: resolvedPayloads
             ),
         ]
     }
@@ -151,6 +195,14 @@ struct PermissionBubbleContent {
             rule["ruleContent"] = ruleContent
         }
         return rule
+    }
+
+    private static func normalizedDirectories(from raw: [String: Any]) -> [String] {
+        guard let directories = raw["directories"] as? [String] else {
+            return []
+        }
+
+        return directories.compactMap(normalizedString)
     }
 
     private static func canonicalJSONData(_ value: Any) -> Data? {

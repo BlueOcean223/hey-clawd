@@ -45,6 +45,7 @@ Claude Code 进程
 | `PreToolUse` | `.working` | 工具即将执行 |
 | `PostToolUse` | `.working` | 工具执行完毕 |
 | `PostToolUseFailure` | `.working` | 工具执行失败（中途失败由 agent 自适应处理，保持 working；真正任务失败走 `StopFailure`） |
+| `PostToolBatch` | `.working` | 工具批次完成，用于终端 deny-with-message 后的残留气泡匹配 |
 | `Stop` | `.attention` | 回合结束，等待输入 |
 | `StopFailure` | `.error` | 停止失败 |
 | `SubagentStart` | `.juggling` | 子代理启动 |
@@ -110,13 +111,15 @@ Claude Code 进程
 
 ## 气泡清理机制
 
-气泡有三条关闭路径：
+气泡有五条关闭路径：
 
 | 路径 | 触发条件 | 代码位置 |
 |------|----------|----------|
 | **用户决策** | 点击 Allow / Deny / Always allow in this session | `BubbleStack.resolveBubble` → `removeBubble(respondingWith: result)` |
 | **手动关闭** | 点击右上角 X，交回 Claude Code 终端侧决策 | `BubbleStack.enqueue` → `removeBubble(respondingWith: .undecided)` |
-| **断连检测** | Claude Code 关闭 /permission TCP 连接 | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
+| **断连检测** | Claude Code 关闭 /permission TCP 连接（终端 Deny 时会触发） | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
+| **工具完成唯一匹配自动关闭** | 终端侧已处理权限但 Claude 未关闭 TCP；`PostToolUse` / `PostToolUseFailure` / `PostToolBatch` 的 hash 唯一锁定一个待决气泡时关闭 | `AppDelegate.autoDismissBubbleIfTerminalApproved` → `BubbleStack.dismissBubbleMatchingTerminalApproval` |
+| **5 分钟超时兜底** | 气泡入栈后 5 分钟仍未决策且未被任何路径关闭 | `PendingPermissionRequest` 内置 timer → 自动 `.undecided` |
 ### Passthrough 工具
 
 以下工具自动批准，不弹气泡（`BubbleStack.passthroughTools`）：
@@ -146,16 +149,25 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **兜底策略**：在气泡右上角保留手动关闭按钮（×）。手动关闭返回 `undecided`，HTTP 层表现为 503；Claude Code 的 HTTP hook 语义把非 2xx 当作 non-blocking error，因此终端侧已有决策仍是事实来源。
 
-### 2. 启发式事件 dismiss 的正确性风险
+### 2. 启发式事件 dismiss 的正确性风险（已通过受控匹配化解）
 
 **背景**：曾考虑通过监听 /state 事件（如检测到同 session 的 `PostToolUse` 或 `working` 状态）来主动 dismiss 气泡。
 
-**为何放弃**：
-- /state 事件中没有 tool_id 字段，无法精确关联 "哪个事件对应哪个 permission 请求"
-- 同一 session 可能有并行事件（SubagentStop 等），噪声事件会导致**未授权的气泡被错误 dismiss**
-- 一旦气泡被误 dismiss，用户丧失 deny 能力，而 /permission 连接仍挂起，Claude Code 干等——比气泡多停留一分钟严重得多
+**为何当时被否**：
+- /state 事件中没有 tool_id 字段，无法精确关联"哪个事件对应哪个 permission 请求"
+- 同一 session 可能有并行事件（`SubagentStop` 等），噪声事件会导致**未授权的气泡被错误 dismiss**
+- 一旦气泡被误 dismiss，用户丧失 deny 能力，而 /permission 连接仍挂起，Claude Code 干等
 
-**决策**：移除按 `session_id` 批量生命周期清理。正确性 > 便利性。
+**当前的安全方案**：通过观测实验确认 `PostToolUse` 与 `PermissionRequest` 之间 `tool_input` 的 SHA-256 哈希在常见 Bash / Write / MCP 调用上保持稳定（详见 [permission-match-key-spec](../permission-match-key-spec.md)），可作为可靠匹配键。`PostToolBatch` 使用同一 hash 处理终端拒绝且附带说明的残留场景。新机制的硬约束：
+
+- 只对 `PostToolUse` / `PostToolUseFailure` / `PostToolBatch` 触发
+- `agent_id` 必须是 `claude-code`
+- `(session_id, tool_name, tool_input_hash)` 必须**唯一锁定**一个待决气泡
+- 多匹配 → **不关**任何气泡，让用户手动决定
+- 永远响应 `.undecided`，绝不替用户 allow / deny
+- 不在 `PreToolUse / Stop / SessionEnd / UserPromptSubmit / Notification` 上做关闭
+
+正确性 > 便利性的原则没有动；只是有了 hash 之后能在不违反原则的前提下覆盖大部分残留场景。同时为 `PendingPermissionRequest` 加 5 分钟超时兜底，覆盖 `PostToolUse` 也未到达的边缘场景。
 
 ### 3. Session always allow
 
@@ -163,11 +175,21 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 - Allow：只批准本次请求，不带 `updatedPermissions`
 - Deny：拒绝本次请求
-- Always allow in this session：把有效 `addRules` 聚合成一个 `destination: "session"` 的 `updatedPermissions` 条目
+- Always allow in this session：把有效 `addRules` / `addDirectories` 聚合成 `destination: "session"` 的 `updatedPermissions` 条目
 
-对于 `curl | python3` 这类 compound Bash，Claude Code 可能给多个 `addRules` suggestion。hey-clawd 会把它们合并到一个 session-only allow 动作里，不写 `localSettings` / `projectSettings` / `userSettings`。
+对于 `curl | python3` 这类 compound Bash，Claude Code 可能给多个 `addRules` suggestion；对于 `/tmp` 等工作目录外路径，可能给 `addDirectories` suggestion。hey-clawd 会把它们合并到一个 session-only allow 动作里，不写 `localSettings` / `projectSettings` / `userSettings`。
 
-`setMode`、空 `rules`、非 allow 行为不会进入这个按钮，避免把"本会话总是允许"误变成权限模式切换或无效持久化。
+`setMode`、空 `rules` / `directories`、非 allow 行为不会进入这个按钮，避免把"本会话总是允许"误变成权限模式切换或无效持久化。
+
+#### 附加信息边界
+
+Claude Code 终端 UI 的 Yes / No 都可以附带说明；本机 2.1.119 实现里，Yes 说明走内部 `acceptFeedback`，会被追加到工具结果后面给 Claude。
+
+HTTP `PermissionRequest` hook 暴露的字段更窄：`decision.message` 只对 `behavior: "deny"` 生效，会作为拒绝原因反馈给 Claude；`updatedInput` / `updatedPermissions` 只对 `behavior: "allow"` 生效。Claude Code 的 hook 解析路径对 allow 决策最终调用 `handleHookAllow(updatedInput, updatedPermissions)`，不会把 `acceptFeedback` / `message` / `additionalContext` 当成终端 Yes 说明处理。
+
+产品决策：hey-clawd 气泡不提供任何附带说明输入。只在气泡里处理 Allow / Deny / Always allow 的权限决策；如果用户需要告诉 Claude 怎么继续，应回到 Claude Code 终端使用原生 Yes / No 附带说明能力。这样避免只支持 Deny reason、无法支持 Allow feedback 的不对称体验。
+
+终端里的 deny-with-message 会把用户说明写进 rejected `tool_result`。官方 `PermissionDenied` hook 只覆盖 auto mode classifier deny，不覆盖手动拒绝；hey-clawd 通过 `PostToolBatch.tool_calls[*].tool_input` 生成同一 hash，在 `(session_id, tool_name, tool_input_hash)` 唯一命中时关闭残留气泡。
 
 ### 4. 响应格式陷阱
 
@@ -175,7 +197,7 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **同一 bug 的连带问题**：suggestion 按钮（Always Allow、Mode 等）只保留了 `label` 用于显示，原始 payload 丢失，即使格式正确也无数据可传。
 
-**当前修法**：`PermissionDecisionResult` 结构体打包 behavior + suggestionPayloads；`BubbleView` 将有效 `addRules` 规范化为 session-only `updatedPermissions`；`permissionResponse()` 按 `hookSpecificOutput` 格式组装。
+**当前修法**：`PermissionDecisionResult` 结构体打包 behavior + suggestionPayloads；`BubbleView` 将有效 `addRules` / `addDirectories` 规范化为 session-only `updatedPermissions`；`permissionResponse()` 按 `hookSpecificOutput` 格式组装。
 
 ### 5. 首次点击被吞
 

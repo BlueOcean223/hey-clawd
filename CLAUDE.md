@@ -34,7 +34,7 @@ swift test
 ./test-animations.sh
 
 # Hook-side Node tests
-cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
+cd hooks && node test/index.js
 ```
 
 `Tests/HeyClawdAppTests/` covers SVG parsing/rendering (`SVGParserTests`, `CALayerRendererTests`, `CAAnimationBuilderTests`, `SVGBaselineScreenshotTests`), the HTTP server, Codex monitor, state-machine animation, and the full `PetView` pipeline. Permission-bubble and end-to-end UX paths are still validated via `test-bubble.sh` plus manual verification.

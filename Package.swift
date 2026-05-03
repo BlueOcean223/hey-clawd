@@ -51,7 +51,10 @@ let package = Package(
             dependencies: [
                 "HeyClawdApp",
             ],
-            path: "Tests/HeyClawdAppTests"
+            path: "Tests/HeyClawdAppTests",
+            resources: [
+                .copy("Fixtures"),
+            ]
         ),
     ]
 )

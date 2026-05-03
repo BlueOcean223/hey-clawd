@@ -13,6 +13,7 @@ const EVENT_TO_STATE = {
   PreToolUse: "working",
   PostToolUse: "working",
   PostToolUseFailure: "working",
+  PostToolBatch: "working",
   Stop: "attention",
   StopFailure: "error",
   SubagentStart: "juggling",
@@ -24,6 +25,14 @@ const EVENT_TO_STATE = {
   Elicitation: "notification",
   WorktreeCreate: "carrying",
 };
+
+const TOOL_EVENTS = new Set([
+  "PreToolUse",
+  "PostToolUse",
+  "PostToolUseFailure",
+  "PermissionRequest",
+  "PermissionDenied",
+]);
 
 const event = process.argv[2];
 const state = EVENT_TO_STATE[event];
@@ -166,28 +175,29 @@ process.stdin.on("end", () => {
   let sessionId = "default";
   let cwd = "";
   let source = "";
+  let payload = null;
   try {
-    const payload = JSON.parse(Buffer.concat(chunks).toString());
+    payload = JSON.parse(Buffer.concat(chunks).toString());
     sessionId = payload.session_id || "default";
     cwd = payload.cwd || "";
     source = payload.source || payload.reason || "";
   } catch {}
-  send(sessionId, cwd, source);
+  send(sessionId, cwd, source, payload, event);
 });
 
 // Safety: if stdin doesn't end in 400ms, send with default session
 // (200ms was too aggressive on slow machines / AV scanning)
 setTimeout(() => send("default", ""), 400);
 
-function send(sessionId, cwd, source) {
+function send(sessionId, cwd, source, payload, eventName = event) {
   if (sent) return;
   sent = true;
 
   // /clear triggers SessionEnd → SessionStart in quick succession;
   // show sweeping (clearing context) instead of sleeping
-  const resolvedState = (event === "SessionEnd" && source === "clear") ? "sweeping" : state;
+  const resolvedState = (eventName === "SessionEnd" && source === "clear") ? "sweeping" : state;
 
-  const body = { state: resolvedState, session_id: sessionId, event };
+  const body = { state: resolvedState, session_id: sessionId, event: eventName };
   body.agent_id = "claude-code";
   if (cwd) body.cwd = cwd;
   if (process.env.CLAWD_REMOTE) {
@@ -205,10 +215,66 @@ function send(sessionId, cwd, source) {
     if (_isHeadless) body.headless = true;
   }
 
+  appendToolMetadata(body, payload, eventName);
+
   const data = JSON.stringify(body);
+  if (process.env.CLAWD_DRY_RUN === "1") {
+    process.stdout.write(data);
+    process.exit(0);
+  }
+
   postStateToRunningServer(
     data,
     { timeoutMs: 100 }, // runtime port first, then a small local fallback range
     () => process.exit(0)
   );
+}
+
+function appendToolMetadata(body, payload, eventName) {
+  if (!payload || !TOOL_EVENTS.has(eventName)) {
+    if (eventName === "PostToolBatch") {
+      appendBatchToolMetadata(body, payload);
+    }
+    return;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "tool_name")) {
+    body.tool_name = payload.tool_name;
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "tool_input")) {
+    try {
+      body.tool_input_hash = require("./lib/match-key").hashToolInput(payload.tool_input);
+    } catch {}
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "tool_use_id")) {
+    body.tool_use_id = payload.tool_use_id;
+  }
+}
+
+function appendBatchToolMetadata(body, payload) {
+  if (!payload || !Array.isArray(payload.tool_calls)) {
+    return;
+  }
+
+  const { hashToolInput } = require("./lib/match-key");
+  body.tool_calls = payload.tool_calls.flatMap((toolCall) => {
+    if (!toolCall || typeof toolCall !== "object") {
+      return [];
+    }
+
+    const result = {};
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_name")) {
+      result.tool_name = toolCall.tool_name;
+    }
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_use_id")) {
+      result.tool_use_id = toolCall.tool_use_id;
+    }
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_input")) {
+      try {
+        result.tool_input_hash = hashToolInput(toolCall.tool_input);
+      } catch {}
+    }
+
+    return Object.keys(result).length > 0 ? [result] : [];
+  });
 }
