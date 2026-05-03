@@ -27,6 +27,7 @@ final class PendingPermissionRequest: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<PermissionDecisionResult, Never>?
     private var disconnectHandler: (@Sendable () -> Void)?
+    private var timeoutWorkItem: DispatchWorkItem?
     private var status: RequestStatus = .pending
 
     private enum RequestStatus {
@@ -35,9 +36,14 @@ final class PendingPermissionRequest: @unchecked Sendable {
         case disconnected
     }
 
-    init(body: Data, continuation: CheckedContinuation<PermissionDecisionResult, Never>) {
+    init(
+        body: Data,
+        continuation: CheckedContinuation<PermissionDecisionResult, Never>,
+        timeoutSeconds: TimeInterval = 5 * 60
+    ) {
         self.body = body
         self.continuation = continuation
+        scheduleTimeout(after: timeoutSeconds)
     }
 
     var isAwaitingDecision: Bool {
@@ -45,20 +51,22 @@ final class PendingPermissionRequest: @unchecked Sendable {
     }
 
     func respond(with result: PermissionDecisionResult) {
-        let continuation = lock.withLock { () -> CheckedContinuation<PermissionDecisionResult, Never>? in
+        let resolved = lock.withLock { () -> (CheckedContinuation<PermissionDecisionResult, Never>?, DispatchWorkItem?) in
             guard status == .pending else {
-                return nil
+                return (nil, nil)
             }
 
             status = .completed
             defer {
                 self.continuation = nil
                 self.disconnectHandler = nil
+                self.timeoutWorkItem = nil
             }
-            return self.continuation
+            return (self.continuation, self.timeoutWorkItem)
         }
 
-        continuation?.resume(returning: result)
+        resolved.1?.cancel()
+        resolved.0?.resume(returning: result)
     }
 
     func setDisconnectHandler(_ handler: @escaping @Sendable () -> Void) {
@@ -87,21 +95,45 @@ final class PendingPermissionRequest: @unchecked Sendable {
     }
 
     func cancelDueToDisconnect() {
-        let result = lock.withLock { () -> (CheckedContinuation<PermissionDecisionResult, Never>?, (@Sendable () -> Void)?) in
+        let result = lock.withLock { () -> (
+            CheckedContinuation<PermissionDecisionResult, Never>?,
+            (@Sendable () -> Void)?,
+            DispatchWorkItem?
+        ) in
             guard status == .pending else {
-                return (nil, nil)
+                return (nil, nil, nil)
             }
 
             status = .disconnected
             defer {
                 self.continuation = nil
                 self.disconnectHandler = nil
+                self.timeoutWorkItem = nil
             }
-            return (continuation, disconnectHandler)
+            return (continuation, disconnectHandler, timeoutWorkItem)
         }
 
+        result.2?.cancel()
         result.0?.resume(returning: .simple(.deny))
         result.1?()
+    }
+
+    private func scheduleTimeout(after timeoutSeconds: TimeInterval) {
+        guard timeoutSeconds > 0 else {
+            return
+        }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isAwaitingDecision else {
+                return
+            }
+            self.respond(with: .simple(.undecided))
+        }
+
+        lock.withLock {
+            timeoutWorkItem = workItem
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeoutSeconds, execute: workItem)
     }
 }
 
@@ -174,6 +206,7 @@ final class HTTPServer: @unchecked Sendable {
     struct Configuration: Sendable {
         var maxActiveConnections = 64
         var maxPendingPermissionRequests = 8
+        var pendingPermissionTimeoutSeconds = HTTPServer.pendingPermissionTimeoutSeconds
     }
 
     static let defaultPort = 23_333
@@ -184,6 +217,7 @@ final class HTTPServer: @unchecked Sendable {
     private static let maxRequestBytes = 532_480    // 520 KB，为 512 KB body + 头部留余量
     private static let statePayloadLimit = 1_024    // POST /state body 上限
     private static let permissionPayloadLimit = 524_288  // POST /permission body 上限 (512 KB)
+    private static let pendingPermissionTimeoutSeconds: TimeInterval = 5 * 60
 
     private let queue = DispatchQueue(label: "hey-clawd.http-server")
     private let lock = NSLock()
@@ -576,7 +610,11 @@ final class HTTPServer: @unchecked Sendable {
         let handler = lock.withLock { permissionRequestHandler }
 
         let result = await withCheckedContinuation { continuation in
-            let request = PendingPermissionRequest(body: body, continuation: continuation)
+            let request = PendingPermissionRequest(
+                body: body,
+                continuation: continuation,
+                timeoutSeconds: configuration.pendingPermissionTimeoutSeconds
+            )
             permissionTracker.attach(request)
 
             if let handler {
@@ -703,6 +741,20 @@ enum HTTPServerTestSupport {
 
         return (result.behavior, disconnectFlag.value)
     }
+
+    static func pendingPermissionTimeoutBehavior(timeoutSeconds: TimeInterval) async -> PermissionBehavior {
+        let holder = PendingPermissionRequestHolder()
+        let result = await withCheckedContinuation { continuation in
+            let request = PendingPermissionRequest(
+                body: Data(),
+                continuation: continuation,
+                timeoutSeconds: timeoutSeconds
+            )
+            holder.store(request)
+        }
+        holder.clear()
+        return result.behavior
+    }
 }
 
 private final class LockedFlag: @unchecked Sendable {
@@ -716,6 +768,23 @@ private final class LockedFlag: @unchecked Sendable {
     func setTrue() {
         lock.withLock {
             storage = true
+        }
+    }
+}
+
+private final class PendingPermissionRequestHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var request: PendingPermissionRequest?
+
+    func store(_ request: PendingPermissionRequest) {
+        lock.withLock {
+            self.request = request
+        }
+    }
+
+    func clear() {
+        lock.withLock {
+            request = nil
         }
     }
 }

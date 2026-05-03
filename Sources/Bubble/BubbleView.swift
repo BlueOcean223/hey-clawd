@@ -49,6 +49,7 @@ struct PermissionBubbleContent {
     let sessionId: String
     let toolName: String
     let toolInput: String
+    let toolInputHash: String?
     let suggestions: [PermissionSuggestion]
 
     static func decode(from body: Data) -> PermissionBubbleContent? {
@@ -62,12 +63,20 @@ struct PermissionBubbleContent {
         let sessionId = normalizedString(payload["session_id"] as? String) ?? "default"
         let toolName = normalizedString(rawToolName) ?? "Unknown"
         let toolInput = previewJSONString(payload["tool_input"])
+        let toolInputHash: String? = {
+            guard let raw = payload["tool_input"] else {
+                return nil
+            }
+            let data = (try? JSONSerialization.data(withJSONObject: raw, options: [.fragmentsAllowed])) ?? Data()
+            return PermissionMatchKey.hashRawJSON(data)
+        }()
         let suggestions = decodeSuggestions(from: payload["permission_suggestions"])
 
         return PermissionBubbleContent(
             sessionId: sessionId,
             toolName: toolName,
             toolInput: toolInput,
+            toolInputHash: toolInputHash,
             suggestions: suggestions
         )
     }

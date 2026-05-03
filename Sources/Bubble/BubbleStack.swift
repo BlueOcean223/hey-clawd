@@ -35,6 +35,40 @@ final class BubbleStack {
         !pendingPermissions.isEmpty
     }
 
+    var pendingCount: Int {
+        pendingPermissions.count
+    }
+
+    func countMatching(sessionId: String, toolName: String, toolInputHash: String) -> Int {
+        pendingPermissions.filter {
+            $0.content.sessionId == sessionId &&
+                $0.content.toolName == toolName &&
+                $0.content.toolInputHash == toolInputHash
+        }.count
+    }
+
+    /// 当 /state 收到 PostToolUse / PostToolUseFailure 且 hash 唯一匹配某个待决气泡时，
+    /// 关闭那唯一一个气泡（响应 .undecided）。返回是否关闭。
+    @discardableResult
+    func dismissBubbleMatchingTerminalApproval(
+        sessionId: String,
+        toolName: String,
+        toolInputHash: String
+    ) -> Bool {
+        let matches = pendingPermissions.filter {
+            $0.content.sessionId == sessionId &&
+                $0.content.toolName == toolName &&
+                $0.content.toolInputHash == toolInputHash
+        }
+
+        guard matches.count == 1, let bubble = matches.first else {
+            return false
+        }
+
+        removeBubble(id: bubble.id, respondingWith: .simple(.undecided))
+        return true
+    }
+
     func enqueue(
         content: PermissionBubbleContent,
         request: PendingPermissionRequest,

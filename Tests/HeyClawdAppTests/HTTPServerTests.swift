@@ -11,6 +11,12 @@ final class HTTPServerTests: XCTestCase {
         XCTAssertTrue(result.disconnectHandlerCalled)
     }
 
+    func testPendingPermissionRequestTimesOutAsUndecided() async {
+        let behavior = await HTTPServerTestSupport.pendingPermissionTimeoutBehavior(timeoutSeconds: 0.2)
+
+        XCTAssertEqual(behavior.rawValue, PermissionBehavior.undecided.rawValue)
+    }
+
     func testPermissionDisconnectAfterSocketHalfCloseCancelsPendingRequest() async throws {
         let server = HTTPServer()
         defer { server.stop() }
