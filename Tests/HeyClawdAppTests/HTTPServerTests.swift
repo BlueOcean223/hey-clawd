@@ -144,6 +144,23 @@ final class HTTPServerTests: XCTestCase {
         XCTAssertEqual(updatedPermissions[0]["destination"] as? String, "session")
     }
 
+    func testPermissionDenyResponseOmitsMessage() async throws {
+        let body = try XCTUnwrap(
+            HTTPServer.testPermissionResponseBody(
+                for: PermissionDecisionResult(
+                    behavior: .deny,
+                    suggestionPayloads: []
+                )
+            )
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let output = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        let decision = try XCTUnwrap(output["decision"] as? [String: Any])
+
+        XCTAssertEqual(decision["behavior"] as? String, "deny")
+        XCTAssertNil(decision["message"])
+    }
+
     private func makeSocket(port: Int) throws -> Int32 {
         let socketFD = socket(AF_INET, SOCK_STREAM, 0)
         guard socketFD >= 0 else {
