@@ -110,13 +110,15 @@ Claude Code 进程
 
 ## 气泡清理机制
 
-气泡有三条关闭路径：
+气泡有五条关闭路径：
 
 | 路径 | 触发条件 | 代码位置 |
 |------|----------|----------|
 | **用户决策** | 点击 Allow / Deny / Always allow in this session | `BubbleStack.resolveBubble` → `removeBubble(respondingWith: result)` |
 | **手动关闭** | 点击右上角 X，交回 Claude Code 终端侧决策 | `BubbleStack.enqueue` → `removeBubble(respondingWith: .undecided)` |
-| **断连检测** | Claude Code 关闭 /permission TCP 连接 | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
+| **断连检测** | Claude Code 关闭 /permission TCP 连接（终端 Deny 时会触发） | `monitorDisconnect` → `cancelPendingPermission` → `removeBubble(respondingWith: nil)` |
+| **PostToolUse 唯一匹配自动关闭** | 终端 Allow 后 Claude 不关 TCP，但工具完成后会发 `PostToolUse` / `PostToolUseFailure`，hash 唯一锁定一个待决气泡时关闭 | `AppDelegate.autoDismissBubbleIfTerminalApproved` → `BubbleStack.dismissBubbleMatchingTerminalApproval` |
+| **5 分钟超时兜底** | 气泡入栈后 5 分钟仍未决策且未被任何路径关闭 | `PendingPermissionRequest` 内置 timer → 自动 `.undecided` |
 ### Passthrough 工具
 
 以下工具自动批准，不弹气泡（`BubbleStack.passthroughTools`）：
@@ -146,16 +148,25 @@ TaskCreate, TaskUpdate, TaskGet, TaskList, TaskStop, TaskOutput
 
 **兜底策略**：在气泡右上角保留手动关闭按钮（×）。手动关闭返回 `undecided`，HTTP 层表现为 503；Claude Code 的 HTTP hook 语义把非 2xx 当作 non-blocking error，因此终端侧已有决策仍是事实来源。
 
-### 2. 启发式事件 dismiss 的正确性风险
+### 2. 启发式事件 dismiss 的正确性风险（已通过受控匹配化解）
 
 **背景**：曾考虑通过监听 /state 事件（如检测到同 session 的 `PostToolUse` 或 `working` 状态）来主动 dismiss 气泡。
 
-**为何放弃**：
-- /state 事件中没有 tool_id 字段，无法精确关联 "哪个事件对应哪个 permission 请求"
-- 同一 session 可能有并行事件（SubagentStop 等），噪声事件会导致**未授权的气泡被错误 dismiss**
-- 一旦气泡被误 dismiss，用户丧失 deny 能力，而 /permission 连接仍挂起，Claude Code 干等——比气泡多停留一分钟严重得多
+**为何当时被否**：
+- /state 事件中没有 tool_id 字段，无法精确关联"哪个事件对应哪个 permission 请求"
+- 同一 session 可能有并行事件（`SubagentStop` 等），噪声事件会导致**未授权的气泡被错误 dismiss**
+- 一旦气泡被误 dismiss，用户丧失 deny 能力，而 /permission 连接仍挂起，Claude Code 干等
 
-**决策**：移除按 `session_id` 批量生命周期清理。正确性 > 便利性。
+**当前的安全方案**：通过观测实验确认 `PostToolUse` 与 `PermissionRequest` 之间 `tool_input` 的 SHA-256 哈希在常见 Bash / Write / MCP 调用上保持稳定（详见 [permission-match-key-spec](../permission-match-key-spec.md)），可作为可靠匹配键。新机制的硬约束：
+
+- 只对 `PostToolUse` / `PostToolUseFailure` 触发
+- `agent_id` 必须是 `claude-code`
+- `(session_id, tool_name, tool_input_hash)` 必须**唯一锁定**一个待决气泡
+- 多匹配 → **不关**任何气泡，让用户手动决定
+- 永远响应 `.undecided`，绝不替用户 allow / deny
+- 不在 `PreToolUse / Stop / SessionEnd / UserPromptSubmit / Notification` 上做关闭
+
+正确性 > 便利性的原则没有动；只是有了 hash 之后能在不违反原则的前提下覆盖大部分残留场景。同时为 `PendingPermissionRequest` 加 5 分钟超时兜底，覆盖 `PostToolUse` 也未到达的边缘场景。
 
 ### 3. Session always allow
 

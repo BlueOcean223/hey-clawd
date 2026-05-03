@@ -102,11 +102,13 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应
 ### 权限气泡（Claude Code / CodeBuddy）
 
 - **Passthrough 自动批准**：TaskCreate/TaskUpdate 等无风险工具直接放行
-- **断连检测**：TCP 连接关闭时自动撤掉气泡（`monitorDisconnect` 循环 receive）
-- **明确关闭路径**：用户决策、手动关闭、HTTP 断连；不再按 `session_id` 批量清理
+- **断连检测**：TCP 连接关闭时自动撤掉气泡（`monitorDisconnect` 循环 receive），覆盖终端 Deny 路径
+- **PostToolUse 唯一匹配自动关闭**（仅 Claude Code）：终端 Allow 后 Claude 不关 TCP，但工具完成后会发 `PostToolUse` / `PostToolUseFailure`，hook 默认携带 `tool_input_hash` 元数据，hey-clawd 在 `(session, tool, hash)` 唯一锁定时关闭气泡（多匹配跳过保护）
+- **5 分钟超时兜底**：`PendingPermissionRequest` 入栈后 5 分钟仍未决策时自动 `.undecided`，覆盖 hook 失败 / 进程僵死等边缘场景
+- **明确关闭路径**：用户决策、手动关闭、HTTP 断连、PostToolUse 唯一匹配、5 分钟超时；不按 `session_id` 批量清理
 - **Session allow**：多个 `addRules` suggestion 聚合为一个 `Always allow in this session` 按钮，只写 `destination: "session"`
 - **DND 模式**：勿扰模式下返回 `undecided`，让 Claude Code / CodeBuddy 回退到终端审批
-- **手动关闭按钮**：气泡右上角 × 按钮，覆盖终端批准后连接不断开导致气泡残留的场景
+- **手动关闭按钮**：气泡右上角 × 按钮，作为协议无法证明场景的最终兜底
 
 ### Codex CLI 特有
 
