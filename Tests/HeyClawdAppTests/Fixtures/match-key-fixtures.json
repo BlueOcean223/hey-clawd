@@ -84,6 +84,41 @@
     "expected": "sha256:v1:114e283af836cebbf0e1ddaf140e600f5c730d762fa94b1a9fcf0d74edac2998"
   },
   {
+    "name": "decimal_lower_boundary",
+    "input": {
+      "n": 0.000001
+    },
+    "expected": "sha256:v1:28343867a0be00aee19f81aa90cfd6c646878b9303fa15410d16bfd3f8894578"
+  },
+  {
+    "name": "small_exponent",
+    "input": {
+      "n": 0.0000001
+    },
+    "expected": "sha256:v1:747d6d23b64d1b2d579adb832b44de31c91c875bbef7a8e397f5d183a746b54b"
+  },
+  {
+    "name": "large_decimal_boundary",
+    "input": {
+      "n": 100000000000000000000
+    },
+    "expected": "sha256:v1:58d2d5b8dd4228ab5775ce84f996718fa19ed49872271e9649b70cebaca26a09"
+  },
+  {
+    "name": "positive_exponent_boundary",
+    "input": {
+      "n": 1e+21
+    },
+    "expected": "sha256:v1:f1ee2b60ee95a3170fdc07a577e5f3514ced26867443d69da265acadead81007"
+  },
+  {
+    "name": "negative_small_exponent",
+    "input": {
+      "n": -0.00000012
+    },
+    "expected": "sha256:v1:170a5adaaba39af90155e70127e9a368c93a208d4a1daa95492224f368d24e3a"
+  },
+  {
     "name": "bash_command",
     "input": {
       "command": "curl -s https://example.com/script.py | python3 -",

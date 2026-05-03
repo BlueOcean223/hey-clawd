@@ -101,9 +101,80 @@ enum PermissionMatchKey {
             return "0"
         }
 
-        var rendered = String(value)
-        if rendered.hasSuffix(".0") {
-            rendered.removeLast(2)
+        return canonicalDouble(value)
+    }
+
+    private static func canonicalDouble(_ value: Double) -> String {
+        let rendered = String(value).replacingOccurrences(of: "E", with: "e")
+        guard rendered.contains("e") else {
+            return trimTrailingFractionZeros(rendered)
+        }
+
+        let normalizedExponent = normalizedExponentString(rendered)
+        let absoluteValue = abs(value)
+        if absoluteValue >= 1e-6 && absoluteValue < 1e21 {
+            return decimalNotation(fromExponentString: normalizedExponent)
+        }
+
+        return normalizedExponent
+    }
+
+    private static func normalizedExponentString(_ rendered: String) -> String {
+        let parts = rendered.split(separator: "e", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, let exponent = Int(parts[1]) else {
+            return rendered
+        }
+
+        let mantissa = trimTrailingFractionZeros(String(parts[0]))
+        let sign = exponent >= 0 ? "+" : "-"
+        return "\(mantissa)e\(sign)\(abs(exponent))"
+    }
+
+    private static func decimalNotation(fromExponentString rendered: String) -> String {
+        let parts = rendered.split(separator: "e", maxSplits: 1, omittingEmptySubsequences: false)
+        guard parts.count == 2, let exponent = Int(parts[1]) else {
+            return trimTrailingFractionZeros(rendered)
+        }
+
+        var mantissa = String(parts[0])
+        var sign = ""
+        if mantissa.hasPrefix("-") {
+            sign = "-"
+            mantissa.removeFirst()
+        } else if mantissa.hasPrefix("+") {
+            mantissa.removeFirst()
+        }
+
+        let mantissaParts = mantissa.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false)
+        let integerPart = String(mantissaParts.first ?? "")
+        let fractionPart = mantissaParts.count > 1 ? String(mantissaParts[1]) : ""
+        let digits = integerPart + fractionPart
+        let decimalIndex = integerPart.count + exponent
+
+        let decimal: String
+        if decimalIndex <= 0 {
+            decimal = "0." + String(repeating: "0", count: -decimalIndex) + digits
+        } else if decimalIndex >= digits.count {
+            decimal = digits + String(repeating: "0", count: decimalIndex - digits.count)
+        } else {
+            let splitIndex = digits.index(digits.startIndex, offsetBy: decimalIndex)
+            decimal = String(digits[..<splitIndex]) + "." + String(digits[splitIndex...])
+        }
+
+        return sign + trimTrailingFractionZeros(decimal)
+    }
+
+    private static func trimTrailingFractionZeros(_ value: String) -> String {
+        guard value.contains(".") else {
+            return value
+        }
+
+        var rendered = value
+        while rendered.hasSuffix("0") {
+            rendered.removeLast()
+        }
+        if rendered.hasSuffix(".") {
+            rendered.removeLast()
         }
         return rendered
     }

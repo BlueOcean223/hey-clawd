@@ -23,9 +23,7 @@ sha256:v1:<64 位小写十六进制>
 - 其它字符串内容按 UTF-8 原样输出。
 - 整数不带 `.0`。
 - 数字无尾随零。
-- 浮点数使用最短可往返的 double 字符串：
-  - JavaScript：`Number.prototype.toString`。
-  - Swift：`String(value)`（针对 `Double`）。
+- 浮点数使用 JavaScript `Number.prototype.toString` 兼容格式；Swift 端会把 `String(Double)` 的指数形式补正为相同边界与指数写法。
 - `null`、`true`、`false` 输出为 JSON 字面量。
 - `NaN` 与无穷大视为非法。
 
