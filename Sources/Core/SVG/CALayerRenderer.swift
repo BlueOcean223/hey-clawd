@@ -1,8 +1,18 @@
 import AppKit
 import QuartzCore
 
+/// 把 `SVGDocument` 转成可直接挂载的 CALayer 树。
+///
+/// 与浏览器 SVG 渲染的对应关系：
+/// - rootLayer 配置 viewBox 平移 + isGeometryFlipped 翻转 Y 轴；
+/// - 每个 SVG 节点对应一个 CALayer / CAShapeLayer，按层级嵌套；
+/// - `<use>` 通过 `visitedDefs` 防止循环引用；
+/// - `shape-rendering=crispEdges` 时关闭抗锯齿并向下传播。
+///
+/// 静态样式 / class / id 绑定的应用顺序：节点本身属性 → CSS class → CSS id → 内联 style。
 @MainActor
 enum CALayerRenderer {
+    /// 渲染入口。返回的 CALayer 自身就是可作为 sublayer 添加到任意 host 的根。
     static func build(_ document: SVGDocument) -> CALayer {
         let rootLayer = makeLayer()
         rootLayer.bounds = rootBounds(for: document)
@@ -45,6 +55,8 @@ enum CALayerRenderer {
         return rootLayer
     }
 
+    /// 像素级命中检测：透明像素（fill = 透明 / opacity = 0）一律不算命中。
+    /// PetView 用它判定鼠标是否真落在桌宠身上以决定是否要 ignoresMouseEvents。
     static func hitTest(point: CGPoint, in rootLayer: CALayer) -> Bool {
         hitTest(point: point, in: rootLayer, from: rootLayer)
     }

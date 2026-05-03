@@ -2,6 +2,8 @@ import Foundation
 import CoreGraphics
 import QuartzCore
 
+/// CSS 短手 + 长手 animation 绑定的统一接口；CAAnimationBuilder 接受 `any AnimationBinding`
+/// 屏蔽 class-selector / inline 两种来源的差异。
 protocol AnimationBinding {
     var animationName: String { get }
     var duration: TimeInterval { get }
@@ -12,7 +14,15 @@ protocol AnimationBinding {
     var fillMode: AnimationFillMode { get }
 }
 
+/// 把 `SVGAnimation` (CSS keyframes) + `AnimationBinding` (animation 短手) 转成 `CAAnimation`。
+///
+/// 主要负担：
+/// - CSS 关键帧偏移 → CAKeyframeAnimation 的 keyTimes；
+/// - CSS timing-function 翻译为 `CAMediaTimingFunction`（step-end 用 linear 近似）；
+/// - 不同属性走不同 keyPath（transform / opacity / fillColor / strokeColor / 自定义 d 路径）。
 enum CAAnimationBuilder {
+    /// CSS timing → Core Animation timing 的转换表。
+    /// step-end 在 CAAnimation 里没有原生对应，资产里仅作占位用，故退化为 linear。
     static func mediaTimingFunction(from tf: TimingFunction) -> CAMediaTimingFunction {
         switch tf {
         case .easeInOut:
@@ -37,6 +47,8 @@ enum CAAnimationBuilder {
         return false
     }
 
+    /// 入口：根据 CSS 属性名分发到不同的 keyPath。
+    /// `circleCenter` 仅 transform 上的 `transform-origin` 计算需要；其余属性会忽略。
     static func buildKeyframeAnimation(
         for cssProperty: String,
         keyframes: [SVGKeyframe],
