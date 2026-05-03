@@ -1,9 +1,21 @@
 import AppKit
 import QuartzCore
 
+/// 桌宠的 Core Animation 渲染宿主视图。
+///
+/// 三大职责：
+/// 1. 把 SVG 文件解析、缓存（`SVGDocumentCache`）并构建成 CALayer 树挂到 host layer 上；
+/// 2. 切换 SVG 时做 0.12s 交叉淡入淡出，避免硬切跳帧；
+/// 3. 命中测试 + 鼠标穿透：透明像素让鼠标事件穿过，只有桌宠主体才"接收"点击/拖拽。
+///
+/// 眼球追踪由 `EyeTracker` 用 10Hz timer 驱动，PetView 负责把偏移转成
+/// 各 layer（eyes-js / body-js / shadow-js）的视觉位移。
 @MainActor
 final class PetView: NSView {
+    /// 拖拽时切换的统一反应 SVG。
     private static let dragReactionSVG = "clawd-react-drag.svg"
+    /// 命中检测自愈定时器周期：当窗口被设为 ignoresMouseEvents=true 后，
+    /// 鼠标移动事件不再投递给我们；这个定时器周期性主动询问光标位置以恢复事件。
     private static let mouseRecoveryTimerIntervalMs: Int = 200
 
     private var mountedRootLayer: CALayer?
@@ -100,6 +112,7 @@ final class PetView: NSView {
         window?.ignoresMouseEvents = true
     }
 
+    /// 加载 SVG 并直接挂上去，不做转场——用于首屏和"被反应动画覆盖"路径。
     func loadSVG(_ filename: String) {
         guard let hostLayer = layer,
               let (newRootLayer, mountedFilename) = buildSVGLayer(from: filename) else {
@@ -119,6 +132,9 @@ final class PetView: NSView {
         syncEyeTrackingTimer(forceResend: true)
     }
 
+    /// 切换到新的 SVG，伴随 0.12s 交叉淡入淡出。
+    /// 同名 SVG 直接跳过。`crossfadeGeneration` 用于让超时清理只动当次淡出对象，
+    /// 避免在快速连续切换时旧的 timer 误删新挂上的 layer。
     func switchSVG(_ filename: String) {
         guard mountedRootLayer != nil else {
             loadSVG(filename)
@@ -231,6 +247,8 @@ final class PetView: NSView {
         syncEyeTrackingTimer(forceResend: true)
     }
 
+    /// 透明 SVG 上判断点击是否落在像素上。
+    /// `lastHitTestPoint` 配合 ±2pt 容差防止 mouseMoved 与 mouseDown 之间的微小偏差导致漏判。
     func shouldHandleMouse(at windowPoint: NSPoint) -> Bool {
         guard window != nil else {
             return false
@@ -301,6 +319,8 @@ final class PetView: NSView {
         mountedSVGFilename = nil
     }
 
+    /// 仅在指定的 idle 类 SVG 上启用眼球追踪：
+    /// 一是其它动画自带眼球关键帧会冲突，二是 working/error 等表演型动画追眼会显得诡异。
     private var shouldTrackEyes: Bool {
         guard !isTrackingPaused, !isCrossfading else {
             return false
@@ -334,6 +354,9 @@ final class PetView: NSView {
         )
     }
 
+    /// 把 EyeTracker 算出的偏移翻译成 layer transform：
+    /// body / shadow 用更小的乘数跟随，制造视差感而非整体平移。
+    /// 镜像（mini 模式贴左侧）时 X 取反，让眼睛朝向同一边。
     private func applyEyeMove(dx: CGFloat, dy: CGFloat) {
         guard let eyesLayer else {
             return
@@ -499,6 +522,8 @@ final class PetView: NSView {
         window?.ignoresMouseEvents = !hit
     }
 
+    /// 当 ignoresMouseEvents 为 true 时系统不再投递 mouseMoved；
+    /// 周期性主动用 NSEvent.mouseLocation 检查光标是否落在像素上，恢复事件投递。
     private func recoverMouseTrackingIfNeeded() {
         guard let window, window.ignoresMouseEvents, !isTrackingPaused else {
             return
