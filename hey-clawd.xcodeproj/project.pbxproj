@@ -23,6 +23,7 @@
 		B100000000000000000000A9 /* BubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B100000000000000000000B9 /* BubbleView.swift */; };
 		B10000000000000000000AA0 /* BubbleWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB0 /* BubbleWindow.swift */; };
 		B10000000000000000000AA1 /* TerminalFocus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB1 /* TerminalFocus.swift */; };
+		B10000000000000000000CA0 /* PermissionMatchKey.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000CB0 /* PermissionMatchKey.swift */; };
 		B10000000000000000000AA2 /* MiniMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB2 /* MiniMode.swift */; };
 		B10000000000000000000AA3 /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB3 /* SparkleUpdater.swift */; };
 		B10000000000000000000AA4 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000BB4 /* StatusBarController.swift */; };
@@ -63,6 +64,7 @@
 		B100000000000000000000B9 /* BubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleView.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB0 /* BubbleWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BubbleWindow.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB1 /* TerminalFocus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalFocus.swift; sourceTree = "<group>"; };
+		B10000000000000000000CB0 /* PermissionMatchKey.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionMatchKey.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB2 /* MiniMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiniMode.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB3 /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
 		B10000000000000000000BB4 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
@@ -153,6 +155,7 @@
 				B100000000000000000000B4 /* Session.swift */,
 				B100000000000000000000B5 /* SoundPlayer.swift */,
 				B100000000000000000000B6 /* StateMachine.swift */,
+				B10000000000000000000CB0 /* PermissionMatchKey.swift */,
 				D100000000000000000000B1 /* HookInstaller.swift */,
 			);
 			path = Sources/Core;
@@ -305,6 +308,7 @@
 				B100000000000000000000A4 /* Session.swift in Sources */,
 				B100000000000000000000A5 /* SoundPlayer.swift in Sources */,
 				B100000000000000000000A6 /* StateMachine.swift in Sources */,
+				B10000000000000000000CA0 /* PermissionMatchKey.swift in Sources */,
 				B100000000000000000000A7 /* EyeTracker.swift in Sources */,
 				B100000000000000000000A8 /* BubbleStack.swift in Sources */,
 				B100000000000000000000A9 /* BubbleView.swift in Sources */,
