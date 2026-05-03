@@ -2,6 +2,9 @@ import CryptoKit
 import Foundation
 
 enum PermissionMatchKey {
+    private static let maxJavaScriptSafeInteger: UInt64 = 9_007_199_254_740_991
+    private static let minJavaScriptSafeInteger: Int64 = -9_007_199_254_740_991
+
     static func canonicalize(_ value: Any) -> Data {
         guard let canonical = try? canonicalString(value) else {
             return Data()
@@ -88,12 +91,28 @@ enum PermissionMatchKey {
         }
 
         let objCType = String(cString: number.objCType)
-        let integerTypes: Set<String> = ["c", "C", "s", "S", "i", "I", "l", "L", "q", "Q", "B"]
-        if integerTypes.contains(objCType) {
-            return "\(number.int64Value)"
+        switch objCType {
+        case "c", "s", "i", "l", "q", "B":
+            let value = number.int64Value
+            if value >= minJavaScriptSafeInteger && value <= Int64(maxJavaScriptSafeInteger) {
+                return "\(value)"
+            }
+            // The Node hook receives JSON through JSON.parse, so unsafe integers
+            // have already been rounded to JavaScript Number values.
+            return try canonicalJSNumber(number.doubleValue)
+        case "C", "S", "I", "L", "Q":
+            let value = number.uint64Value
+            if value <= maxJavaScriptSafeInteger {
+                return "\(value)"
+            }
+            // Avoid int64Value wraparound for uint64 JSON values and match Node.
+            return try canonicalJSNumber(number.doubleValue)
+        default:
+            return try canonicalJSNumber(number.doubleValue)
         }
+    }
 
-        let value = number.doubleValue
+    private static func canonicalJSNumber(_ value: Double) throws -> String {
         guard value.isFinite else {
             throw CanonicalizationError.unsupportedValue
         }

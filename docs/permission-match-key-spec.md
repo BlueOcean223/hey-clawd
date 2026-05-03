@@ -21,7 +21,8 @@ sha256:v1:<64 位小写十六进制>
 - 字符串使用以下转义子集：`\"`、`\\`、`\b`、`\f`、`\n`、`\r`、`\t`。
 - 其它低于 `0x20` 的控制字符使用 `\u00XX` 形式转义。
 - 其它字符串内容按 UTF-8 原样输出。
-- 整数不带 `.0`。
+- JavaScript 安全整数范围内的整数不带 `.0`。
+- 超出 JavaScript 安全整数范围的整数按 `JSON.parse` 后的 `Number` 值规范化，不保留原始高精度整数 token。
 - 数字无尾随零。
 - 浮点数使用 JavaScript `Number.prototype.toString` 兼容格式；Swift 端会把 `String(Double)` 的指数形式补正为相同边界与指数写法。
 - `null`、`true`、`false` 输出为 JSON 字面量。

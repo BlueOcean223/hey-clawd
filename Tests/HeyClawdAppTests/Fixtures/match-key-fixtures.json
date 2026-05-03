@@ -84,6 +84,34 @@
     "expected": "sha256:v1:114e283af836cebbf0e1ddaf140e600f5c730d762fa94b1a9fcf0d74edac2998"
   },
   {
+    "name": "unsafe_integer_rounds_to_js_number",
+    "input": {
+      "n": 9007199254740993
+    },
+    "expected": "sha256:v1:66c87d9cb3014e05a11baa97df62282d89d425f22ee15816577c84534e2ef1bb"
+  },
+  {
+    "name": "negative_unsafe_integer_rounds_to_js_number",
+    "input": {
+      "n": -9007199254740993
+    },
+    "expected": "sha256:v1:b05a958438727696a33ea9f819b69ca4ea39b5ee89f0f80a61d5f813875f9734"
+  },
+  {
+    "name": "int64_max_rounds_to_js_number",
+    "input": {
+      "n": 9223372036854775807
+    },
+    "expected": "sha256:v1:b92d37d4ecb9f2e1e60ea9038d37f1b47ecd3cfe621d11ccfd8ce393791e397f"
+  },
+  {
+    "name": "uint64_max_rounds_to_js_number",
+    "input": {
+      "n": 18446744073709551615
+    },
+    "expected": "sha256:v1:683c3b5df88dac54ef47abac301b2abd114258c10929f0d71cb7afd4099b7f02"
+  },
+  {
     "name": "decimal_lower_boundary",
     "input": {
       "n": 0.000001
