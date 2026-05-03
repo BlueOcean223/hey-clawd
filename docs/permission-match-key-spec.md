@@ -1,6 +1,6 @@
 # 权限匹配键规约
 
-本算法为 Claude Code 的 `PostToolUse` / `PostToolUseFailure` 事件提供唯一匹配键，使终端批准的工具调用能精确关闭对应的待决权限气泡。
+本算法为 Claude Code 的 `PostToolUse` / `PostToolUseFailure` / `PostToolBatch` 事件提供唯一匹配键，使终端侧已处理的工具调用能精确关闭对应的待决权限气泡。
 
 ## 算法
 
