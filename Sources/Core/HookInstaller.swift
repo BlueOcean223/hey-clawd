@@ -4,12 +4,16 @@ import Foundation
 /// by running the bundled hooks/install.js with Node.js.
 /// Idempotent — safe to call on every launch.
 enum HookInstaller {
+    /// 默认 HTTP 服务端口；HTTPServer 实际可能落到 23333..23337 中的任一个。
     private static let defaultServerPort = 23333
     private static let serverPortCount = 5
+    /// 已知的本机权限回调 URL 集合，用于 `unregister` 的安全清理：
+    /// 只删除指向我们端口的钩子配置，避免误删用户自定义的同名钩子。
     private static let clawdPermissionURLs = Set(
         (0..<serverPortCount).map { "http://127.0.0.1:\(defaultServerPort + $0)/permission" }
     )
 
+    /// settings.json 风格的清理规格：通过 commandMarkers 识别属于本应用的条目。
     private struct LocalCleanupSpec {
         let settingsPath: String
         let cleanedMessage: String
@@ -19,6 +23,8 @@ enum HookInstaller {
         let permissionURLs: Set<String>
     }
 
+    /// 目录式清理规格：通过 markerFileName 标记我们写入的条目；
+    /// 仅当目录里只剩这些 marker 才整体删除，保护用户的其它内容。
     private struct LocalDirectoryCleanupSpec {
         let directoryPath: String
         let markerFileName: String
@@ -27,6 +33,8 @@ enum HookInstaller {
         let unmanagedMessage: String
     }
 
+    /// 支持注入 hook 的目标 IDE/CLI 列表。
+    /// rawValue 必须与 `hooks/` 目录下的安装脚本文件名严格一致。
     enum HookTarget: String, CaseIterable {
         case claudeCode = "install.js"
         case gemini = "gemini-install.js"

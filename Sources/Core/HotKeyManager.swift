@@ -1,8 +1,15 @@
 import Carbon
 import Foundation
 
+/// 全局热键管理：注册 Allow / Deny / Toggle Visibility 三组系统级快捷键。
+///
+/// 走 Carbon 的 `RegisterEventHotKey` 是因为 AppKit 的 NSEvent 监听拿不到
+/// app 未激活时的按键。该 API 为 C 接口，因此本类需要小心处理 retain/release：
+/// `installHandlerIfNeeded` 用 `passRetained` 把 self 暴露给 C 回调，
+/// `teardown` 必须 `release` 配平，否则会泄漏对象 + handler。
 @MainActor
 final class HotKeyManager {
+    /// 4 字节 OSType 签名 'CLWD'，用于把本应用的 hot key 与系统其它 app 区分开。
     private static let signature: OSType = 0x434C5744
     private static let allowKeyID: UInt32 = 1
     private static let denyKeyID: UInt32 = 2
@@ -17,6 +24,7 @@ final class HotKeyManager {
     var onDeny: @MainActor () -> Void = {}
     var onToggleVisibility: @MainActor () -> Void = {}
 
+    /// 仅在有权限气泡时注册 Allow/Deny；避免无气泡时 Ctrl+Shift+Y 等组合误抢系统快捷键。
     func register() {
         installHandlerIfNeeded()
 
@@ -53,6 +61,7 @@ final class HotKeyManager {
         }
     }
 
+    /// 显示/隐藏桌宠的快捷键独立注册：与气泡生命周期解耦，App 启动后即常驻。
     func registerVisibilityToggle() {
         installHandlerIfNeeded()
 
@@ -73,6 +82,7 @@ final class HotKeyManager {
         }
     }
 
+    /// 仅注销 Allow/Deny；visibility toggle 由 `unregisterVisibilityToggle` 单独管理。
     func unregister() {
         if let ref = allowRef {
             UnregisterEventHotKey(ref)
@@ -92,6 +102,7 @@ final class HotKeyManager {
         }
     }
 
+    /// 应用退出前清理所有 Carbon 资源；漏掉这里会留下 handler 与 retain 泄漏。
     func teardown() {
         unregister()
         unregisterVisibilityToggle()
@@ -104,6 +115,7 @@ final class HotKeyManager {
         }
     }
 
+    /// 同一个事件回调只装一次；多次 register 会被这里短路，避免重复回调和重复 retain。
     private func installHandlerIfNeeded() {
         guard handlerRef == nil else {
             return
@@ -118,6 +130,7 @@ final class HotKeyManager {
                 return OSStatus(eventNotHandledErr)
             }
 
+            // 只 takeUnretainedValue：retain 计数始终由 teardown 统一释放。
             let hotKeyManager = Unmanaged<HotKeyManager>.fromOpaque(userData).takeUnretainedValue()
             MainActor.assumeIsolated {
                 hotKeyManager.handle(event: event)
@@ -135,11 +148,14 @@ final class HotKeyManager {
             &handlerRef
         )
         if status != noErr {
+            // 安装失败要立刻 release，否则 retain 计数无法在 teardown 中配平。
             Unmanaged<HotKeyManager>.fromOpaque(userData).release()
             print("hotkey handler installation failed: \(status)")
         }
     }
 
+    /// 解析事件参数中的 hot key id，再分发到对应 closure。
+    /// signature 不一致时直接忽略——属于其他 app 的 hot key 事件。
     private func handle(event: EventRef) {
         var hotKeyID = EventHotKeyID()
         let status = GetEventParameter(

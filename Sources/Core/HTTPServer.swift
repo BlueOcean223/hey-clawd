@@ -1,6 +1,7 @@
 import Foundation
 @preconcurrency import Network
 
+/// 权限决策的三态：允许、拒绝、未决（由用户在终端自行处理）。
 enum PermissionBehavior: String, Sendable {
     case allow
     case deny
@@ -21,6 +22,10 @@ struct PermissionDecisionResult: Sendable {
 /// POST /permission 产生的挂起请求。
 /// 连接保持打开，直到上层调用 respond(with:) 发送许可结果。
 /// lock 保证 continuation 最多只被 resume 一次。
+///
+/// 关键不变量：`status` 只能 pending → 终态（completed/disconnected/timedOut）转一次。
+/// 所有副作用入口都先在 lock 内做 status 检查并立刻更新为终态，
+/// 再在 lock 外执行 closure 调用与 continuation.resume，避免重复送回决策。
 final class PendingPermissionRequest: @unchecked Sendable {
     let body: Data
 

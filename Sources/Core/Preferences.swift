@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 
+/// 所有持久化偏好的 key 常量；改动时记得在 `defaults.register` 与 `restoredWindowOrigin` 同步。
 enum PrefKey: String {
     case windowX
     case windowY
@@ -18,6 +19,11 @@ enum PrefKey: String {
     case autoFocusSession
 }
 
+/// 围绕 `UserDefaults` 的强类型偏好封装。
+///
+/// 单例 + `@MainActor` 是因为 UI 路径会同步读，避免 actor 跨域调用；偏好值都是
+/// 小数据，无需关心线程安全。每个属性都 `register` 了默认值，
+/// 这样 `bool(forKey:)` 等同步 API 永远拿到合理值。
 @MainActor
 final class Preferences {
     static let shared = Preferences()
@@ -42,6 +48,7 @@ final class Preferences {
         ])
     }
 
+    /// 上次主窗口位置；首次启动或用户主动重置时返回 nil 让 PetWindow 用默认坐标。
     var windowOrigin: NSPoint? {
         get {
             guard hasValue(for: .windowX), hasValue(for: .windowY) else {
@@ -65,6 +72,8 @@ final class Preferences {
         }
     }
 
+    /// 老版本写入过 "S/M/L" 字符串预设；这里做一次性转换映射到等效百分比，
+    /// 同时夹紧到 25–400% 区间防止恶意/损坏的 UserDefaults 把窗口拉到不可见尺寸。
     var windowSizePercent: Int {
         get {
             let raw = defaults.object(forKey: PrefKey.windowSize.rawValue)
@@ -97,6 +106,7 @@ final class Preferences {
         set { defaults.set(newValue, forKey: PrefKey.miniEdge.rawValue) }
     }
 
+    /// 进入 mini 模式之前的位置；退出 mini 时用它把桌宠还原到原处。
     var preMiniOrigin: NSPoint? {
         get {
             guard hasValue(for: .preMiniX), hasValue(for: .preMiniY) else {
@@ -176,6 +186,7 @@ final class Preferences {
 
         let savedFrame = NSRect(origin: savedOrigin, size: size)
         let restoredX: CGFloat
+        // 已保存位置仍然落在某个屏幕内：保留 X，避免连接外接显示器后桌宠被挪位置。
         if screen.frame.intersects(savedFrame) {
             restoredX = savedOrigin.x
         } else {
@@ -186,10 +197,13 @@ final class Preferences {
         return NSPoint(x: restoredX, y: clampedY)
     }
 
+    /// `defaults.bool/double` 区分不出"未设置"和"显式 false/0"；用 `object(forKey:) == nil` 显式判定。
     private func hasValue(for key: PrefKey) -> Bool {
         defaults.object(forKey: key.rawValue) != nil
     }
 
+    /// 多屏匹配按优先级：完整覆盖 → 仅 X 轴覆盖 → 主屏 → 任意屏。
+    /// 兼顾"原屏幕被拔掉"和"屏幕排列方式变化"两种常见外接屏场景。
     private func preferredScreen(for origin: NSPoint, size: NSSize, screens: [NSScreen]) -> NSScreen? {
         let savedFrame = NSRect(origin: origin, size: size)
 

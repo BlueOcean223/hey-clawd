@@ -1,10 +1,15 @@
 import AVFoundation
 import Foundation
 
+/// 一次性提示音播放器，主要服务于 `attention`/`notification` 这类一次性状态。
+///
+/// 使用单例 + `AVAudioPlayer` 缓存，避免每次都从磁盘解码；
+/// 同时引入冷却时间，防止短时间高频的 hook 事件叠加成吵闹的"机关枪音效"。
 @MainActor
 final class SoundPlayer {
     static let shared = SoundPlayer()
 
+    /// 两次播放之间的最小间隔；即使有更多请求进来也直接丢弃，保护用户耳朵。
     private static let cooldown: TimeInterval = 10
 
     private var cache: [String: AVAudioPlayer] = [:]
@@ -12,6 +17,8 @@ final class SoundPlayer {
 
     private init() {}
 
+    /// 按文件名播放 `Resources/sounds/<name>` 中的提示音。
+    /// 静音/勿扰/冷却任意一项命中都会静默跳过，调用方不需关心是否真的发声。
     func play(_ name: String) {
         guard !Preferences.shared.soundMuted else {
             return
@@ -29,12 +36,14 @@ final class SoundPlayer {
             return
         }
 
+        // 同一播放器复用时必须重置进度，否则上一段未播完会被截断后立即结束。
         player.currentTime = 0
         if player.play() {
             lastPlayTime = Date()
         }
     }
 
+    /// 命中缓存直接返回；首次访问触发解码并 `prepareToPlay`，之后播放零延迟。
     private func cachedPlayer(named name: String) -> AVAudioPlayer? {
         if let player = cache[name] {
             return player

@@ -1,10 +1,21 @@
 import AppKit
 import Foundation
 
+/// 应用主控：装配各个子系统并把它们之间的回调连起来。
+///
+/// `assembleCoreLoop()` 是核心入口；其他 `setup*` 方法分别负责状态栏、CodexMonitor、
+/// MiniMode、Sparkle、信号处理、热键等。所有子系统都通过 closure 注入回调到本类，
+/// 然后由本类按需访问 `petWindow` / `stateMachine` 等长生命周期对象。
+///
+/// 设计原则：本类对每个子系统**单向持有**，子系统不感知 AppDelegate 的存在；
+/// 这样换 UI 框架或子系统时只需要重写本类即可。
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// release 构建中通过 Info.plist 把 `ClawdEnableSparkleUpdater=true` 注入；debug 不做更新检查。
     private static let sparkleUpdaterEnabledKey = "ClawdEnableSparkleUpdater"
     private static let alertIconImage = makeAlertIconImage()
+    /// 终端真正完成工具调用对应的事件名集合。
+    /// 收到这类事件时尝试 dismiss 当前 hash 匹配的气泡，避免用户在终端确认后气泡仍残留。
     private static let terminalApprovalEvents: Set<String> = [
         "PostToolUse",
         "PostToolUseFailure",
