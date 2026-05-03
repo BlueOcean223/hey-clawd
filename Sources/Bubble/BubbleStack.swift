@@ -47,7 +47,7 @@ final class BubbleStack {
         }.count
     }
 
-    /// 当 /state 收到 PostToolUse / PostToolUseFailure 且 hash 唯一匹配某个待决气泡时，
+    /// 当 /state 收到工具完成事件且 hash 唯一匹配某个待决气泡时，
     /// 关闭那唯一一个气泡（响应 .undecided）。返回是否关闭。
     @discardableResult
     func dismissBubbleMatchingTerminalApproval(

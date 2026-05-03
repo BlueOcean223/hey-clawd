@@ -13,6 +13,7 @@ const EVENT_TO_STATE = {
   PreToolUse: "working",
   PostToolUse: "working",
   PostToolUseFailure: "working",
+  PostToolBatch: "working",
   Stop: "attention",
   StopFailure: "error",
   SubagentStart: "juggling",
@@ -231,6 +232,9 @@ function send(sessionId, cwd, source, payload, eventName = event) {
 
 function appendToolMetadata(body, payload, eventName) {
   if (!payload || !TOOL_EVENTS.has(eventName)) {
+    if (eventName === "PostToolBatch") {
+      appendBatchToolMetadata(body, payload);
+    }
     return;
   }
 
@@ -245,4 +249,32 @@ function appendToolMetadata(body, payload, eventName) {
   if (Object.prototype.hasOwnProperty.call(payload, "tool_use_id")) {
     body.tool_use_id = payload.tool_use_id;
   }
+}
+
+function appendBatchToolMetadata(body, payload) {
+  if (!payload || !Array.isArray(payload.tool_calls)) {
+    return;
+  }
+
+  const { hashToolInput } = require("./lib/match-key");
+  body.tool_calls = payload.tool_calls.flatMap((toolCall) => {
+    if (!toolCall || typeof toolCall !== "object") {
+      return [];
+    }
+
+    const result = {};
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_name")) {
+      result.tool_name = toolCall.tool_name;
+    }
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_use_id")) {
+      result.tool_use_id = toolCall.tool_use_id;
+    }
+    if (Object.prototype.hasOwnProperty.call(toolCall, "tool_input")) {
+      try {
+        result.tool_input_hash = hashToolInput(toolCall.tool_input);
+      } catch {}
+    }
+
+    return Object.keys(result).length > 0 ? [result] : [];
+  });
 }

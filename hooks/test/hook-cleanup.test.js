@@ -126,6 +126,25 @@ test("registerHooks does not rewrite unrelated permission hooks", () => {
   ]);
 });
 
+test("registerHooks adds PostToolBatch for Claude Code versions that support it", () => {
+  const settingsPath = makeTempSettingsPath("claude-post-tool-batch");
+  writeSettings(settingsPath, { hooks: {} });
+
+  registerHooks({
+    settingsPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+    claudeVersionInfo: { version: "2.1.119", source: "test", status: "known" },
+  });
+  const settings = readSettings(settingsPath);
+
+  assert.equal(Array.isArray(settings.hooks.PostToolBatch), true);
+  assert.equal(
+    settings.hooks.PostToolBatch[0].hooks[0].command,
+    "\"/usr/bin/node\" \"" + path.resolve(__dirname, "../clawd-hook.js").replace(/\\/g, "/") + "\" PostToolBatch"
+  );
+});
+
 test("unregisterHooks removes only Clawd permission and auto-start hooks", () => {
   const settingsPath = makeTempSettingsPath("claude-clean");
   writeSettings(settingsPath, {

@@ -70,3 +70,41 @@ test("tool events without tool input remain valid state payloads", () => {
   assert.equal(body.tool_use_id, "toolu_4");
   assert.equal(Object.prototype.hasOwnProperty.call(body, "tool_input_hash"), false);
 });
+
+test("PostToolBatch emits compact metadata for each tool call", () => {
+  const payload = {
+    session_id: "session-5",
+    cwd: "/tmp/project",
+    tool_calls: [
+      {
+        tool_name: "Bash",
+        tool_input: { command: "date" },
+        tool_use_id: "toolu_5",
+        tool_response: "large response omitted from state payload",
+      },
+      {
+        tool_name: "Read",
+        tool_input: { file_path: "README.md" },
+        tool_use_id: "toolu_6",
+      },
+    ],
+  };
+
+  const body = runHook("PostToolBatch", payload);
+
+  assert.equal(body.state, "working");
+  assert.equal(body.event, "PostToolBatch");
+  assert.deepEqual(body.tool_calls, [
+    {
+      tool_name: "Bash",
+      tool_use_id: "toolu_5",
+      tool_input_hash: hashToolInput(payload.tool_calls[0].tool_input),
+    },
+    {
+      tool_name: "Read",
+      tool_use_id: "toolu_6",
+      tool_input_hash: hashToolInput(payload.tool_calls[1].tool_input),
+    },
+  ]);
+  assert.equal(Object.prototype.hasOwnProperty.call(body.tool_calls[0], "tool_response"), false);
+});

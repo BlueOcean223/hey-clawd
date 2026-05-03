@@ -31,6 +31,7 @@ const VERSIONED_HOOKS = [
   { event: "PreCompact",  minVersion: "2.1.76" },
   { event: "PostCompact", minVersion: "2.1.76" },
   { event: "StopFailure", minVersion: "2.1.78" },
+  { event: "PostToolBatch", minVersion: "2.1.119" },
 ];
 
 const CLAUDE_VERSION_PATTERN = /(\d+\.\d+\.\d+)/;

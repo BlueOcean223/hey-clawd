@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static let terminalApprovalEvents: Set<String> = [
         "PostToolUse",
         "PostToolUseFailure",
+        "PostToolBatch",
     ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
@@ -673,7 +674,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard
             let event,
             Self.terminalApprovalEvents.contains(event),
-            agentId == "claude-code",
+            agentId == "claude-code"
+        else {
+            return
+        }
+
+        if event == "PostToolBatch" {
+            let toolCalls = payload["tool_calls"] as? [[String: Any]] ?? []
+            for toolCall in toolCalls {
+                dismissBubbleMatchingToolPayload(toolCall, sessionId: sessionId)
+            }
+            return
+        }
+
+        dismissBubbleMatchingToolPayload(payload, sessionId: sessionId)
+    }
+
+    private func dismissBubbleMatchingToolPayload(_ payload: [String: Any], sessionId: String) {
+        guard
             let toolName = payload["tool_name"] as? String,
             !toolName.isEmpty,
             let toolInputHash = payload["tool_input_hash"] as? String,
