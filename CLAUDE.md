@@ -84,7 +84,7 @@ Each state has a corresponding `clawd-*.svg` file, parsed once and cached in `SV
 
 ## Release Process
 
-Tag with `v*` (e.g., `git tag v1.2.3`) and push. GitHub Actions (`.github/workflows/release.yml`) builds, signs with Sparkle EdDSA, creates a GitHub Release, and commits `appcast.xml` back to `main` for the auto-update feed.
+Tag with `v*` (e.g., `git tag v1.2.3`) and push. GitHub Actions (`.github/workflows/release.yml`) builds, signs with Sparkle EdDSA, creates a GitHub Release, and publishes `appcast.xml` to the `gh-pages` branch (served via GitHub Pages) for the auto-update feed.
 
 ## Conventions
 
