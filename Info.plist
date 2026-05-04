@@ -25,7 +25,7 @@
 	<key>ClawdEnableSparkleUpdater</key>
 	<false/>
 	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/BlueOcean223/hey-clawd/main/appcast.xml</string>
+	<string>https://blueocean223.github.io/hey-clawd/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>uT/oyYrtnkcmhiLSCOioUlbcQk9wYoBrfBuD0QN+8hE=</string>
 	<key>CFBundleIconFile</key>

@@ -208,13 +208,21 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Commit appcast.xml
+      - name: Publish appcast.xml to gh-pages
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+        env:
+          PAGES_DIR: ${{ runner.temp }}/gh-pages
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git add appcast.xml
-          git commit -m "update appcast.xml for ${{ github.ref_name }}" || echo "No changes"
-          git push origin main
+          git fetch origin gh-pages
+          git worktree add "$PAGES_DIR" gh-pages
+          cp appcast.xml "$PAGES_DIR/appcast.xml"
+          git -C "$PAGES_DIR" add appcast.xml
+          if git -C "$PAGES_DIR" diff --cached --quiet; then
+            echo "appcast.xml unchanged"
+            exit 0
+          fi
+          git -C "$PAGES_DIR" commit -m "chore(appcast): publish ${{ github.ref_name }}"
+          git -C "$PAGES_DIR" push origin gh-pages
