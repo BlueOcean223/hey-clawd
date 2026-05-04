@@ -13,7 +13,7 @@ struct TerminalFocusTarget: Sendable {
     let pid: pid_t?
     /// `pid` 对应进程的可执行身份指纹，激活前用于检测 PID 是否被 OS 复用给了别的进程。
     let identity: FocusProcessIdentity?
-    /// hook 端是否已经验证 `pid` 是 agent 的可信祖先；只有 true 时才允许激活白名单外的 bundle。
+    /// 兼容旧会话快照字段；payload PID 不再用于放宽焦点白名单。
     let isSourceVerified: Bool
     /// agent → … → terminal 的祖先链，用于 fallback 校验。
     let pidChain: [pid_t]?
@@ -27,11 +27,11 @@ struct TerminalFocusTarget: Sendable {
 /// 把用户焦点带回到触发该会话的终端/编辑器。
 ///
 /// 由 `MenuBuilder` 在用户点击会话子菜单时调用，也用于 `BubbleStack` 的"激活后再决策"路径。
-/// 安全考虑：本地 8 位整数 PID 极易被攻击者预测/复用，因此 hook 必须先在自己的进程树内
-/// 校验过 `source_pid`，否则只能激活下方白名单内的已知终端 bundle。
+/// 安全考虑：本地 PID 来自 `/state` payload，不能作为授权证据；这里只激活下方白名单内的
+/// 已知终端/IDE，并在有进程指纹时额外检查 PID 是否被复用。
 @MainActor
 enum TerminalFocus {
-    /// 老 hook（未上送 agent_pid）或验证失败时的保守白名单，覆盖项目积累的常见终端/IDE。
+    /// 保守白名单，覆盖项目积累的常见终端/IDE。
     private static let fallbackAllowedBundleIDs: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
@@ -44,18 +44,11 @@ enum TerminalFocus {
         "com.todesktop.230313mzl4w4u92",
     ]
 
-    /// 三段式回切策略：受信 PID → 白名单 PID → 编辑器 AppleScript。
-    /// `processInspector` 默认走系统实现，单测注入桩用于隔离 `NSRunningApplication`。
-    static func focus(_ target: TerminalFocusTarget, processInspector: ProcessInspecting = SystemProcessInspector.shared) {
-        // 优先激活 hook 进程树验证过的 source_pid；未知终端不需要预先写进 bundle 白名单。
+    /// 两段式回切策略：白名单 PID → 编辑器 AppleScript。
+    static func focus(_ target: TerminalFocusTarget) {
+        // `/state` payload 里的 PID 只能作为候选目标；实际激活必须落在保守白名单内。
         if let pid = target.pid,
-           target.isSourceVerified,
-           focusVerifiedApplication(pid: pid, identity: target.identity, processInspector: processInspector) {
-            return
-        }
-
-        // 老 hook 或缺少 agent_pid 的会话仍走保守白名单 fallback，避免任意本地 payload 激活任意应用。
-        if let pid = target.pid, focusKnownApplication(pid: pid) {
+           focusKnownApplication(pid: pid, identity: target.identity) {
             return
         }
 
@@ -66,31 +59,17 @@ enum TerminalFocus {
         }
     }
 
-    /// 受信路径：identity 指纹匹配则激活；缺失指纹时退化为"进程仍存活"判断（兼容老 hook）。
-    @discardableResult
-    private static func focusVerifiedApplication(
-        pid: pid_t,
-        identity: FocusProcessIdentity?,
-        processInspector: ProcessInspecting
-    ) -> Bool {
-        guard
-            let app = NSRunningApplication(processIdentifier: pid),
-            !app.isTerminated,
-            identity?.matches(app) == true || identity == nil && processInspector.isProcessAlive(pid)
-        else {
-            return false
-        }
-
-        return activate(app)
-    }
-
     /// fallback 路径：仅当 bundleID 落在白名单内才激活，限制 PID 复用造成的风险。
     @discardableResult
-    private static func focusKnownApplication(pid: pid_t) -> Bool {
+    private static func focusKnownApplication(pid: pid_t, identity: FocusProcessIdentity?) -> Bool {
         guard
             let app = NSRunningApplication(processIdentifier: pid),
             !app.isTerminated
         else {
+            return false
+        }
+
+        if let identity, identity.hasStableFields, !identity.matches(app) {
             return false
         }
 

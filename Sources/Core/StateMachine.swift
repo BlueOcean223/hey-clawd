@@ -479,12 +479,9 @@ final class StateMachine {
             resolvedSourcePid: nextSourcePid,
             existing: existing
         )
-        let nextSourcePidVerified = sourcePidVerified(
-            resolvedSourcePid: nextSourcePid,
-            resolvedAgentPid: nextAgentPid,
-            existing: existing,
-            shouldRefresh: sourcePid != nil || agentPid != nil || pidChain != nil
-        )
+        // `/state` PID fields come from client JSON. Keep them for session cleanup and
+        // menu display, but never use them as proof to bypass the focus whitelist.
+        let nextSourcePidVerified = false
         let nextCwd = normalizedString(cwd) ?? existing?.cwd
         let nextEditor = editor ?? existing?.editor
         let nextAgentId = normalizedString(agentId) ?? existing?.agentId
@@ -668,32 +665,6 @@ final class StateMachine {
         }
 
         return existing?.sourceProcessIdentity
-    }
-
-    /// hook 端把 source_pid + agent_pid + pid_chain 同时上送时，验证 source_pid 是否真的是
-    /// agent 进程的祖先。验证通过后才允许 TerminalFocus 激活白名单外的 bundle。
-    private func sourcePidVerified(
-        resolvedSourcePid: pid_t?,
-        resolvedAgentPid: pid_t?,
-        existing: Session?,
-        shouldRefresh: Bool
-    ) -> Bool {
-        guard let resolvedSourcePid else {
-            return false
-        }
-
-        if !shouldRefresh, resolvedSourcePid == existing?.sourcePid {
-            return existing?.sourcePidVerified ?? false
-        }
-
-        guard
-            let resolvedAgentPid,
-            processInspector.isProcessAlive(resolvedAgentPid)
-        else {
-            return resolvedSourcePid == existing?.sourcePid && existing?.sourcePidVerified == true
-        }
-
-        return processInspector.isAncestor(resolvedSourcePid, of: resolvedAgentPid)
     }
 
     /// 睡眠序列只在“当前没有高优先级会话占住屏幕”时运行。

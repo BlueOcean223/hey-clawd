@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class StateMachineSessionFocusTests: XCTestCase {
-    func testSessionFocusTargetUsesVerifiedAgentAncestryInsteadOfTerminalBundleWhitelist() {
+    func testAgentPidAncestryDoesNotBypassTerminalBundleWhitelist() {
         let identity = FocusProcessIdentity(
             pid: 100,
             bundleIdentifier: "dev.example.UnknownTerminal",
@@ -21,7 +21,7 @@ final class StateMachineSessionFocusTests: XCTestCase {
 
         stateMachine.setState(
             .working,
-            sessionId: "verified-session",
+            sessionId: "ancestry-session",
             event: "PreToolUse",
             sourcePid: 100,
             agentPid: 200,
@@ -35,9 +35,62 @@ final class StateMachineSessionFocusTests: XCTestCase {
         XCTAssertEqual(session?.agentPid, 200)
         XCTAssertEqual(session?.pidChain, [200, 150, 100])
         XCTAssertEqual(session?.sourceProcessIdentity, identity)
-        XCTAssertEqual(session?.sourcePidVerified, true)
+        XCTAssertEqual(session?.sourcePidVerified, false)
         XCTAssertEqual(session?.focusTarget.identity, identity)
-        XCTAssertEqual(session?.focusTarget.isSourceVerified, true)
+        XCTAssertEqual(session?.focusTarget.isSourceVerified, false)
+    }
+
+    func testSessionFocusTargetRejectsAgentPidAsItsOwnVerifiedSource() {
+        let identity = FocusProcessIdentity(
+            pid: 200,
+            bundleIdentifier: "dev.example.UnknownAgent",
+            executablePath: "/usr/local/bin/unknown-agent",
+            launchDate: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let inspector = FakeProcessInspector(
+            alivePids: [100, 200],
+            parentPids: [200: 100, 100: 1],
+            identities: [200: identity]
+        )
+        let stateMachine = StateMachine(processInspector: inspector)
+        defer { stateMachine.cleanup() }
+
+        stateMachine.setState(
+            .working,
+            sessionId: "self-source",
+            event: "PreToolUse",
+            sourcePid: 200,
+            agentPid: 200,
+            pidChain: [200, 100],
+            cwd: "/tmp/project",
+            agentId: "claude-code"
+        )
+
+        let session = stateMachine.activeSessionSnapshots.first
+        XCTAssertEqual(session?.sourcePid, 200)
+        XCTAssertEqual(session?.agentPid, 200)
+        XCTAssertEqual(session?.sourceProcessIdentity, identity)
+        XCTAssertEqual(session?.sourcePidVerified, false)
+        XCTAssertEqual(session?.focusTarget.isSourceVerified, false)
+    }
+
+    func testProcessIdentityRequiresCurrentLaunchDateWhenLaunchDateWasCaptured() {
+        let identity = FocusProcessIdentity(
+            pid: 100,
+            bundleIdentifier: nil,
+            executablePath: nil,
+            launchDate: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+
+        XCTAssertFalse(
+            identity.matches(
+                pid: 100,
+                isTerminated: false,
+                bundleIdentifier: nil,
+                executablePath: nil,
+                launchDate: nil
+            )
+        )
     }
 
     func testDeadAgentPidRemovesSessionWithoutWaitingForAgeTimeout() {

@@ -20,21 +20,42 @@ struct FocusProcessIdentity: Equatable, Sendable {
     /// 与当前运行中的 `NSRunningApplication` 比对：PID 一致 + 各非空字段一致。
     /// `launchDate` 用 1ms 容差兼容 AppKit 不同 API 路径返回的精度差异。
     func matches(_ app: NSRunningApplication) -> Bool {
-        guard app.processIdentifier == pid, !app.isTerminated, hasStableFields else {
+        matches(
+            pid: app.processIdentifier,
+            isTerminated: app.isTerminated,
+            bundleIdentifier: app.bundleIdentifier,
+            executablePath: app.executableURL?.path,
+            launchDate: app.launchDate
+        )
+    }
+
+    func matches(
+        pid currentPid: pid_t,
+        isTerminated: Bool,
+        bundleIdentifier currentBundleIdentifier: String?,
+        executablePath currentExecutablePath: String?,
+        launchDate currentLaunchDate: Date?
+    ) -> Bool {
+        guard currentPid == pid, !isTerminated, hasStableFields else {
             return false
         }
 
-        if let bundleIdentifier, app.bundleIdentifier != bundleIdentifier {
+        if let bundleIdentifier, currentBundleIdentifier != bundleIdentifier {
             return false
         }
 
-        if let executablePath, app.executableURL?.path != executablePath {
+        if let executablePath, currentExecutablePath != executablePath {
             return false
         }
 
-        if let launchDate, let currentLaunchDate = app.launchDate,
-           abs(currentLaunchDate.timeIntervalSince(launchDate)) > 0.001 {
-            return false
+        if let launchDate {
+            guard let currentLaunchDate else {
+                return false
+            }
+
+            if abs(currentLaunchDate.timeIntervalSince(launchDate)) > 0.001 {
+                return false
+            }
         }
 
         return true
@@ -119,22 +140,22 @@ extension ProcessInspecting {
     /// 沿父进程链向上爬，验证 `possibleAncestor` 是否真的是 `child` 的祖先。
     /// `maxDepth=12` 避免恶意构造的进程链导致死循环；遇到 launchd（pid 1）或自指立即终止。
     func isAncestor(_ possibleAncestor: pid_t, of child: pid_t, maxDepth: Int = 12) -> Bool {
-        guard possibleAncestor > 0, child > 0 else {
+        guard possibleAncestor > 0, child > 0, possibleAncestor != child else {
             return false
         }
 
         var current = child
         for _ in 0..<maxDepth {
-            if current == possibleAncestor {
-                return true
-            }
-
             guard
                 let parent = parentPid(of: current),
                 parent > 1,
                 parent != current
             else {
                 return false
+            }
+
+            if parent == possibleAncestor {
+                return true
             }
 
             current = parent

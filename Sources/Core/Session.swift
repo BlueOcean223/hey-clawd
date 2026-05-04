@@ -4,8 +4,8 @@ import Foundation
 ///
 /// 每个 Hook 客户端（Claude Code、Codex、Cursor…）每个工程目录会绑定一个 `id`，
 /// 后续 PreToolUse/PostToolUse 等事件都通过相同 id 找到这条记录并更新状态。
-/// 字段中的 `sourcePid`/`agentPid`/`pidChain` 由 hook 携带上来，用于
-/// `TerminalFocus` 在用户回到 dock 时把焦点带回到对应终端。
+/// 字段中的 `sourcePid` 由 hook 携带上来，用作白名单聚焦候选；
+/// `agentPid`/`pidChain` 只用于会话生命周期线索，不作为焦点授权证据。
 struct Session: Sendable {
     let id: String
     var state: PetState
@@ -16,8 +16,7 @@ struct Session: Sendable {
     var sourcePid: pid_t?
     /// `sourcePid` 对应进程的可执行身份指纹，用于在激活前防止 PID 被复用。
     var sourceProcessIdentity: FocusProcessIdentity?
-    /// 为 true 表示 hook 端已通过 agent_pid → 父进程链验证过 sourcePid 的合法性，
-    /// 可放宽白名单（否则只激活 `fallbackAllowedBundleIDs` 内的已知终端）。
+    /// 兼容旧快照字段；payload PID 不再作为焦点授权证据，当前保持 false。
     var sourcePidVerified: Bool
     /// CLI agent 自身的 PID，用于反查 PID 链以判断终端归属。
     var agentPid: pid_t?
