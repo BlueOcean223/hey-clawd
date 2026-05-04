@@ -2,12 +2,19 @@
 import QuartzCore
 
 // 承载桌宠内容的透明浮窗，本身不负责动画逻辑。
+//
+// 角色拆分：本类管事件路由（点击/拖拽/右键菜单）、屏幕约束、occlusion 暂停、
+// 以及"反应动画"短期覆盖层（被点 / 被拖时插播一段 SVG，结束后回到状态机最新结果）。
+// 真正的渲染由 PetView 完成，状态机决策由 AppDelegate 注入 `display(state:svgFilename:sourcePid:)`。
 @MainActor final class PetWindow: NSWindow {
+    /// 拖拽超过这个距离才认为是真的"在拖"，避免单次点击被误判成短拖。
     private static let dragThreshold: CGFloat = 3
+    /// 多击窗口期：在窗内累积的点击数会触发不同等级的反应动画。
     private static let clickWindow: TimeInterval = 0.4
     private static let pokeReactionDuration: TimeInterval = 2.5
     private static let annoyedReactionDuration: TimeInterval = 3.5
     private static let doubleReactionDuration: TimeInterval = 3.5
+    /// 100% 时的窗口尺寸；其它百分比由 `applySizePercent` 等比缩放。
     private static let baseDimension: CGFloat = 200
 
     private let petView: PetView
@@ -154,6 +161,8 @@ import QuartzCore
         }
     }
 
+    /// 暂停 SVG 动画与眼球跟踪。借助 layer.speed/timeOffset 冻结 Core Animation 时间，
+    /// 解除时再用 beginTime 把"暂停的时长"补回去，保证恢复后动画曲线连续。
     private func pauseForOcclusion() {
         guard !isPausedForOcclusion else {
             return
@@ -271,6 +280,8 @@ import QuartzCore
         petView.switchSVG(svgFilename)
     }
 
+    /// 开始播放拖拽反应动画，并把状态机推送过来的更新先缓冲（不直接换 SVG）。
+    /// 拖拽结束后再用最新缓冲值恢复展示。
     private func beginDragReactionIfNeeded() {
         cancelClickWindow()
         reactionTimer?.invalidate()
@@ -365,6 +376,10 @@ import QuartzCore
         NSMenu.popUpContextMenu(menu, with: event, for: contentView ?? petView)
     }
 
+    /// 多击触发不同档位反应：
+    /// - 单击：focus 终端；
+    /// - 2-3 击：随机 poke / annoyed / dizzy；
+    /// - ≥4 击：直接进 double-jump，不等窗口结束。
     private func handlePetClick(_ event: NSEvent) {
         onPetClick?()
         lastClickPoint = event.locationInWindow
@@ -390,6 +405,7 @@ import QuartzCore
         }
     }
 
+    /// 反应只在桌宠处于 idle-follow 时播；状态机正在驱动其它动画时不打断。
     private var canPlayClickReaction: Bool {
         !isShowingReaction && currentDisplaySVGFilename == "clawd-idle-follow.svg"
     }

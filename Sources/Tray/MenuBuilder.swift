@@ -1,11 +1,14 @@
 import AppKit
 import Foundation
 
+/// 菜单内显示用的应用语言枚举。
 enum AppLanguage: String {
     case en
     case zh
 }
 
+/// 渲染右键菜单需要的全部状态快照。
+/// 由 `AppDelegate` 在每次菜单弹出前重新构造，保证菜单内容（勾选/会话/可用性）一定是最新的。
 struct AppMenuState {
     var language: AppLanguage
     var sizePercent: Int
@@ -20,6 +23,8 @@ struct AppMenuState {
     var sessions: [SessionMenuSnapshot]
 }
 
+/// 菜单结构装配器。无状态，纯函数式：吃 `AppMenuState` 吐 `NSMenu`。
+/// 文案集中在 `strings` 字典里维护双语；新增菜单项必须在这里同时加 en/zh 文案。
 @MainActor
 enum MenuBuilder {
     private static let strings: [AppLanguage: [String: String]] = [
@@ -77,8 +82,11 @@ enum MenuBuilder {
         ],
     ]
 
+    /// 桌宠尺寸预设；不在这里的百分比通过 "Custom..." 子菜单展示并标记为当前值。
     private static let sizePresets = [50, 75, 100, 125, 150, 200, 250]
     private static let defaultAgentIconName = "claude-code"
+    /// `Resources/icons/agents/<name>.png` 中可用的 agent 图标名集合；
+    /// 找不到匹配时回退到 `defaultAgentIconName`。
     private static let agentIconNames: Set<String> = [
         "claude-code",
         "codex",
@@ -102,6 +110,7 @@ enum MenuBuilder {
         return formatter
     }()
 
+    /// 入口：按当前状态从上到下拼装菜单。`autoenablesItems = false` 让我们手动控制 enabled。
     static func build(state: AppMenuState, target: StatusBarController) -> NSMenu {
         let menu = NSMenu()
         menu.autoenablesItems = false
@@ -201,6 +210,8 @@ enum MenuBuilder {
         return item
     }
 
+    /// 会话子菜单：按 `Sessions` 分组展示，无活跃会话时显示禁用占位项。
+    /// 每个会话条目带 agent 图标和"距上次更新多久"的相对时间。
     private static func sessionsMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
         let item = NSMenuItem(title: text("sessions", lang: state.language), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
@@ -218,7 +229,7 @@ enum MenuBuilder {
                     target: target
                 )
                 sessionItem.representedObject = session
-                sessionItem.isEnabled = session.sourcePid != nil || session.editor != nil
+                sessionItem.isEnabled = session.focusTarget.isFocusable
                 sessionItem.image = agentIcon(for: session.agentId)
                 submenu.addItem(sessionItem)
             }
@@ -255,6 +266,8 @@ enum MenuBuilder {
         return item
     }
 
+    /// Hooks 子菜单：每个支持的 IDE/CLI 一个注册/清理入口，
+    /// 末尾还提供 "全部注册 / 全部清理"——`representedObject == nil` 表示作用于全部 target。
     private static func hooksMenuItem(state: AppMenuState, target: StatusBarController) -> NSMenuItem {
         let item = NSMenuItem(title: text("hooks", lang: state.language), action: nil, keyEquivalent: "")
         let submenu = NSMenu()
@@ -422,6 +435,7 @@ enum MenuBuilder {
         return candidates.compactMap { $0 }
     }
 
+    /// 优先按 cwd 末段（项目目录名）展示标题，缺失则退化到 agentId 或 session id。
     private static func sessionTitle(_ session: SessionMenuSnapshot, lang: AppLanguage) -> String {
         let name = session.cwd.flatMap { URL(fileURLWithPath: $0).lastPathComponent }.flatMap { $0.isEmpty ? nil : $0 }
             ?? session.agentId

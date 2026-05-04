@@ -1,6 +1,8 @@
 import Foundation
 import Darwin
 
+/// Codex CLI 没有 hook 接口，只能反向解析其 JSONL 日志获取事件。
+/// 本结构是把日志条目映射成 StateMachine 能消费的状态更新。
 struct CodexStateUpdate: Sendable {
     let state: PetState
     let sessionId: String
@@ -9,6 +11,14 @@ struct CodexStateUpdate: Sendable {
     let agentId: String
 }
 
+/// 监视 `~/.codex` 下 Codex CLI 的会话日志（JSONL）并把事件转成桌宠状态。
+///
+/// 工作流：
+/// - 启动时扫描最近 2 天内修改过的会话文件，挂上 `DispatchSourceFileSystemObject` 监听；
+/// - 文件每次写入触发 1.5s 防抖读取，把新增字节按行解析；
+/// - 保留状态快照到 `previouslyTrackedStates`，让被 prune 出去的文件再次活跃时能续接。
+///
+/// actor 是因为 DispatchSource 回调走 utility 队列，需要安全切回管理状态的隔离域。
 actor CodexMonitor {
     private enum EventMapping {
         case direct(PetState)
@@ -16,6 +26,7 @@ actor CodexMonitor {
         case ignored
     }
 
+    /// 文件被 prune 后保存的最少状态：再启用时从同一 offset 续读，避免重复触发已处理过的事件。
     private struct SavedTrackingState {
         let offset: UInt64
         let partial: String
@@ -23,6 +34,8 @@ actor CodexMonitor {
         let hadToolUse: Bool
     }
 
+    /// 单个被监视的 JSONL 文件的所有 mutable 状态。
+    /// `partial` 暂存"读到一半的不完整行"，`hadToolUse` 决定 turn_end 该回 idle 还是 attention。
     private final class TrackedFile {
         let sessionId: String
         let fileURL: URL
@@ -51,18 +64,29 @@ actor CodexMonitor {
         }
     }
 
+    /// 周期性重新扫描会话目录，发现新文件。
     private static let scanInterval: TimeInterval = 1.5
+    /// DispatchSource 触发后的防抖：写入往往是连续多次，等 1.5s 再读避免反复 IO。
     private static let readDebounce: TimeInterval = 1.5
+    /// 超过这段时间无更新的文件被视作"陈旧"，从活跃 watch 集合中移除以释放 fd。
     private static let staleInterval: TimeInterval = 300
+    /// 启动时只挂 watch 距今 2 分钟内动过的文件，旧文件按需懒加载。
     private static let recentFileWindow: TimeInterval = 120
+    /// 历史扫描窗口：超过 2 天没动的会话直接忽略。
     private static let historicalLookbackDays = 2
+    /// 同时 watch 的文件数上限，防止极端情况下打开过多 fd。
     private static let maxTrackedFiles = 50
+    /// `previouslyTrackedStates` 的容量上限；LRU 风格淘汰最旧的快照。
     private static let maxSavedStates = 200
+    /// 单条 JSONL 行最大缓冲字节，防止恶意/损坏文件导致 partial 无限增长。
     private static let maxPartialBytes = 65_536
+    /// 首次挂载时只读取最后 256KB，避开历史日志全量解析。
     private static let maxInitialReadBytes: UInt64 = 256 * 1024
     private static let readChunkBytes = 64 * 1024
     // DispatchSource runs on a utility queue, then hops back into the actor for debounced reads.
     private static let watchQueue = DispatchQueue(label: "hey-clawd.codex-monitor", qos: .utility)
+    /// Codex JSONL 事件 → 桌宠状态的映射表。`turnEnd` 表示一个 turn 结束，
+    /// 具体回 idle 还是 attention 由本轮是否调用过工具决定（见 `applyTurnEnd`）。
     private static let eventMap: [String: EventMapping] = [
         "session_meta": .direct(.idle),
         "event_msg:task_started": .direct(.thinking),

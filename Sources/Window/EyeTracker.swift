@@ -108,6 +108,10 @@ final class EyeTracker {
         onOffsetChange(nextOffset.x, nextOffset.y)
     }
 
+    /// 计算从眼睛中心指向鼠标的偏移：
+    /// - 距离 ≥ `maxDistance` 时锁定到最大偏移，不会再继续放大；
+    /// - X 轴最大 `maxEyeOffset`，Y 轴单独再压一刀（`maxEyeYOffset`）以保留垂直留白；
+    /// - 用 `quantizeStep` 量化以减少抖动并便于命中相同偏移时跳过重发。
     private static func calculateOffset(cursor: NSPoint, eyeCenter: NSPoint) -> CGPoint {
         let relX = cursor.x - eyeCenter.x
         let relY = cursor.y - eyeCenter.y

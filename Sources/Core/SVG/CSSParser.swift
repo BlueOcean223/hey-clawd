@@ -1,7 +1,17 @@
 import Foundation
 import CoreGraphics
 
+/// 解析 SVG `<style>` 块为结构化 CSS：@keyframes、selector → 静态样式、animation 短手/长手、transition。
+///
+/// 仅实现项目资产实际用到的子集：
+/// - selector 仅支持 `.foo` 和 `#bar`，不处理后代/伪类；
+/// - @keyframes 内允许多 offset 合并写法（`0%, 50% { ... }`）；
+/// - 不解析 @media / @supports / 变量。
+///
+/// 解析方式是手写状态机扫描——避开正则的回溯和性能问题，也方便在 keyframe block 内
+/// 维护小括号/花括号嵌套深度。
 enum CSSParser {
+    /// 解析输出的聚合体。`CALayerRenderer` 通过 selector 匹配把这些绑定应用到具体 CALayer 上。
     struct CSSResult: Sendable {
         var animations: [String: SVGAnimation] = [:]
         var staticStyleBindings: [SVGStaticStyleBinding] = []
@@ -10,8 +20,11 @@ enum CSSParser {
         var transitions: [SVGTransitionBinding] = []
     }
 
+    /// CSS 短手 `animation: name 1s ease-out` 缺省 timing-function 时的回退值，等价于 CSS spec 的 `ease`。
     static let defaultTimingFunction: TimingFunction = .cubicBezier(0.25, 0.1, 0.25, 1)
 
+    /// 入口：把多段 `<style>` 块文本（可能带注释）合并解析。
+    /// 第一轮提取 @keyframes，第二轮解析普通 selector 块，分别填进 CSSResult。
     static func parse(_ styleBlocks: [String]) -> CSSResult {
         let combined = stripComments(styleBlocks.joined(separator: "\n"))
         guard !combined.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

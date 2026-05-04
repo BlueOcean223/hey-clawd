@@ -1,6 +1,9 @@
 import AppKit
 import Foundation
 
+/// 桌宠的全部状态。`rawValue` 与 `Resources/svg/clawd-<state>.svg` 的文件名约定一致。
+/// 普通桌宠模式与 mini 模式（边缘贴附小窗）的状态分两族；
+/// `priority` 决定多 hook 同时活跃时谁的状态会胜出。
 enum PetState: String, CaseIterable, Sendable {
     case sleeping = "sleeping"
     case idle = "idle"
@@ -29,6 +32,8 @@ enum PetState: String, CaseIterable, Sendable {
         rawValue.hasPrefix("mini-")
     }
 
+    /// 状态优先级（越大越优先）。多个会话同时活跃时取最高的展示。
+    /// 0 = 睡眠序列（最低，可被任何活动打断）；8 = error（最高，必须立刻让用户看到）。
     var priority: Int {
         switch self {
         case .error:
@@ -52,6 +57,8 @@ enum PetState: String, CaseIterable, Sendable {
         }
     }
 
+    /// 一次性表演型状态：播完一次自动回退到上一个聚合结果。
+    /// 这些状态有 `minDisplayMs` / `autoReturnMs` 控制最短停留与自动复位。
     var isOneShot: Bool {
         switch self {
         case .attention, .error, .sweeping, .notification, .carrying, .miniAlert, .miniHappy:
@@ -61,6 +68,7 @@ enum PetState: String, CaseIterable, Sendable {
         }
     }
 
+    /// 当前是否处于"睡眠链路"中的某一阶段；睡眠链路自身不应被睡眠 timer 重复触发。
     var isSleepSequence: Bool {
         switch self {
         case .yawning, .dozing, .collapsing, .sleeping, .waking:
@@ -71,17 +79,22 @@ enum PetState: String, CaseIterable, Sendable {
     }
 }
 
+/// 待应用的状态切换；带 `triggeringSession` 是为了在状态真正落地时把 sourcePid 一起带过去，
+/// 让点击桌宠能聚焦到引发本次切换的那个会话所在终端。
 private struct PendingTransition {
     let state: PetState
     let svg: String
     let triggeringSession: Session?
 }
 
+/// 单条 idle 动画的资源描述：固定时长 + 对应 SVG 文件。
 struct IdleAnimationSpec: Sendable {
     let svg: String
     let durationMs: Int
 }
 
+/// 睡眠链路的内部模式。`idleAnimation` 表示在播某段 idle 表演动画，
+/// 其余阶段对应 yawning → dozing → collapsing → sleeping → waking。
 private enum SleepMode: Equatable {
     case awake
     case idleAnimation(String)
@@ -137,6 +150,8 @@ final class StateMachine {
         .miniSleep: "clawd-mini-sleep.svg",
     ]
 
+    /// 一次性状态强制最少展示这么久（毫秒），即使更高优先级的活动会话进入也要等过这段时间，
+    /// 避免 attention/notification 闪现一帧就消失。
     static let minDisplayMs: [PetState: Int] = [
         .attention: 4_000,
         .error: 5_000,
@@ -149,6 +164,8 @@ final class StateMachine {
         .miniHappy: 4_000,
     ]
 
+    /// 一次性状态在没人接管的情况下，多久后自动回到聚合状态。
+    /// `sweeping` 的 5 分钟特别长——它对应 Claude Code 的 context compact 流程，整个过程都要持续显示。
     static let autoReturnMs: [PetState: Int] = [
         .attention: 4_000,
         .error: 5_000,
@@ -159,6 +176,8 @@ final class StateMachine {
         .miniHappy: 4_000,
     ]
 
+    /// 允许 hook 端通过 `display_svg` 显式指定的 SVG 白名单。
+    /// 不在表里的 svg 名字会被忽略——避免外部输入控制任意资源加载。
     static let allowedDisplaySvgs: Set<String> = [
         "clawd-working-typing.svg",
         "clawd-working-building.svg",
@@ -178,6 +197,8 @@ final class StateMachine {
         "clawd-working-wizard.svg",
     ]
 
+    /// 长时间 idle 时随机播放的"表演型 idle"动画清单。每条带建议时长。
+    /// `idleAnimationDelay` 之后开始随机播；和 yawn/sleep 链路按时间叠加。
     static let idleAnims: [IdleAnimationSpec] = [
         IdleAnimationSpec(svg: "clawd-idle-look.svg", durationMs: 10_000),
         IdleAnimationSpec(svg: "clawd-working-debugger.svg", durationMs: 14_000),
@@ -188,19 +209,30 @@ final class StateMachine {
         IdleAnimationSpec(svg: "clawd-crab-walking.svg", durationMs: 8_000),
     ]
 
+    /// 同时跟踪的会话上限；超过后剔除最旧的，避免内存无限增长。
     private static let maxSessions = 20
+    /// 周期性扫描陈旧会话并清理。
     private static let staleCleanupInterval: TimeInterval = 10
+    /// 一般会话超过 10 分钟无更新视为失效。
     private static let sessionStaleInterval: TimeInterval = 600
+    /// "working" 是允许更长寂静期的：长任务完全可能 5 分钟都没新事件。
     private static let workingStaleInterval: TimeInterval = 300
+    /// 鼠标活跃检测的轮询周期；用于判定用户是否离开。
     private static let pointerPollInterval: TimeInterval = 0.2
+    /// idle 多久后开始播表演型 idle 动画。
     private static let idleAnimationDelay: TimeInterval = 20
+    /// 用户离开多久开始打哈欠（睡眠链路的入口）。
     private static let yawnDelay: TimeInterval = 180
     private static let dozingDelay: TimeInterval = 3.8
+    /// 进入深度睡眠的总等待时长。
     private static let deepSleepDelay: TimeInterval = 600
     private static let collapseDelay: TimeInterval = 0.8
+    /// DND 触发的 collapse 比自然 collapse 慢一些，让用户看清楚动画。
     private static let dndCollapseDelay: TimeInterval = 3.6
     private static let wakingDelay: TimeInterval = 3.5
+    /// 鼠标移动判定阈值；小于这个值视为静止，避免抖动算"活跃"。
     private static let pointerMovementThreshold: CGFloat = 0.5
+    /// 软 idle 回归延迟：一次性状态结束到真正切回 idle 的过渡时间。
     private static let softIdleReturnDelay: TimeInterval = 0.22
 
     private(set) var currentState: PetState = .idle
@@ -223,7 +255,7 @@ final class StateMachine {
             return nil
         }
 
-        return TerminalFocusTarget(pid: session.sourcePid, editor: session.editor)
+        return session.focusTarget
     }
     var activeSessionSnapshots: [SessionMenuSnapshot] {
         sessions.values
@@ -235,6 +267,10 @@ final class StateMachine {
                     state: $0.state,
                     updatedAt: $0.updatedAt,
                     sourcePid: $0.sourcePid,
+                    sourceProcessIdentity: $0.sourceProcessIdentity,
+                    sourcePidVerified: $0.sourcePidVerified,
+                    agentPid: $0.agentPid,
+                    pidChain: $0.pidChain,
                     cwd: $0.cwd,
                     editor: $0.editor,
                     agentId: $0.agentId
@@ -271,8 +307,10 @@ final class StateMachine {
     private var isPointerPollingSuspended = false
     private var oneShotSourcePid: pid_t?
     private var oneShotFocusTarget: TerminalFocusTarget?
+    private let processInspector: ProcessInspecting
 
-    init() {
+    init(processInspector: ProcessInspecting = SystemProcessInspector.shared) {
+        self.processInspector = processInspector
         startStaleCleanup()
         startSleepMonitor()
     }
@@ -293,6 +331,12 @@ final class StateMachine {
         pendingTransition = nil
         softIdleTransition = nil
     }
+
+#if DEBUG
+    func pruneStaleSessionsForTesting() {
+        pruneStaleSessions(shouldTransition: false)
+    }
+#endif
 
     func setMiniModeEnabled(_ enabled: Bool) {
         miniModeEnabled = enabled
@@ -394,6 +438,13 @@ final class StateMachine {
         }
     }
 
+    /// 由所有外部事件（HTTP、CodexMonitor、菜单）共同调用的写入入口。
+    /// 大体流程：
+    /// 1. DND/唤醒动画期间直接吞掉事件；
+    /// 2. 非 DND 时打断本地睡眠链路；
+    /// 3. 合并字段（incoming 字段缺失则继承现有 session）；
+    /// 4. 决定是覆盖会话状态还是保留 juggling（避免 working 抢占已经在多任务中的桌宠）；
+    /// 5. 一次性状态直接展示；其余状态走 `resolveDisplayState` 聚合后再展示。
     func setState(
         _ state: PetState,
         sessionId: String = "default",
@@ -401,6 +452,8 @@ final class StateMachine {
         svg: String? = nil,
         svgWasProvided: Bool = false,
         sourcePid: pid_t? = nil,
+        agentPid: pid_t? = nil,
+        pidChain: [pid_t]? = nil,
         cwd: String? = nil,
         editor: FocusEditor? = nil,
         agentId: String? = nil,
@@ -419,6 +472,16 @@ final class StateMachine {
         let normalizedSessionId = sessionId.isEmpty ? "default" : sessionId
         let existing = sessions[normalizedSessionId]
         let nextSourcePid = sourcePid ?? existing?.sourcePid
+        let nextAgentPid = agentPid ?? existing?.agentPid
+        let nextPidChain = normalizedPIDChain(pidChain) ?? existing?.pidChain
+        let nextSourceProcessIdentity = sourceProcessIdentity(
+            incomingSourcePid: sourcePid,
+            resolvedSourcePid: nextSourcePid,
+            existing: existing
+        )
+        // `/state` PID fields come from client JSON. Keep them for session cleanup and
+        // menu display, but never use them as proof to bypass the focus whitelist.
+        let nextSourcePidVerified = false
         let nextCwd = normalizedString(cwd) ?? existing?.cwd
         let nextEditor = editor ?? existing?.editor
         let nextAgentId = normalizedString(agentId) ?? existing?.agentId
@@ -457,6 +520,10 @@ final class StateMachine {
                 updatedAt: Date(),
                 displaySvg: nil,
                 sourcePid: nextSourcePid,
+                sourceProcessIdentity: nextSourceProcessIdentity,
+                sourcePidVerified: nextSourcePidVerified,
+                agentPid: nextAgentPid,
+                pidChain: nextPidChain,
                 cwd: nextCwd,
                 editor: nextEditor,
                 agentId: nextAgentId,
@@ -477,6 +544,10 @@ final class StateMachine {
                 svgWasProvided: svgWasProvided
             )
             updated.sourcePid = nextSourcePid
+            updated.sourceProcessIdentity = nextSourceProcessIdentity
+            updated.sourcePidVerified = nextSourcePidVerified
+            updated.agentPid = nextAgentPid
+            updated.pidChain = nextPidChain
             updated.cwd = nextCwd
             updated.editor = nextEditor
             updated.agentId = nextAgentId
@@ -494,6 +565,10 @@ final class StateMachine {
                     svgWasProvided: svgWasProvided
                 ),
                 sourcePid: nextSourcePid,
+                sourceProcessIdentity: nextSourceProcessIdentity,
+                sourcePidVerified: nextSourcePidVerified,
+                agentPid: nextAgentPid,
+                pidChain: nextPidChain,
                 cwd: nextCwd,
                 editor: nextEditor,
                 agentId: nextAgentId,
@@ -520,6 +595,8 @@ final class StateMachine {
         requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
     }
 
+    /// 后台轮询鼠标位置，决定是否进入 yawn → doze → sleep 链路。
+    /// 不依赖 EyeTracker 是为了避免 mini 模式 / 隐藏窗口情况下监听不到。
     private func startSleepMonitor() {
         sleepMonitorTimer?.invalidate()
         lastPointerLocation = NSEvent.mouseLocation
@@ -548,6 +625,7 @@ final class StateMachine {
         }
     }
 
+    /// 移除 maxSessions 装满后的最旧会话；按 updatedAt 升序找第一个非 headless 的删除。
     private func evictOldestSession() {
         let oldest = sessions.min { $0.value.updatedAt < $1.value.updatedAt }
         if let oldest {
@@ -562,6 +640,31 @@ final class StateMachine {
 
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func normalizedPIDChain(_ value: [pid_t]?) -> [pid_t]? {
+        guard let value else {
+            return nil
+        }
+
+        let normalized = value.filter { $0 > 0 }
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func sourceProcessIdentity(
+        incomingSourcePid: pid_t?,
+        resolvedSourcePid: pid_t?,
+        existing: Session?
+    ) -> FocusProcessIdentity? {
+        if let incomingSourcePid {
+            return processInspector.captureApplicationIdentity(for: incomingSourcePid)
+        }
+
+        guard resolvedSourcePid == existing?.sourcePid else {
+            return nil
+        }
+
+        return existing?.sourceProcessIdentity
     }
 
     /// 睡眠序列只在“当前没有高优先级会话占住屏幕”时运行。
@@ -782,12 +885,29 @@ final class StateMachine {
         return existing?.displaySvg
     }
 
+    /// 周期性扫描 sessions：超过 sessionStaleInterval / workingStaleInterval 的会话被剔除。
+    /// `shouldTransition` 控制是否在剔除后立刻聚合新状态；setState 路径已经在调用方做了，传 false 跳过。
     private func pruneStaleSessions(shouldTransition: Bool) {
         let now = Date()
         var didChange = false
 
         for (id, session) in sessions {
             let age = now.timeIntervalSince(session.updatedAt)
+
+            if let agentPid = session.agentPid,
+               !processInspector.isProcessAlive(agentPid) {
+                sessions.removeValue(forKey: id)
+                didChange = true
+                continue
+            }
+
+            if let sourcePid = session.sourcePid,
+               session.sourceProcessIdentity != nil,
+               !processInspector.isProcessAlive(sourcePid) {
+                sessions.removeValue(forKey: id)
+                didChange = true
+                continue
+            }
 
             if age > Self.sessionStaleInterval {
                 sessions.removeValue(forKey: id)
@@ -817,6 +937,8 @@ final class StateMachine {
         requestDisplayTransition(to: displayState, svgOverride: svgOverride(for: displayState))
     }
 
+    /// 把所有可见、非陈旧的会话按优先级聚合成"该展示哪一种状态"。
+    /// mini 模式下走 `stableMiniState` 限定在 mini-* 家族里。
     private func resolveDisplayState() -> PetState {
         winningVisibleSession()?.state ?? .idle
     }
@@ -849,6 +971,8 @@ final class StateMachine {
         }
     }
 
+    /// 决定要显示哪个会话作为"焦点"——返回最高优先级、最新的非陈旧会话。
+    /// 用于点击桌宠跳转终端、菜单展示当前活跃会话等。
     private func winningVisibleSession() -> Session? {
         let visibleSessions = sessions.values.filter { !$0.headless }
         guard !visibleSessions.isEmpty else {
@@ -863,6 +987,8 @@ final class StateMachine {
         }
     }
 
+    /// 状态切换的主路径：先做 minDisplayMs 检查防抖，再决定立即应用还是排到 pendingTransition。
+    /// `triggeringSession` 在落地时会作为 `oneShotSourcePid` 缓存，让点击桌宠能跳到这个会话。
     private func requestDisplayTransition(to state: PetState, svgOverride: String?, triggeringSession: Session? = nil) {
         guard !debugFreezeDisplay else {
             return
@@ -1000,6 +1126,8 @@ final class StateMachine {
         return currentSession.updatedAt == triggeringSession.updatedAt
     }
 
+    /// 真正把状态/SVG/sourcePid 推送给 PetView 的最终落地点。
+    /// 同时更新 `oneShotSourcePid`、`autoReturnTimer`、声效等所有副作用。
     private func applyTransition(to state: PetState, svg: String, triggeringSession: Session? = nil) {
         currentState = state
         currentSvg = svg
@@ -1008,10 +1136,7 @@ final class StateMachine {
         if state.isOneShot {
             oneShotSourcePid = triggeringSession?.sourcePid
             if let triggeringSession {
-                oneShotFocusTarget = TerminalFocusTarget(
-                    pid: triggeringSession.sourcePid,
-                    editor: triggeringSession.editor
-                )
+                oneShotFocusTarget = triggeringSession.focusTarget
             } else {
                 oneShotFocusTarget = nil
             }

@@ -1,7 +1,16 @@
 import Foundation
 import CoreGraphics
 
+/// 解析 SVG `<path d="...">` 属性为 `CGPath`。
+///
+/// 支持完整 SVG path 命令集：M/m L/l H/h V/v C/c S/s Q/q T/t A/a Z/z，
+/// 包括相对坐标、隐式连续坐标、平滑曲线（S/T 复用上一段控制点的反射）。
+/// `A`（椭圆弧）按 SVG 规范转换为多段三次贝塞尔近似。
+///
+/// 实现要点：所有命令共享 `currentPoint` / `subpathStart` / 上次控制点等状态；
+/// 解析失败（数字不全、命令未知）一律返回 nil 让上层跳过这条 path。
 enum PathParser {
+    /// 入口：吃 `d` 属性字符串，吐 `CGPath`。
     static func parsePath(_ d: String) -> CGPath? {
         guard !d.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return nil

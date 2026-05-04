@@ -1,7 +1,15 @@
 import Foundation
 import CoreGraphics
 
+/// SVG 解析入口。把原始 XML 文本拆解为 `SVGDocument`，再交给 CSSParser 解析样式块。
+///
+/// 实现细节：
+/// - 使用 Foundation 的 `XMLParser`（SAX 风格）逐节点构建 `SVGNode` 树；
+/// - 内联 `style="animation:..."` / `transition` 在 SVGDocument 构造完后做第二轮收集，
+///   因为这一步需要知道完整的节点路径（nodePath）才能生成 InlineBinding；
+/// - 不支持 `<text>`、`<filter>` 等节点——资产里没用到。
 enum SVGParser {
+    /// 单次 XML 解析的中间产物；CSSParser 会消费 `styleBlocks` 部分填补 animation/transition 字段。
     struct XMLResult: Sendable {
         var viewBox: SVGViewBox?
         var width: CGFloat?
@@ -35,6 +43,7 @@ enum SVGParser {
         return delegate.result
     }
 
+    /// 完整入口：XML → CSS → SVGDocument。两阶段是因为 inlineBinding 需要先有完整节点树。
     static func parse(_ svgString: String) -> SVGDocument {
         let xmlResult = parseXML(svgString)
         let cssResult = CSSParser.parse(xmlResult.styleBlocks)

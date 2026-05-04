@@ -1,6 +1,15 @@
 import AppKit
 import Foundation
 
+/// 极简模式（Mini Mode）控制器：把桌宠贴到屏幕左/右侧，只露出小半个身体。
+///
+/// 核心交互：
+/// - 鼠标靠近时桌宠"探头"（peek）；
+/// - 拖出 `dragDetachThreshold` 触发跳跃脱离回正常模式；
+/// - 没人理时进入 mini-sleep 表演动画。
+///
+/// 与 StateMachine 的协作通过 `requestMiniDisplayState` 完成——本类决定 mini 应展示哪个子状态，
+/// 状态机据此从 mini-* 家族里选 SVG。
 @MainActor
 final class MiniMode {
     private enum Edge: String {
@@ -8,16 +17,22 @@ final class MiniMode {
         case right
     }
 
+    /// 贴边时桌宠在屏幕外的占比；0.486 是肉眼判定"探头但保留辨识度"的最佳比例。
     static let miniOffsetRatio: CGFloat = 0.486
+    /// peek 模式下额外向中心偏移的距离。
     static let peekOffset: CGFloat = 25
+    /// 拖入贴边动作的吸附容差。
     static let snapTolerance: CGFloat = 10
     static let jumpPeakHeight: CGFloat = 40
     static let jumpDuration: TimeInterval = 0.35
     static let crabwalkSpeed: CGFloat = 0.12
+    /// 拖动桌宠多少距离视为"脱离 mini"——回到正常模式。
     private static let dragDetachThreshold: CGFloat = 45
     private static let dragReturnDuration: TimeInterval = 0.12
+    /// peek 死区：鼠标在贴边一定范围内才会触发探头，避免擦边误触。
     private static let revealDeadZone: CGFloat = 8
     private static let jitterThreshold: CGFloat = 1
+    /// 进入 mini 时的暂停时长，让进入动画播完再让用户互动。
     private static let enterHoldDuration: TimeInterval = 3.2
     private static let animationFrameInterval: TimeInterval = 0.016
     private static let hoverPollInterval: TimeInterval = 0.12
