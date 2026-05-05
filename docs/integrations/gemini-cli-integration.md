@@ -46,19 +46,27 @@ Gemini CLI 的 gating hooks 需要 stdout JSON 响应：
 
 ### Hook 注册
 
-`gemini-install.js` 写入 `~/.gemini/settings.json`，格式为扁平 command hook：
+`gemini-install.js` 写入 `~/.gemini/settings.json`，格式为 Gemini CLI 当前要求的嵌套 command hook：
 
 ```json
 {
   "hooks": {
     "SessionStart": [
-      { "type": "command", "command": "\"/path/to/node\" \"/path/to/gemini-hook.js\"", "name": "clawd" }
+      {
+        "hooks": [
+          { "type": "command", "command": "\"/path/to/node\" \"/path/to/gemini-hook.js\"", "name": "clawd" }
+        ]
+      }
     ]
   }
 }
 ```
 
 安装器检测 `~/.gemini/` 是否存在，未安装 Gemini CLI 时自动跳过。
+
+### 配置加载边界
+
+Gemini CLI 的 hook registry 在进程启动时从 settings 初始化；Clawd 后续重建或修正 `~/.gemini/settings.json`，不会让已经运行的 Gemini 进程热加载新 hook。安装器更新 hook 后，需要重启正在运行的 Gemini CLI 会话。
 
 ---
 

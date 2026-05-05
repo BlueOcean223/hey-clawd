@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Merge Clawd Gemini CLI hooks into ~/.gemini/settings.json (append-only, idempotent)
+// Merge Clawd Gemini CLI hooks into ~/.gemini/settings.json (idempotent, sibling-safe)
 
 const fs = require("fs");
 const path = require("path");
@@ -13,18 +13,94 @@ function extractExistingNodeBin(settings, marker) {
   if (!settings || !settings.hooks) return null;
   for (const entries of Object.values(settings.hooks)) {
     if (!Array.isArray(entries)) continue;
-    for (const entry of entries) {
-      if (!entry || typeof entry !== "object" || typeof entry.command !== "string") continue;
-      if (!entry.command.includes(marker)) continue;
-      const qi = entry.command.indexOf('"');
+    for (const command of collectCommandHooks(entries)) {
+      if (!command.includes(marker)) continue;
+      const qi = command.indexOf('"');
       if (qi === -1) continue;
-      const qe = entry.command.indexOf('"', qi + 1);
+      const qe = command.indexOf('"', qi + 1);
       if (qe === -1) continue;
-      const first = entry.command.substring(qi + 1, qe);
+      const first = command.substring(qi + 1, qe);
       if (!first.includes(marker) && first.startsWith("/")) return first;
     }
   }
   return null;
+}
+
+function collectCommandHooks(entries) {
+  if (!Array.isArray(entries)) return [];
+  const commands = [];
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    if (typeof entry.command === "string") commands.push(entry.command);
+    if (!Array.isArray(entry.hooks)) continue;
+    for (const hook of entry.hooks) {
+      if (hook && typeof hook === "object" && typeof hook.command === "string") {
+        commands.push(hook.command);
+      }
+    }
+  }
+
+  return commands;
+}
+
+function desiredHookEntry(command) {
+  return {
+    hooks: [
+      { type: "command", command, name: "clawd" },
+    ],
+  };
+}
+
+function hasFilteringMatcher(entry) {
+  return entry.matcher !== undefined && entry.matcher !== null && entry.matcher !== "";
+}
+
+function isCurrentGeminiHookFormat(entries, desiredCommand) {
+  let matchingFlatCount = 0;
+  let matchingNestedCount = 0;
+  let hasDesiredUnfilteredNestedHook = false;
+
+  for (const entry of entries) {
+    if (!entry || typeof entry !== "object") continue;
+    if (typeof entry.command === "string" && entry.command.includes(MARKER)) {
+      matchingFlatCount++;
+    }
+    if (!Array.isArray(entry.hooks)) continue;
+    for (const hook of entry.hooks) {
+      if (!hook || typeof hook !== "object" || typeof hook.command !== "string") continue;
+      if (!hook.command.includes(MARKER)) continue;
+      matchingNestedCount++;
+      if (hook.type === "command" && hook.command === desiredCommand && hook.name === "clawd") {
+        hasDesiredUnfilteredNestedHook = !hasFilteringMatcher(entry);
+      }
+    }
+  }
+
+  return matchingFlatCount === 0 && matchingNestedCount === 1 && hasDesiredUnfilteredNestedHook;
+}
+
+function syncGeminiHookEntries(entries, desiredCommand) {
+  const clawdHookCount = collectCommandHooks(entries)
+    .filter((command) => command.includes(MARKER))
+    .length;
+
+  if (isCurrentGeminiHookFormat(entries, desiredCommand)) {
+    return { entries, added: false, updated: false };
+  }
+
+  const cleaned = removeMatchingCommandHooks(
+    entries,
+    (command) => command.includes(MARKER)
+  );
+  const nextEntries = cleaned.entries.slice();
+  nextEntries.push(desiredHookEntry(desiredCommand));
+
+  return {
+    entries: nextEntries,
+    added: clawdHookCount === 0,
+    updated: clawdHookCount > 0,
+  };
 }
 
 const GEMINI_HOOK_EVENTS = [
@@ -102,33 +178,14 @@ function registerGeminiHooks(options = {}) {
     }
 
     const arr = settings.hooks[event];
-    let found = false;
-    let stalePath = false;
-    for (const entry of arr) {
-      if (!entry || typeof entry !== "object") continue;
-      const cmd = entry.command || "";
-      if (!cmd.includes(MARKER)) continue;
-      found = true;
-      if (cmd !== desiredCommand) {
-        entry.command = desiredCommand;
-        stalePath = true;
-      }
-      break;
-    }
+    const syncResult = syncGeminiHookEntries(arr, desiredCommand);
+    settings.hooks[event] = syncResult.entries;
 
-    if (found) {
-      if (stalePath) {
-        updated++;
-        changed = true;
-      } else {
-        skipped++;
-      }
-      continue;
-    }
+    if (syncResult.added) added++;
+    else if (syncResult.updated) updated++;
+    else skipped++;
 
-    arr.push({ type: "command", command: desiredCommand, name: "clawd" });
-    added++;
-    changed = true;
+    if (syncResult.added || syncResult.updated) changed = true;
   }
 
   if (added > 0 || changed) {
