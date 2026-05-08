@@ -10,12 +10,12 @@
   <img src="Resources/gif/clawd-dump.gif" width="120" alt="dump" />
 </p>
 
-一只会响应 AI 编程会话的 macOS 菜单栏桌宠 —— Clawd 实时感知 Claude Code、Codex CLI、Cursor、Gemini CLI、GitHub Copilot CLI、CodeBuddy、Pi 的工具调用，根据空闲 / 思考 / 工作 / 错误 / 睡眠等状态播放不同动画。对 Claude Code 和 CodeBuddy 还额外提供浮动权限气泡，不必切回终端就能批准/拒绝工具调用。
+一只会响应 AI 编程会话的 macOS 菜单栏桌宠 —— Clawd 实时感知 Claude Code、Codex CLI、Cursor、Gemini CLI、GitHub Copilot CLI、CodeBuddy、Pi 的工具调用，根据空闲 / 思考 / 工作 / 错误 / 睡眠等状态播放不同动画。对 Claude Code、CodeBuddy 和 Codex CLI 还额外提供浮动权限气泡，不必切回终端就能批准/拒绝工具调用。
 
 ## 亮点
 
-- **联动 7 种 AI 编码工具** —— Claude Code、CodeBuddy、Cursor、Gemini CLI、Copilot CLI 走 hook；Pi 走 extension；Codex CLI 走 JSONL 日志监控。
-- **权限气泡** —— 不切走编辑器也能批准/拒绝 Claude Code / CodeBuddy 的工具调用；`TaskCreate`、`TaskUpdate` 等 passthrough 工具自动放行。
+- **联动 7 种 AI 编码工具** —— Claude Code、CodeBuddy、Codex CLI、Cursor、Gemini CLI、Copilot CLI 走 hook；Pi 走 extension。
+- **权限气泡** —— 不切走编辑器也能批准/拒绝 Claude Code / CodeBuddy / Codex CLI 的工具调用；Codex 只支持单次 Allow / Deny。
 - **自研 Core Animation SVG 管线** —— 不走 WebView，手绘 50+ 状态基于 15×16 像素网格，按需加载并带 LRU 缓存。
 - **轻量原生实现** —— Swift 6 + AppKit/Core Animation，无 WebView、无内嵌 JS 运行时，CPU 和内存占用低。
 - **纯菜单栏应用**（`LSUIElement`），配靠边 Mini 模式、跟随鼠标的眼神追踪、勿扰开关。
@@ -25,7 +25,7 @@
 ## 环境要求
 
 - macOS 12（Monterey）或更新
-- Node.js（供首次启动时将 hook / extension 注册进 Claude Code / Cursor / Gemini / CodeBuddy / Pi）
+- Node.js（供首次启动时将 hook / extension 注册进 Claude Code / Cursor / Gemini / CodeBuddy / Codex CLI / Pi）
 
 ## 安装
 
@@ -66,7 +66,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | 单向   | — | ✅ |
 | Cursor       | hook           | 单向   | — | ✅ |
 | Copilot CLI  | hook           | 单向   | — | ✅ |
-| Codex CLI    | JSONL 监控     | 只读   | — | — |
+| Codex CLI    | hook           | 双向   | ✅ 单次 Allow/Deny | — |
 | Pi           | extension      | 单向   | — | ✅ |
 
 完整的事件覆盖矩阵见 [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md)，各工具的接入细节在 [docs/integrations/](docs/integrations/)。
@@ -74,13 +74,13 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 ## 工作原理
 
 ```
-IDE hooks / Pi extension / CodexMonitor  →  HTTP POST /state       →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
-IDE hooks                                →  HTTP POST /permission  →  HTTPServer  →  BubbleStack   →  allow/deny
+IDE/CLI hooks / Pi extension  →  HTTP POST /state       →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
+Permission hooks              →  HTTP POST /permission  →  HTTPServer  →  BubbleStack   →  allow/deny
 ```
 
 - **StateMachine** —— 跨并发会话的优先级聚合器（0–8 级），高优先级状态覆盖低优先级；attention、error、notification 等一次性状态播完回落。
 - **SVG 管线** —— `SVGParser` → `SVGDocument`（LRU 缓存）→ `CALayerRenderer` → `CAAnimationBuilder`（CSS keyframes → Core Animation）。深入讲解见 [docs/rendering-system.md](docs/rendering-system.md)。
-- **集成桥接层**（`hooks/`）—— 包含 CommonJS hook 脚本 `clawd-hook.js`、`cursor-hook.js`、`gemini-hook.js`、`codebuddy-hook.js`、`copilot-hook.js`，Codex 的 JSONL 监控器 `codex-remote-monitor.js`，以及 Pi 的 extension / installer（`pi-extension.ts`、`pi-install.js`）。这些集成最终都会把工具生命周期事件映射为桌宠状态并 POST 到本地 HTTP。端口发现顺序：先 `~/.clawd/runtime.json`，再扫 23333–23337。
+- **集成桥接层**（`hooks/`）—— 包含 CommonJS hook 脚本与 installer：`clawd-hook.js`、`cursor-hook.js`、`gemini-hook.js`、`codebuddy-hook.js`、`copilot-hook.js`、`codex-hook.js` 及对应 `*-install.js`，以及 Pi 的 extension / installer（`pi-extension.ts`、`pi-install.js`）。这些集成最终都会把工具生命周期事件映射为桌宠状态并 POST 到本地 HTTP。端口发现顺序：先 `~/.clawd/runtime.json`，再扫 23333–23337。
 - **HTTP 端点** —— `/state`、`/permission`、`/status`、`/quit`，开发期还有 `/debug/svg` 和 `/debug/reset`。
 
 ## 状态画廊
@@ -102,7 +102,7 @@ IDE hooks                                →  HTTP POST /permission  →  HTTPSe
 ## 开发
 
 ```bash
-# Swift 测试（SVG 解析/渲染、HTTP 服务、Codex 监控、状态机）
+# Swift 测试（SVG 解析/渲染、HTTP 服务、hook installer、状态机）
 swift test
 
 # 权限气泡集成测试（对着运行中的 app）

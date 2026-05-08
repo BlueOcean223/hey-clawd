@@ -10,12 +10,12 @@
   <img src="Resources/gif/clawd-dump.gif" width="120" alt="dump" />
 </p>
 
-A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI, CodeBuddy and Pi, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code and CodeBuddy it can also surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow".
+A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI, CodeBuddy and Pi, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code, CodeBuddy and Codex CLI it can also surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow".
 
 ## Highlights
 
-- **Reacts to 7 AI coding tools** — Claude Code, CodeBuddy, Cursor, Gemini CLI, Copilot CLI via hooks; Pi via extension; Codex CLI via JSONL log monitoring.
-- **Permission bubbles** — approve or deny tool use for Claude Code / CodeBuddy without leaving your editor; passthrough tools (`TaskCreate`, `TaskUpdate`, …) auto-allow.
+- **Reacts to 7 AI coding tools** — Claude Code, CodeBuddy, Codex CLI, Cursor, Gemini CLI and Copilot CLI via hooks; Pi via extension.
+- **Permission bubbles** — approve or deny tool use for Claude Code / CodeBuddy / Codex CLI without leaving your editor; Codex supports single Allow / Deny decisions only.
 - **Custom Core Animation SVG pipeline** — no WebView. 50+ hand-drawn states on a 15×16 pixel grid, cached via LRU.
 - **Lightweight & native** — Swift 6 + AppKit/Core Animation. No WebView, no embedded JS runtime. Low CPU and memory footprint.
 - **Menu-bar only** (`LSUIElement`) with mini edge-hugging mode, eye tracking that follows your cursor, and a Do-Not-Disturb toggle.
@@ -25,7 +25,7 @@ A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI codin
 ## Requirements
 
 - macOS 12 (Monterey) or newer
-- Node.js (for bundled installers to register hooks/extensions into Claude Code / Cursor / Gemini / CodeBuddy / Pi on first launch)
+- Node.js (for bundled installers to register hooks/extensions into Claude Code / Cursor / Gemini / CodeBuddy / Codex CLI / Pi on first launch)
 
 ## Install
 
@@ -66,7 +66,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | one-way       | — | ✅ |
 | Cursor       | hook           | one-way       | — | ✅ |
 | Copilot CLI  | hook           | one-way       | — | ✅ |
-| Codex CLI    | JSONL monitor  | read-only     | — | — |
+| Codex CLI    | hook           | bidirectional | ✅ single Allow/Deny | — |
 | Pi           | extension      | one-way       | — | ✅ |
 
 See [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md) for the full event-coverage matrix and per-tool deep dives in [docs/integrations/](docs/integrations/).
@@ -74,13 +74,13 @@ See [docs/integrations/platform-comparison.md](docs/integrations/platform-compar
 ## How it works
 
 ```
-IDE hooks / Pi extension / CodexMonitor  →  HTTP POST /state  →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
-IDE hooks                                →  HTTP POST /permission  →  HTTPServer  →  BubbleStack  →  allow/deny
+IDE/CLI hooks / Pi extension  →  HTTP POST /state  →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
+Permission hooks              →  HTTP POST /permission  →  HTTPServer  →  BubbleStack  →  allow/deny
 ```
 
 - **StateMachine** — priority-based aggregator (priority 0–8) across concurrent sessions. Higher-priority states override lower ones; one-shot states (attention, error, notification) play once then revert.
 - **SVG pipeline** — `SVGParser` → `SVGDocument` (LRU cache) → `CALayerRenderer` → `CAAnimationBuilder` (CSS keyframes → Core Animation). See [docs/rendering-system.md](docs/rendering-system.md).
-- **Integration bridge** (`hooks/`) — CommonJS hook handlers (`clawd-hook.js`, `cursor-hook.js`, `gemini-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`), the Codex JSONL monitor (`codex-remote-monitor.js`), plus the Pi extension/installer pair (`pi-extension.ts`, `pi-install.js`). Each integration ultimately maps tool lifecycle events to pet states and POSTs to the local HTTP server. Port discovery: `~/.clawd/runtime.json` first, then scans 23333–23337.
+- **Integration bridge** (`hooks/`) — CommonJS hook handlers and installers (`clawd-hook.js`, `cursor-hook.js`, `gemini-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`, `codex-hook.js`, plus their `*-install.js` scripts), plus the Pi extension/installer pair (`pi-extension.ts`, `pi-install.js`). Each integration ultimately maps tool lifecycle events to pet states and POSTs to the local HTTP server. Port discovery: `~/.clawd/runtime.json` first, then scans 23333–23337.
 - **HTTP endpoints** — `/state`, `/permission`, `/status`, `/quit`, plus `/debug/svg` and `/debug/reset` for development.
 
 ## State gallery
@@ -102,7 +102,7 @@ Full catalog of 50+ states: [docs/svg-catalog.md](docs/svg-catalog.md).
 ## Develop
 
 ```bash
-# Swift test target (SVG parsing/rendering, HTTP server, Codex monitor, state machine)
+# Swift test target (SVG parsing/rendering, HTTP server, hook installer, state machine)
 swift test
 
 # Permission-bubble integration tests (hits a running app)
