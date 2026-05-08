@@ -18,7 +18,7 @@ docs/
     ├── platform-comparison.md        ← 七种工具的能力/事件覆盖度对比矩阵
     ├── claude-code-integration.md    ← Claude Code（含权限气泡完整链路）
     ├── codebuddy-integration.md      ← CodeBuddy（含权限气泡）
-    ├── codex-integration.md          ← Codex CLI（native hooks + 单次权限气泡）
+    ├── codex-integration.md          ← Codex CLI（native hooks + 实验性权限气泡）
     ├── cursor-integration.md         ← Cursor Agent
     ├── gemini-cli-integration.md     ← Gemini CLI
     ├── pi-integration.md             ← Pi（extension 单向状态同步）

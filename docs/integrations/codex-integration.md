@@ -1,6 +1,6 @@
 # Codex CLI 集成原理
 
-> Clawd 桌宠如何通过 Codex native hooks 感知会话状态并辅助权限审批。
+> Clawd 桌宠如何通过 Codex native hooks 感知会话状态，并在实验开关打开时接管单次权限审批。
 
 ---
 
@@ -11,7 +11,7 @@ Codex CLI
   └─ native command hook (~/.codex/hooks.json)
        └─ hooks/codex-hook.js
             ├─ 状态事件 → POST /state → HTTPServer → StateMachine → 桌宠动画切换
-            └─ PermissionRequest → POST /permission → BubbleStack → 气泡 UI
+            └─ PermissionRequest（实验开关）→ POST /permission → BubbleStack → 气泡 UI
                                                              ↓
                                                       Allow / Deny
                                                              ↓
@@ -34,6 +34,8 @@ Codex CLI
 - `~/.codex/` 不存在时直接跳过，不主动创建 Codex 配置目录
 - 不读取、不修改 `~/.codex/config.toml`
 - append-only / idempotent merge，不覆盖用户已有 hooks
+- 默认只注册状态同步 hook，并清理旧版本遗留的 Clawd `PermissionRequest` hook
+- 只有 `Hooks → 实验 → Codex 权限审核` 打开时，才额外注册 `PermissionRequest` hook
 - 以 command 中包含 `codex-hook.js` 作为 hey-clawd 条目标记
 - `--uninstall` 只移除 hey-clawd 写入的 `codex-hook.js` 条目，保留用户其他 hooks
 
@@ -48,7 +50,7 @@ Codex 首次发现新的 command hooks 时，可能会提示 `hooks need review 
 | `SessionStart` | `idle` | 会话开始 |
 | `UserPromptSubmit` | `thinking` | 用户提交 prompt |
 | `PreToolUse` | `working` | 工具调用前 |
-| `PermissionRequest` | `notification` / 权限气泡 | 仅非 bypass / dontAsk 时转发 `/permission` |
+| `PermissionRequest` | `notification` / 权限气泡 | 实验开关打开时才注册；仅非 bypass / dontAsk 时转发 `/permission` |
 | `PostToolUse` | `working` | 工具调用后；同时用于唯一匹配关闭残留气泡 |
 | `Stop` | `attention` | 回合结束 |
 | `PreCompact` | `sweeping` | 上下文压缩开始 |
@@ -85,9 +87,17 @@ Codex 首次发现新的 command hooks 时，可能会提示 `hooks need review 
 
 ---
 
-## 权限气泡
+## 权限气泡（实验开关）
 
 Codex `PermissionRequest` 走 command hook stdout 决策，而不是 Claude Code 的 HTTP hook 直连。因此 hey-clawd 先由 `codex-hook.js` POST `/permission`，再把 HTTPServer 返回的 Codex-safe JSON 原样写回 stdout。
+
+这个功能默认关闭。开启路径：
+
+```text
+Hooks → 实验 → Codex 权限审核
+```
+
+开启前会弹窗提醒用户：启用后 Clawd 会接管 Codex 的单次权限审批，Codex 终端会等待气泡 Allow/Deny。关闭该开关时，只清理 Codex `PermissionRequest` hook，保留其它状态同步 hooks。
 
 行为边界：
 

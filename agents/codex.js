@@ -19,7 +19,8 @@ module.exports = {
   },
   capabilities: {
     httpHook: true,
-    permissionApproval: true,
+    permissionApproval: false,
+    experimentalPermissionApproval: true,
     sessionEnd: false,
     subagent: false,
   },

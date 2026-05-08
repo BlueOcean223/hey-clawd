@@ -9,15 +9,19 @@ const { loadJsonFile, normalizeHookEntries, removeMatchingCommandHooks } = requi
 
 const MARKER = "codex-hook.js";
 
-const CODEX_HOOK_EVENTS = [
+const CODEX_STATE_HOOK_EVENTS = [
   "SessionStart",
   "UserPromptSubmit",
   "PreToolUse",
-  "PermissionRequest",
   "PostToolUse",
   "Stop",
   "PreCompact",
   "PostCompact",
+];
+const CODEX_PERMISSION_HOOK_EVENT = "PermissionRequest";
+const CODEX_HOOK_EVENTS = [
+  ...CODEX_STATE_HOOK_EVENTS,
+  CODEX_PERMISSION_HOOK_EVENT,
 ];
 
 const EVENT_STATUS_MESSAGES = {
@@ -156,6 +160,33 @@ function syncCodexHookEntries(entries, event, command) {
   };
 }
 
+function removeCodexHooksForEvent(settings, event) {
+  if (!settings || !settings.hooks || typeof settings.hooks !== "object") {
+    return { removed: 0, changed: false };
+  }
+
+  const normalized = normalizeHookEntries(settings.hooks[event]);
+  if (!normalized.entries) {
+    return { removed: 0, changed: false };
+  }
+
+  const result = removeMatchingCommandHooks(
+    normalized.entries,
+    (command) => command.includes(MARKER)
+  );
+  if (!result.changed) {
+    return { removed: 0, changed: false };
+  }
+
+  if (result.entries.length === 0) {
+    delete settings.hooks[event];
+  } else {
+    settings.hooks[event] = result.entries;
+  }
+
+  return { removed: result.removed, changed: true };
+}
+
 function loadHooksFile(hooksPath) {
   const loaded = loadJsonFile(hooksPath);
   if (!loaded.exists) {
@@ -174,6 +205,8 @@ function loadHooksFile(hooksPath) {
  * @param {string} [options.codexDir]
  * @param {string} [options.hooksPath]
  * @param {string|null} [options.nodeBin]
+ * @param {boolean} [options.includePermission]
+ * @param {boolean} [options.permissionOnly]
  * @returns {{ added: number, skipped: number, updated: number }}
  */
 function registerCodexHooks(options = {}) {
@@ -201,8 +234,21 @@ function registerCodexHooks(options = {}) {
   let skipped = 0;
   let updated = 0;
   let changed = false;
+  const events = options.permissionOnly
+    ? [CODEX_PERMISSION_HOOK_EVENT]
+    : options.includePermission
+      ? CODEX_HOOK_EVENTS
+      : CODEX_STATE_HOOK_EVENTS;
 
-  for (const event of CODEX_HOOK_EVENTS) {
+  if (!options.permissionOnly && !options.includePermission) {
+    const permissionCleanup = removeCodexHooksForEvent(settings, CODEX_PERMISSION_HOOK_EVENT);
+    if (permissionCleanup.changed) {
+      updated++;
+      changed = true;
+    }
+  }
+
+  for (const event of events) {
     const normalized = normalizeHookEntries(settings.hooks[event]);
     if (!normalized.entries) {
       settings.hooks[event] = [];
@@ -231,7 +277,8 @@ function registerCodexHooks(options = {}) {
   }
 
   if (!options.silent) {
-    console.log(`Clawd Codex hooks → ${hooksPath}`);
+    const label = options.permissionOnly ? "Clawd Codex permission hook" : "Clawd Codex hooks";
+    console.log(`${label} → ${hooksPath}`);
     console.log(`  Added: ${added}, updated: ${updated}, skipped: ${skipped}`);
   }
 
@@ -296,14 +343,53 @@ function unregisterCodexHooks(options = {}) {
   return { removed: totalRemoved };
 }
 
-module.exports = { registerCodexHooks, unregisterCodexHooks, CODEX_HOOK_EVENTS };
+function unregisterCodexPermissionHook(options = {}) {
+  const { hooksPath } = codexPaths(options);
+  const loaded = loadJsonFile(hooksPath);
+  if (!loaded.exists) {
+    if (!options.silent) console.log("No ~/.codex/hooks.json found — nothing to clean.");
+    return { removed: 0 };
+  }
+  const settings = loaded.data;
+
+  if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+    throw new Error(`Failed to read ${hooksPath}: root object is not a JSON object`);
+  }
+  if (!settings.hooks || typeof settings.hooks !== "object") {
+    if (!options.silent) console.log("No hooks in hooks.json — nothing to clean.");
+    return { removed: 0 };
+  }
+
+  const result = removeCodexHooksForEvent(settings, CODEX_PERMISSION_HOOK_EVENT);
+  if (result.changed) writeJsonAtomic(hooksPath, settings);
+
+  if (!options.silent) {
+    console.log(`Clawd Codex permission hook cleaned from ${hooksPath}`);
+    console.log(`  Removed: ${result.removed} hooks`);
+  }
+
+  return { removed: result.removed };
+}
+
+module.exports = {
+  registerCodexHooks,
+  unregisterCodexHooks,
+  unregisterCodexPermissionHook,
+  CODEX_HOOK_EVENTS,
+  CODEX_STATE_HOOK_EVENTS,
+  CODEX_PERMISSION_HOOK_EVENT,
+};
 
 if (require.main === module) {
   try {
     if (process.argv.includes("--uninstall")) {
       unregisterCodexHooks({});
+    } else if (process.argv.includes("--uninstall-permission")) {
+      unregisterCodexPermissionHook({});
+    } else if (process.argv.includes("--permission-only")) {
+      registerCodexHooks({ permissionOnly: true });
     } else {
-      registerCodexHooks({});
+      registerCodexHooks({ includePermission: process.argv.includes("--with-permission") });
     }
   } catch (err) {
     console.error(err.message);

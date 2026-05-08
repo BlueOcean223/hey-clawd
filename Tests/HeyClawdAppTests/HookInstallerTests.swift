@@ -94,6 +94,63 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(permissionRequest.count, 1)
     }
 
+    func testCodexPermissionLocalCleanupRemovesOnlyPermissionHook() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let hooksURL = root
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("hooks.json", isDirectory: false)
+        try writeJSON([
+            "hooks": [
+                "PreToolUse": [
+                    [
+                        "matcher": "*",
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "\"/usr/bin/node\" \"/tmp/codex-hook.js\"",
+                                "timeout": 10,
+                            ],
+                        ],
+                    ],
+                ],
+                "PermissionRequest": [
+                    [
+                        "matcher": "*",
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "\"/usr/bin/node\" \"/tmp/codex-hook.js\"",
+                                "timeout": 600,
+                            ],
+                            [
+                                "type": "command",
+                                "command": "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"",
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], to: hooksURL)
+
+        let result = HookInstaller.cleanupLocalCodexPermissionHookForTesting(settingsPath: hooksURL.path)
+        let settings = try readJSONObject(from: hooksURL)
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        let preToolUse = try XCTUnwrap(hooks["PreToolUse"] as? [Any])
+        let preToolUseEntry = try XCTUnwrap(preToolUse.first as? [String: Any])
+        let preToolUseHooks = try XCTUnwrap(preToolUseEntry["hooks"] as? [[String: Any]])
+        let permissionRequest = try XCTUnwrap(hooks["PermissionRequest"] as? [Any])
+        let permissionEntry = try XCTUnwrap(permissionRequest.first as? [String: Any])
+        let permissionHooks = try XCTUnwrap(permissionEntry["hooks"] as? [[String: Any]])
+
+        XCTAssertTrue(result.success)
+        XCTAssertTrue(result.output.contains("Removed: 1 hooks"))
+        XCTAssertEqual(preToolUseHooks.first?["command"] as? String, "\"/usr/bin/node\" \"/tmp/codex-hook.js\"")
+        XCTAssertEqual(permissionHooks.count, 1)
+        XCTAssertEqual(permissionHooks.first?["command"] as? String, "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"")
+    }
+
     func testFindHooksDir_returnsWorkspaceHooks_whenResourceURLInDerivedData() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }

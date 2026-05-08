@@ -4,7 +4,14 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const { registerCodexHooks, unregisterCodexHooks, CODEX_HOOK_EVENTS } = require("../codex-install");
+const {
+  registerCodexHooks,
+  unregisterCodexHooks,
+  unregisterCodexPermissionHook,
+  CODEX_HOOK_EVENTS,
+  CODEX_STATE_HOOK_EVENTS,
+  CODEX_PERMISSION_HOOK_EVENT,
+} = require("../codex-install");
 
 const EXPECTED_STATUS_MESSAGES = {
   SessionStart: "Clawd: session started",
@@ -74,7 +81,7 @@ test("registerCodexHooks skips when ~/.codex is missing", () => {
   assert.equal(fs.existsSync(hooksPath), false);
 });
 
-test("registerCodexHooks writes eight hook events without touching config.toml", () => {
+test("registerCodexHooks writes state hook events without touching config.toml", () => {
   const { codexDir, hooksPath } = makeTempCodexDir("codex-install");
   const configPath = path.join(codexDir, "config.toml");
   fs.writeFileSync(configPath, "hooks = false\n", "utf8");
@@ -87,12 +94,13 @@ test("registerCodexHooks writes eight hook events without touching config.toml",
   });
   const settings = readHooks(hooksPath);
 
-  assert.equal(result.added, CODEX_HOOK_EVENTS.length);
+  assert.equal(result.added, CODEX_STATE_HOOK_EVENTS.length);
   assert.equal(result.updated, 0);
   assert.equal(result.skipped, 0);
   assert.equal(fs.readFileSync(configPath, "utf8"), "hooks = false\n");
+  assert.equal(Object.prototype.hasOwnProperty.call(settings.hooks, CODEX_PERMISSION_HOOK_EVENT), false);
 
-  for (const event of CODEX_HOOK_EVENTS) {
+  for (const event of CODEX_STATE_HOOK_EVENTS) {
     assert.equal(Array.isArray(settings.hooks[event]), true);
     assert.equal(settings.hooks[event].length, 1);
     assert.equal(settings.hooks[event][0].matcher, "*");
@@ -115,7 +123,7 @@ test("registerCodexHooks is idempotent", () => {
   const rerun = registerCodexHooks({ codexDir, hooksPath, silent: true, nodeBin: "/usr/bin/node" });
   const after = fs.readFileSync(hooksPath, "utf8");
 
-  assert.deepEqual(rerun, { added: 0, skipped: CODEX_HOOK_EVENTS.length, updated: 0 });
+  assert.deepEqual(rerun, { added: 0, skipped: CODEX_STATE_HOOK_EVENTS.length, updated: 0 });
   assert.equal(after, before);
 });
 
@@ -149,7 +157,7 @@ test("registerCodexHooks preserves user hooks and top-level settings", () => {
   });
   const settings = readHooks(hooksPath);
 
-  assert.equal(result.added, CODEX_HOOK_EVENTS.length);
+  assert.equal(result.added, CODEX_STATE_HOOK_EVENTS.length);
   assert.equal(settings.userSetting, true);
   assert.equal(
     collectCommandHooks(settings.hooks.PreToolUse).includes("\"/usr/bin/node\" \"/tmp/user-hook.js\""),
@@ -161,6 +169,93 @@ test("registerCodexHooks preserves user hooks and top-level settings", () => {
   );
   assert.equal(collectCommandHooks(settings.hooks.PreToolUse).includes(expectedCodexCommand()), true);
   assert.equal(collectCommandHooks(settings.hooks.Stop).includes(expectedCodexCommand()), true);
+  assert.equal(Object.prototype.hasOwnProperty.call(settings.hooks, CODEX_PERMISSION_HOOK_EVENT), false);
+});
+
+test("registerCodexHooks removes stale permission hook by default", () => {
+  const { codexDir, hooksPath } = makeTempCodexDir("codex-default-no-permission");
+  writeHooks(hooksPath, {
+    hooks: {
+      PermissionRequest: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "command", command: expectedCodexCommand(), timeout: 600 },
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"" },
+          ],
+        },
+      ],
+    },
+  });
+
+  const result = registerCodexHooks({
+    codexDir,
+    hooksPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+  });
+  const settings = readHooks(hooksPath);
+
+  assert.equal(result.added, CODEX_STATE_HOOK_EVENTS.length);
+  assert.equal(result.updated, 1);
+  assert.deepEqual(collectCommandHooks(settings.hooks.PermissionRequest), [
+    "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"",
+  ]);
+});
+
+test("registerCodexHooks can opt into permission hook", () => {
+  const { codexDir, hooksPath } = makeTempCodexDir("codex-with-permission");
+
+  const result = registerCodexHooks({
+    codexDir,
+    hooksPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+    includePermission: true,
+  });
+  const settings = readHooks(hooksPath);
+
+  assert.equal(result.added, CODEX_HOOK_EVENTS.length);
+  assert.equal(result.updated, 0);
+  assert.equal(result.skipped, 0);
+  assert.equal(collectCommandHooks(settings.hooks.PermissionRequest).includes(expectedCodexCommand()), true);
+  assert.deepEqual(settings.hooks.PermissionRequest[0].hooks, [
+    {
+      type: "command",
+      command: expectedCodexCommand(),
+      timeout: 600,
+      statusMessage: EXPECTED_STATUS_MESSAGES.PermissionRequest,
+    },
+  ]);
+});
+
+test("registerCodexHooks permissionOnly touches only PermissionRequest", () => {
+  const { codexDir, hooksPath } = makeTempCodexDir("codex-permission-only");
+  writeHooks(hooksPath, {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "keep",
+          hooks: [{ type: "command", command: "\"/usr/bin/node\" \"/tmp/user-hook.js\"" }],
+        },
+      ],
+    },
+  });
+
+  const result = registerCodexHooks({
+    codexDir,
+    hooksPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+    permissionOnly: true,
+  });
+  const settings = readHooks(hooksPath);
+
+  assert.deepEqual(result, { added: 1, skipped: 0, updated: 0 });
+  assert.deepEqual(collectCommandHooks(settings.hooks.PreToolUse), [
+    "\"/usr/bin/node\" \"/tmp/user-hook.js\"",
+  ]);
+  assert.equal(collectCommandHooks(settings.hooks.PermissionRequest).includes(expectedCodexCommand()), true);
 });
 
 test("unregisterCodexHooks removes only codex-hook.js entries and preserves siblings", () => {
@@ -198,6 +293,40 @@ test("unregisterCodexHooks removes only codex-hook.js entries and preserves sibl
     },
   ]);
   assert.equal(Object.prototype.hasOwnProperty.call(settings.hooks, "Stop"), false);
+});
+
+test("unregisterCodexPermissionHook removes only PermissionRequest codex hooks", () => {
+  const { codexDir, hooksPath } = makeTempCodexDir("codex-uninstall-permission");
+  writeHooks(hooksPath, {
+    hooks: {
+      PreToolUse: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "command", command: expectedCodexCommand(), timeout: 10 },
+          ],
+        },
+      ],
+      PermissionRequest: [
+        {
+          matcher: "*",
+          hooks: [
+            { type: "command", command: expectedCodexCommand(), timeout: 600 },
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"" },
+          ],
+        },
+      ],
+    },
+  });
+
+  const result = unregisterCodexPermissionHook({ codexDir, hooksPath, silent: true });
+  const settings = readHooks(hooksPath);
+
+  assert.equal(result.removed, 1);
+  assert.equal(collectCommandHooks(settings.hooks.PreToolUse).includes(expectedCodexCommand()), true);
+  assert.deepEqual(collectCommandHooks(settings.hooks.PermissionRequest), [
+    "\"/usr/bin/node\" \"/tmp/user-permission-hook.js\"",
+  ]);
 });
 
 test("codex installer fails loudly on malformed hooks.json", () => {

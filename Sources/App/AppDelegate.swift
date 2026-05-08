@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
     private var isAutoFocusEnabled: Bool
+    private var isCodexPermissionReviewEnabled: Bool
     private var miniModeController: MiniMode?
     private var sparkleUpdater: SparkleUpdater?
     private lazy var bubbleStack = BubbleStack(
@@ -57,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isHideBubblesEnabled = preferences.hideBubbles
         isSoundEffectsEnabled = !preferences.soundMuted
         isAutoFocusEnabled = preferences.autoFocusSession
+        isCodexPermissionReviewEnabled = preferences.codexPermissionReviewEnabled
         super.init()
     }
 
@@ -206,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isHideBubblesEnabled: false,
                 isSoundEffectsEnabled: true,
                 isAutoFocusEnabled: false,
+                isCodexPermissionReviewEnabled: false,
                 isPetVisible: true,
                 sessions: []
             )
@@ -277,6 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onUnregisterHooks = { [weak self] target in
             self?.unregisterHooksManually(target: target)
         }
+        controller.onToggleCodexPermissionReview = { [weak self] enabled in
+            self?.toggleCodexPermissionReview(enabled)
+        }
         controller.onQuit = {
             NSApp.terminate(nil)
         }
@@ -339,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isHideBubblesEnabled: isHideBubblesEnabled,
             isSoundEffectsEnabled: isSoundEffectsEnabled,
             isAutoFocusEnabled: isAutoFocusEnabled,
+            isCodexPermissionReviewEnabled: isCodexPermissionReviewEnabled,
             isPetVisible: petWindow?.isVisible ?? false,
             sessions: stateMachine?.activeSessionSnapshots ?? []
         )
@@ -764,19 +771,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 启动时静默注册一次 hooks，不弹窗。
     private func registerHooksOnLaunch(serverPort: Int) {
+        let codexPermissionHookEnabled = isCodexPermissionReviewEnabled
         Task.detached(priority: .utility) {
-            _ = HookInstaller.register(serverPort: serverPort)
+            _ = HookInstaller.register(
+                serverPort: serverPort,
+                codexPermissionHookEnabled: codexPermissionHookEnabled
+            )
         }
     }
 
     /// 菜单栏手动注册，完成后弹窗显示结果。
     private func registerHooksManually(target: HookInstaller.HookTarget?) {
+        let codexPermissionHookEnabled = isCodexPermissionReviewEnabled
         Task.detached(priority: .userInitiated) {
             let result: (success: Bool, output: String)
             if let target {
-                result = HookInstaller.register(target: target)
+                result = HookInstaller.register(
+                    target: target,
+                    codexPermissionHookEnabled: codexPermissionHookEnabled
+                )
             } else {
-                result = HookInstaller.register()
+                result = HookInstaller.register(codexPermissionHookEnabled: codexPermissionHookEnabled)
             }
             await MainActor.run {
                 let alert = self.makeAlert(style: result.success ? .informational : .warning)
@@ -785,6 +800,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.runModal()
             }
         }
+    }
+
+    private func toggleCodexPermissionReview(_ enabled: Bool) {
+        if enabled && !confirmEnableCodexPermissionReview() {
+            return
+        }
+
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = HookInstaller.setCodexPermissionHookEnabled(enabled)
+            await MainActor.run {
+                guard let self else { return }
+                if result.success {
+                    self.isCodexPermissionReviewEnabled = enabled
+                    self.preferences.codexPermissionReviewEnabled = enabled
+                    return
+                }
+
+                let alert = self.makeAlert(style: .warning)
+                alert.messageText = enabled ? "Codex Permission Review Failed" : "Codex Permission Cleanup Failed"
+                alert.informativeText = result.output
+                alert.runModal()
+            }
+        }
+    }
+
+    private func confirmEnableCodexPermissionReview() -> Bool {
+        let alert = makeAlert(style: .warning)
+        if appLanguage == .zh {
+            alert.messageText = "启用 Codex 权限审核？"
+            alert.informativeText = "启用后 Clawd 会接管 Codex 的单次权限审批，Codex 终端会等待气泡 Allow/Deny。关闭后会恢复 Codex 原生终端审批。"
+            alert.addButton(withTitle: "启用")
+            alert.addButton(withTitle: "取消")
+        } else {
+            alert.messageText = "Enable Codex Permission Review?"
+            alert.informativeText = "When enabled, Clawd handles Codex single-use permission approvals and the Codex terminal waits for the bubble decision. Turning it off restores Codex's native terminal approval flow."
+            alert.addButton(withTitle: "Enable")
+            alert.addButton(withTitle: "Cancel")
+        }
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// 菜单栏手动清理钩子，完成后弹窗显示结果。

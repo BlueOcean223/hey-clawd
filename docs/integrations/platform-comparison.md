@@ -10,7 +10,7 @@
 |------|:-----------:|:---------:|:----------:|:------:|:-----------:|:---------:|:--:|
 | **集成方式** | hook | hook | hook | hook | hook | native hook | extension |
 | **数据方向** | 双向 | 双向 | 单向 | 单向 | 单向 | 双向 | 单向 |
-| **权限气泡** | ✅ | ✅ | ❌ | ❌ | ❌ | ✅ 单次 Allow/Deny | ❌ |
+| **权限气泡** | ✅ | ✅ | ❌ | ❌ | ❌ | 实验开关 | ❌ |
 | **终端跳转** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
 | **编辑器检测** | ✅ | ✅ | ✅ | ✅ (默认 cursor) | ✅ | ❌ | ✅ |
 | **远程模式** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
@@ -71,7 +71,7 @@
 
 ## 权限气泡支持详情
 
-Claude Code、CodeBuddy 和 Codex CLI 支持权限气泡。Claude Code / CodeBuddy 走 HTTP hook；Codex 由 `codex-hook.js` 在 `PermissionRequest` command hook 中 POST `/permission`，再把 Codex-safe 决策写回 stdout。
+Claude Code、CodeBuddy 和 Codex CLI 支持权限气泡。Claude Code / CodeBuddy 走 HTTP hook；Codex 权限气泡默认关闭，只有 `Hooks → 实验 → Codex 权限审核` 打开后才由 `codex-hook.js` 在 `PermissionRequest` command hook 中 POST `/permission`，再把 Codex-safe 决策写回 stdout。
 
 ```
 POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应 / Codex stdout
@@ -102,7 +102,7 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应 / 
 
 - **Passthrough 自动批准**：TaskCreate/TaskUpdate 等无风险工具直接放行
 - **断连检测**：TCP 连接关闭时自动撤掉气泡（`monitorDisconnect` 循环 receive），覆盖终端 Deny 路径
-- **工具完成唯一匹配自动关闭**（Claude Code / Codex）：终端 Allow 后客户端不一定关闭待决气泡；工具完成后会发 `PostToolUse`。Claude Code 终端 deny-with-message 可由 `PostToolBatch` 覆盖。hook 默认携带 `tool_input_hash` 元数据，hey-clawd 在 `(session, tool, hash)` 唯一锁定时关闭气泡（多匹配跳过保护）
+- **工具完成唯一匹配自动关闭**（Claude Code / Codex 实验权限气泡）：终端 Allow 后客户端不一定关闭待决气泡；工具完成后会发 `PostToolUse`。Claude Code 终端 deny-with-message 可由 `PostToolBatch` 覆盖。hook 默认携带 `tool_input_hash` 元数据，hey-clawd 在 `(session, tool, hash)` 唯一锁定时关闭气泡（多匹配跳过保护）
 - **5 分钟超时兜底**：`PendingPermissionRequest` 入栈后 5 分钟仍未决策时自动 `.undecided`，覆盖 hook 失败 / 进程僵死等边缘场景
 - **明确关闭路径**：用户决策、手动关闭、HTTP 断连、PostToolUse / PostToolUseFailure / PostToolBatch 唯一匹配、5 分钟超时；不按 `session_id` 批量清理
 - **Session allow**（Claude Code / CodeBuddy）：多个 `addRules` / `addDirectories` suggestion 聚合为一个 `Always allow in this session` 按钮，只写 `destination: "session"`。Codex 不支持 `updatedPermissions`，因此不显示 Always allow。
@@ -115,6 +115,8 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应 / 
 
 - **native hooks**：`codex-install.js` 只写用户级 `~/.codex/hooks.json`，不创建 `~/.codex/`，不修改 `~/.codex/config.toml`
 - **hook review 门槛**：Codex 首次发现新的 command hooks 时可能要求用户在 `/hooks` 中 review/trust；完成前 hooks 已注册但不会执行
+- **默认不接管审批**：自动注册和普通注册只写状态同步 hooks，并清理旧版本遗留的 Clawd `PermissionRequest` hook
+- **实验权限审核**：`Hooks → 实验 → Codex 权限审核` 打开时才额外注册 `PermissionRequest`；关闭时只移除该 hook，保留状态同步 hooks
 - **fail-open**：状态上报 100ms 超时；权限路径在 app 不可达、超时、undecided、DND、hide bubbles 时返回 `{}`，Codex 原生审批流继续
 - **权限边界**：只支持单次 Allow / Deny；不支持 Always allow、`updatedPermissions`、`updatedInput` 或 `interrupt`
 - **bypass 模式**：`permission_mode` 为 `bypassPermissions` 或 `dontAsk` 时不弹权限气泡，普通状态事件仍会上报
