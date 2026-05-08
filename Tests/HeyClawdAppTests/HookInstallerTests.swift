@@ -9,6 +9,13 @@ final class HookInstallerTests: XCTestCase {
         XCTAssertEqual(HookInstaller.HookTarget.codex.displayName, "Codex CLI")
     }
 
+    func testHookTargetsMenuOrderKeepsCodexNearClaudeAndCodeBuddyLast() {
+        XCTAssertEqual(
+            HookInstaller.HookTarget.allCases,
+            [.claudeCode, .codex, .gemini, .cursor, .pi, .codeBuddy]
+        )
+    }
+
     func testBundledHooksIncludeCodexInstaller() throws {
         let hooksDir = try XCTUnwrap(HookInstaller.findHooksDir())
         let codexInstallerPath = URL(fileURLWithPath: hooksDir)

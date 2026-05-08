@@ -719,6 +719,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 payload["cursor_pid"] ??
                 payload["codebuddy_pid"] ??
                 payload["gemini_pid"] ??
+                payload["codex_pid"] ??
                 payload["copilot_pid"]
         )
     }

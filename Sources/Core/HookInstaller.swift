@@ -37,11 +37,11 @@ enum HookInstaller {
     /// rawValue 必须与 `hooks/` 目录下的安装脚本文件名严格一致。
     enum HookTarget: String, CaseIterable {
         case claudeCode = "install.js"
+        case codex = "codex-install.js"
         case gemini = "gemini-install.js"
         case cursor = "cursor-install.js"
-        case codeBuddy = "codebuddy-install.js"
-        case codex = "codex-install.js"
         case pi = "pi-install.js"
+        case codeBuddy = "codebuddy-install.js"
 
         var displayName: String {
             switch self {

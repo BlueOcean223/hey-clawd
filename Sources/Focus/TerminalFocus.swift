@@ -42,6 +42,7 @@ enum TerminalFocus {
         "com.mitchellh.ghostty",
         "com.microsoft.VSCode",
         "com.todesktop.230313mzl4w4u92",
+        "com.openai.codex",
     ]
 
     /// 两段式回切策略：白名单 PID → 编辑器 AppleScript。

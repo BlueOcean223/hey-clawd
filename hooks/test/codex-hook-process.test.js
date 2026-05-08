@@ -6,9 +6,11 @@ const path = require("node:path");
 const {
   EVENT_TO_STATE,
   PERMISSION_TIMEOUT_MS,
+  attachCodexProcessMetadata,
   buildPermissionPayload,
   buildStatePayload,
   codexSessionId,
+  getCodexProcessMetadata,
   parsePayload,
   runPayload,
   shouldSkipPermissionRequest,
@@ -67,6 +69,101 @@ test("Codex hook attaches stable tool metadata for tool events", () => {
     assert.equal(body.tool_use_id, "tool-1");
     assert.equal(body.tool_input_hash, hashToolInput(toolInput));
   }
+});
+
+test("Codex hook preserves process metadata for focus and lifecycle", () => {
+  const body = buildStatePayload({
+    hook_event_name: "SessionStart",
+    session_id: "session-focus",
+    source_pid: 123,
+    agent_pid: 456,
+    codex_pid: 456,
+    pid_chain: [456, 200, 123],
+    editor: "cursor",
+    headless: true,
+  });
+
+  assert.equal(body.source_pid, 123);
+  assert.equal(body.agent_pid, 456);
+  assert.equal(body.codex_pid, 456);
+  assert.deepEqual(body.pid_chain, [456, 200, 123]);
+  assert.equal(body.editor, "cursor");
+  assert.equal(body.headless, true);
+});
+
+test("Codex hook resolves CLI focus to the terminal ancestor", () => {
+  const metadata = getCodexProcessMetadata({
+    platform: "darwin",
+    startPid: 10,
+    execSync: fakePs({
+      10: {
+        ppid: 11,
+        comm: "/Users/me/.nvm/versions/node/vendor/codex/codex",
+        command: "/Users/me/.nvm/versions/node/vendor/codex/codex",
+      },
+      11: { ppid: 12, comm: "/bin/zsh", command: "-/bin/zsh" },
+      12: {
+        ppid: 1,
+        comm: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+        command: "/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal",
+      },
+    }),
+  });
+
+  assert.equal(metadata.sourcePid, 12);
+  assert.equal(metadata.codexPid, 10);
+  assert.deepEqual(metadata.pidChain, [10, 11, 12]);
+  assert.equal(metadata.headless, false);
+
+  const body = attachCodexProcessMetadata({ hook_event_name: "SessionStart" }, metadata);
+  assert.equal(body.source_pid, 12);
+  assert.equal(body.agent_pid, 10);
+  assert.equal(body.codex_pid, 10);
+  assert.deepEqual(body.pid_chain, [10, 11, 12]);
+});
+
+test("Codex hook resolves app focus when no terminal ancestor exists", () => {
+  const metadata = getCodexProcessMetadata({
+    platform: "darwin",
+    startPid: 20,
+    execSync: fakePs({
+      20: {
+        ppid: 1,
+        comm: "/Applications/Codex.app/Contents/MacOS/Codex",
+        command: "/Applications/Codex.app/Contents/MacOS/Codex",
+      },
+    }),
+  });
+
+  assert.equal(metadata.sourcePid, 20);
+  assert.equal(metadata.codexPid, 20);
+  assert.deepEqual(metadata.pidChain, [20]);
+});
+
+test("Codex hook marks noninteractive codex exec sessions headless", () => {
+  const metadata = getCodexProcessMetadata({
+    platform: "darwin",
+    startPid: 30,
+    execSync: fakePs({
+      30: {
+        ppid: 31,
+        comm: "/Users/me/.nvm/versions/node/vendor/codex/codex",
+        command: "/Users/me/.nvm/versions/node/vendor/codex/codex exec run-tests",
+      },
+      31: { ppid: 32, comm: "/bin/zsh", command: "-/bin/zsh" },
+      32: {
+        ppid: 1,
+        comm: "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+        command: "/Applications/Ghostty.app/Contents/MacOS/ghostty",
+      },
+    }),
+  });
+
+  assert.equal(metadata.sourcePid, 32);
+  assert.equal(metadata.codexPid, 30);
+  assert.equal(metadata.headless, true);
+  const body = attachCodexProcessMetadata({ hook_event_name: "SessionStart" }, metadata);
+  assert.equal(body.headless, true);
 });
 
 test("Codex hook skips tool hash when tool_input is absent", () => {
@@ -310,3 +407,18 @@ test("Codex PermissionRequest bypass modes do not call /permission", () => {
     assert.equal(stdout, "{}\n");
   }
 });
+
+function fakePs(processes) {
+  return (command) => {
+    const match = String(command).match(/-p\s+(\d+)/);
+    assert.ok(match, `missing pid in command: ${command}`);
+    const pid = Number(match[1]);
+    const proc = processes[pid];
+    if (!proc) throw new Error(`unknown pid ${pid}`);
+
+    if (/ps -o ppid=/.test(command)) return String(proc.ppid);
+    if (/ps -o comm=/.test(command)) return proc.comm;
+    if (/ps -o command=/.test(command)) return proc.command || proc.comm;
+    throw new Error(`unexpected command: ${command}`);
+  };
+}

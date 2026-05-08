@@ -32,6 +32,36 @@ const TOOL_EVENTS = new Set([
   "PermissionRequest",
 ]);
 
+const TERMINAL_NAMES_WIN = new Set([
+  "windowsterminal.exe", "cmd.exe", "powershell.exe", "pwsh.exe",
+  "code.exe", "alacritty.exe", "wezterm-gui.exe", "mintty.exe",
+  "conemu64.exe", "conemu.exe", "hyper.exe", "tabby.exe",
+  "antigravity.exe", "warp.exe", "iterm.exe", "ghostty.exe",
+]);
+const TERMINAL_NAMES_MAC = new Set([
+  "terminal", "iterm2", "alacritty", "wezterm-gui", "kitty",
+  "hyper", "tabby", "warp", "ghostty",
+]);
+const TERMINAL_NAMES_LINUX = new Set([
+  "gnome-terminal", "kgx", "konsole", "xfce4-terminal", "tilix",
+  "alacritty", "wezterm", "wezterm-gui", "kitty", "ghostty",
+  "xterm", "lxterminal", "terminator", "tabby", "hyper", "warp",
+]);
+
+const SYSTEM_BOUNDARY_WIN = new Set(["explorer.exe", "services.exe", "winlogon.exe", "svchost.exe"]);
+const SYSTEM_BOUNDARY_MAC = new Set(["launchd", "init", "systemd"]);
+const SYSTEM_BOUNDARY_LINUX = new Set(["systemd", "init"]);
+
+const EDITOR_MAP_WIN = { "code.exe": "code", "cursor.exe": "cursor" };
+const EDITOR_MAP_MAC = { "code": "code", "cursor": "cursor" };
+const EDITOR_MAP_LINUX = { "code": "code", "cursor": "cursor", "code-insiders": "code" };
+
+const CODEX_NAMES_WIN = new Set(["codex.exe"]);
+const CODEX_NAMES_MAC = new Set(["codex"]);
+const CODEX_NAMES_LINUX = new Set(["codex"]);
+
+let _processMetadata = null;
+
 function codexSessionId(sessionId) {
   const raw = typeof sessionId === "string" && sessionId.length > 0 ? sessionId : "default";
   return raw.startsWith("codex:") ? raw : `codex:${raw}`;
@@ -51,6 +81,7 @@ function buildStatePayload(payload) {
 
   copyIfPresent(body, payload, "cwd");
   copyIfPresent(body, payload, "turn_id");
+  appendProcessMetadata(body, payload);
   appendToolMetadata(body, payload, hookName);
 
   return body;
@@ -70,6 +101,7 @@ function buildPermissionPayload(payload) {
   copyIfPresent(body, payload, "tool_name");
   copyIfPresent(body, payload, "tool_input");
   copyIfPresent(body, payload, "tool_use_id");
+  appendProcessMetadata(body, payload);
   if (Object.prototype.hasOwnProperty.call(payload, "tool_input")) {
     try {
       body.tool_input_hash = hashToolInput(payload.tool_input);
@@ -85,6 +117,15 @@ function copyIfPresent(target, source, key) {
   }
 }
 
+function appendProcessMetadata(body, payload) {
+  copyIfPresent(body, payload, "source_pid");
+  copyIfPresent(body, payload, "agent_pid");
+  copyIfPresent(body, payload, "codex_pid");
+  copyIfPresent(body, payload, "pid_chain");
+  copyIfPresent(body, payload, "editor");
+  copyIfPresent(body, payload, "headless");
+}
+
 function appendToolMetadata(body, payload, hookName) {
   if (!payload || !TOOL_EVENTS.has(hookName)) return;
 
@@ -95,6 +136,164 @@ function appendToolMetadata(body, payload, hookName) {
       body.tool_input_hash = hashToolInput(payload.tool_input);
     } catch {}
   }
+}
+
+function terminalNameSet(platform = process.platform) {
+  if (platform === "win32") return TERMINAL_NAMES_WIN;
+  return platform === "linux" ? TERMINAL_NAMES_LINUX : TERMINAL_NAMES_MAC;
+}
+
+function systemBoundarySet(platform = process.platform) {
+  if (platform === "win32") return SYSTEM_BOUNDARY_WIN;
+  return platform === "linux" ? SYSTEM_BOUNDARY_LINUX : SYSTEM_BOUNDARY_MAC;
+}
+
+function editorMap(platform = process.platform) {
+  if (platform === "win32") return EDITOR_MAP_WIN;
+  return platform === "linux" ? EDITOR_MAP_LINUX : EDITOR_MAP_MAC;
+}
+
+function codexNameSet(platform = process.platform) {
+  if (platform === "win32") return CODEX_NAMES_WIN;
+  return platform === "linux" ? CODEX_NAMES_LINUX : CODEX_NAMES_MAC;
+}
+
+function readProcessInfo(pid, platform, execSync) {
+  if (!pid || pid <= 1) return null;
+  try {
+    if (platform === "win32") {
+      const out = execSync(
+        `wmic process where "ProcessId=${pid}" get Name,ParentProcessId /format:csv`,
+        { encoding: "utf8", timeout: 1500, windowsHide: true }
+      );
+      const lines = out.trim().split("\n").filter((line) => line.includes(","));
+      if (!lines.length) return null;
+      const parts = lines[lines.length - 1].split(",");
+      return {
+        name: (parts[1] || "").trim().toLowerCase(),
+        parentPid: parseInt(parts[2], 10),
+        command: "",
+      };
+    }
+
+    const ppidOut = execSync(`ps -o ppid= -p ${pid}`, { encoding: "utf8", timeout: 1000 }).trim();
+    const commOut = execSync(`ps -o comm= -p ${pid}`, { encoding: "utf8", timeout: 1000 }).trim();
+    let commandOut = commOut;
+    try {
+      commandOut = execSync(`ps -o command= -p ${pid}`, { encoding: "utf8", timeout: 500 }).trim();
+    } catch {}
+    return {
+      name: require("path").basename(commOut).toLowerCase(),
+      parentPid: parseInt(ppidOut, 10),
+      command: commandOut,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function detectEditor(name, command, platform = process.platform) {
+  const mapped = editorMap(platform)[name];
+  if (mapped) return mapped;
+
+  const fullLower = String(command || "").toLowerCase();
+  if (fullLower.includes("visual studio code")) return "code";
+  if (fullLower.includes("cursor.app")) return "cursor";
+  return null;
+}
+
+function isCodexProcess(name, command, platform = process.platform) {
+  if (codexNameSet(platform).has(name)) return true;
+
+  const fullLower = String(command || "").toLowerCase();
+  return fullLower.includes("@openai/codex") ||
+    fullLower.includes("/codex-darwin-") ||
+    fullLower.includes("\\codex-") ||
+    /\bcodex(\.exe)?\b/.test(fullLower);
+}
+
+function isCodexAppProcess(command) {
+  const fullLower = String(command || "").toLowerCase();
+  return fullLower.includes(".app/contents/macos/") &&
+    (fullLower.includes("/codex.app/") || fullLower.endsWith("/codex"));
+}
+
+function isHeadlessCodexCommand(command) {
+  const text = String(command || "");
+  return /\bcodex\s+(exec|app-server)\b/.test(text) ||
+    /\s(exec|app-server)(\s|$)/.test(text);
+}
+
+function getCodexProcessMetadata(options = {}) {
+  if (_processMetadata && !options.execSync && !options.startPid && !options.platform) {
+    return _processMetadata;
+  }
+
+  const platform = options.platform || process.platform;
+  const execSync = options.execSync || require("child_process").execSync;
+  const terminalNames = terminalNameSet(platform);
+  const systemBoundary = systemBoundarySet(platform);
+  let pid = options.startPid || process.ppid;
+  let terminalPid = null;
+  let codexPid = null;
+  let codexCommand = "";
+  let codexAppPid = null;
+  let detectedEditor = null;
+  const pidChain = [];
+
+  for (let i = 0; i < 8; i++) {
+    const info = readProcessInfo(pid, platform, execSync);
+    if (!info) break;
+
+    pidChain.push(pid);
+    if (!detectedEditor) detectedEditor = detectEditor(info.name, info.command, platform);
+    if (!codexPid && isCodexProcess(info.name, info.command, platform)) {
+      codexPid = pid;
+      codexCommand = info.command || "";
+    }
+    if (!codexAppPid && isCodexAppProcess(info.command)) {
+      codexAppPid = pid;
+    }
+    if (systemBoundary.has(info.name)) break;
+    if (terminalNames.has(info.name)) terminalPid = pid;
+    if (!info.parentPid || info.parentPid === pid || info.parentPid <= 1) break;
+    pid = info.parentPid;
+  }
+
+  const metadata = {
+    sourcePid: terminalPid || codexAppPid || null,
+    codexPid: codexPid || null,
+    pidChain,
+    editor: detectedEditor,
+    headless: codexPid ? isHeadlessCodexCommand(codexCommand) : false,
+  };
+
+  if (!options.execSync && !options.startPid && !options.platform) {
+    _processMetadata = metadata;
+  }
+  return metadata;
+}
+
+function attachCodexProcessMetadata(payload, metadata = getCodexProcessMetadata()) {
+  if (!payload || process.env.CLAWD_REMOTE) return payload || {};
+  const next = { ...payload };
+  if (metadata.sourcePid && !Object.prototype.hasOwnProperty.call(next, "source_pid")) {
+    next.source_pid = metadata.sourcePid;
+  }
+  if (metadata.codexPid) {
+    if (!Object.prototype.hasOwnProperty.call(next, "agent_pid")) next.agent_pid = metadata.codexPid;
+    if (!Object.prototype.hasOwnProperty.call(next, "codex_pid")) next.codex_pid = metadata.codexPid;
+  }
+  if (metadata.pidChain && metadata.pidChain.length && !Object.prototype.hasOwnProperty.call(next, "pid_chain")) {
+    next.pid_chain = metadata.pidChain;
+  }
+  if (metadata.editor && !Object.prototype.hasOwnProperty.call(next, "editor")) {
+    next.editor = metadata.editor;
+  }
+  if (metadata.headless && !Object.prototype.hasOwnProperty.call(next, "headless")) {
+    next.headless = true;
+  }
+  return next;
 }
 
 function parsePayload(raw) {
@@ -289,7 +488,11 @@ function main() {
     if (ran) return;
     ran = true;
     if (stdinTimer) clearTimeout(stdinTimer);
-    runPayload(payload, { dryRun: process.env.CLAWD_DRY_RUN === "1" }, () => process.exit(0));
+    runPayload(
+      attachCodexProcessMetadata(payload),
+      { dryRun: process.env.CLAWD_DRY_RUN === "1" },
+      () => process.exit(0)
+    );
   };
 
   process.stdin.on("data", (chunk) => chunks.push(chunk));
@@ -304,9 +507,11 @@ module.exports = {
   EVENT_TO_STATE,
   PERMISSION_TIMEOUT_MS,
   STATE_TIMEOUT_MS,
+  attachCodexProcessMetadata,
   buildPermissionPayload,
   buildStatePayload,
   codexSessionId,
+  getCodexProcessMetadata,
   parsePayload,
   postPermissionToPort,
   postPermissionToRunningServer,
