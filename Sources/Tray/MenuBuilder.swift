@@ -89,6 +89,7 @@ enum MenuBuilder {
     /// 找不到匹配时回退到 `defaultAgentIconName`。
     private static let agentIconNames: Set<String> = [
         "claude-code",
+        "codebuddy",
         "codex",
         "copilot-cli",
         "cursor-agent",
@@ -370,7 +371,7 @@ enum MenuBuilder {
         case .cursor:
             return "cursor-agent"
         case .codeBuddy:
-            return nil
+            return "codebuddy"
         case .codex:
             return "codex"
         case .pi:
