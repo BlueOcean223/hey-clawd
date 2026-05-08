@@ -5,10 +5,13 @@ const path = require("node:path");
 
 const {
   EVENT_TO_STATE,
+  PERMISSION_TIMEOUT_MS,
+  buildPermissionPayload,
   buildStatePayload,
   codexSessionId,
   parsePayload,
   runPayload,
+  shouldSkipPermissionRequest,
 } = require("../codex-hook");
 const { hashToolInput } = require("../lib/match-key");
 
@@ -165,4 +168,145 @@ test("Codex hook process handles malformed stdin as fail-open", () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(result.stdout, "{}\n");
   assert.deepEqual(parsePayload("{ invalid json"), {});
+});
+
+test("Codex hook builds PermissionRequest payload without permission suggestions", () => {
+  const toolInput = { command: "cat package.json" };
+  const body = buildPermissionPayload({
+    hook_event_name: "PermissionRequest",
+    session_id: "permission-session",
+    cwd: "/repo",
+    turn_id: "turn-permission",
+    tool_name: "shell",
+    tool_input: toolInput,
+    tool_use_id: "tool-permission",
+    permission_suggestions: [{ type: "addRules" }],
+  });
+
+  assert.equal(body.agent_id, "codex");
+  assert.equal(body.session_id, "codex:permission-session");
+  assert.equal(body.event, "PermissionRequest");
+  assert.equal(body.cwd, "/repo");
+  assert.equal(body.turn_id, "turn-permission");
+  assert.equal(body.tool_name, "shell");
+  assert.deepEqual(body.tool_input, toolInput);
+  assert.equal(body.tool_use_id, "tool-permission");
+  assert.equal(body.tool_input_hash, hashToolInput(toolInput));
+  assert.equal(Object.prototype.hasOwnProperty.call(body, "permission_suggestions"), false);
+});
+
+test("Codex PermissionRequest allow returns Codex-safe allow output", () => {
+  const allowBody = JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: { behavior: "allow" },
+    },
+  });
+  let postedPayload = null;
+  let stdout = "";
+
+  runPayload(
+    {
+      hook_event_name: "PermissionRequest",
+      session_id: "allow-session",
+      tool_name: "shell",
+      tool_input: { command: "date" },
+    },
+    {
+      writeStdout: (text) => { stdout += text; },
+      postPermissionToRunningServer: (data, options, callback) => {
+        postedPayload = JSON.parse(data);
+        assert.equal(options.timeoutMs, PERMISSION_TIMEOUT_MS);
+        callback(true, 23333, allowBody);
+      },
+    }
+  );
+
+  assert.equal(postedPayload.agent_id, "codex");
+  assert.equal(postedPayload.session_id, "codex:allow-session");
+  assert.equal(stdout, `${allowBody}\n`);
+  assert.equal(stdout.includes("updatedPermissions"), false);
+});
+
+test("Codex PermissionRequest deny returns Codex-safe deny output", () => {
+  const denyBody = JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PermissionRequest",
+      decision: {
+        behavior: "deny",
+        message: "Denied by user.",
+      },
+    },
+  });
+  let stdout = "";
+
+  runPayload(
+    {
+      hook_event_name: "PermissionRequest",
+      session_id: "deny-session",
+      tool_name: "shell",
+      tool_input: { command: "rm file" },
+    },
+    {
+      writeStdout: (text) => { stdout += text; },
+      postPermissionToRunningServer: (_data, _options, callback) => {
+        callback(true, 23333, denyBody);
+      },
+    }
+  );
+
+  const output = JSON.parse(stdout);
+  assert.equal(output.hookSpecificOutput.decision.behavior, "deny");
+  assert.equal(output.hookSpecificOutput.decision.message, "Denied by user.");
+});
+
+test("Codex PermissionRequest undecided and unavailable paths fail open", () => {
+  for (const response of [
+    { ok: true, body: "{}" },
+    { ok: false, body: null },
+    { ok: true, body: "not json" },
+  ]) {
+    let stdout = "";
+    runPayload(
+      {
+        hook_event_name: "PermissionRequest",
+        session_id: "undecided-session",
+        tool_name: "shell",
+        tool_input: { command: "pwd" },
+      },
+      {
+        writeStdout: (text) => { stdout += text; },
+        postPermissionToRunningServer: (_data, _options, callback) => {
+          callback(response.ok, response.ok ? 23333 : null, response.body);
+        },
+      }
+    );
+
+    assert.equal(stdout, "{}\n");
+  }
+});
+
+test("Codex PermissionRequest bypass modes do not call /permission", () => {
+  for (const permissionMode of ["bypassPermissions", "dontAsk"]) {
+    let posted = false;
+    let stdout = "";
+
+    assert.equal(shouldSkipPermissionRequest({ permission_mode: permissionMode }), true);
+    runPayload(
+      {
+        hook_event_name: "PermissionRequest",
+        session_id: "skip-session",
+        permission_mode: permissionMode,
+        tool_name: "shell",
+        tool_input: { command: "whoami" },
+      },
+      {
+        writeStdout: (text) => { stdout += text; },
+        postPermissionToRunningServer: () => { posted = true; },
+      }
+    );
+
+    assert.equal(posted, false);
+    assert.equal(stdout, "{}\n");
+  }
 });
