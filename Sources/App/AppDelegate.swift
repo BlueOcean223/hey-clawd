@@ -21,6 +21,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "PostToolUseFailure",
         "PostToolBatch",
     ]
+    private static let terminalApprovalAgentIds: Set<String> = [
+        "claude-code",
+        "codex",
+    ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
@@ -688,11 +692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionId: String,
         agentId: String?
     ) {
-        guard
-            let event,
-            Self.terminalApprovalEvents.contains(event),
-            agentId == "claude-code"
-        else {
+        guard Self.isTerminalApprovalEvent(event, agentId: agentId) else {
             return
         }
 
@@ -705,6 +705,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         dismissBubbleMatchingToolPayload(payload, sessionId: sessionId)
+    }
+
+    static func isTerminalApprovalEvent(_ event: String?, agentId: String?) -> Bool {
+        guard
+            let event,
+            Self.terminalApprovalEvents.contains(event),
+            let agentId
+        else {
+            return false
+        }
+
+        return Self.terminalApprovalAgentIds.contains(agentId)
     }
 
     private func dismissBubbleMatchingToolPayload(_ payload: [String: Any], sessionId: String) {
