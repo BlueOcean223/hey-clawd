@@ -10,12 +10,12 @@
   <img src="Resources/gif/clawd-dump.gif" width="120" alt="dump" />
 </p>
 
-一只会响应 AI 编程会话的 macOS 菜单栏桌宠 —— Clawd 实时感知 Claude Code、Codex CLI、Cursor、Gemini CLI、GitHub Copilot CLI、CodeBuddy、Pi 的工具调用，根据空闲 / 思考 / 工作 / 错误 / 睡眠等状态播放不同动画。对 Claude Code、CodeBuddy 和 Codex CLI 还额外提供浮动权限气泡，不必切回终端就能批准/拒绝工具调用。
+一只会响应 AI 编程会话的 macOS 菜单栏桌宠 —— Clawd 实时感知 Claude Code、Codex CLI、Cursor、Gemini CLI、GitHub Copilot CLI、CodeBuddy、Pi 的工具调用，根据空闲 / 思考 / 工作 / 错误 / 睡眠等状态播放不同动画。对 Claude Code、CodeBuddy 额外提供浮动权限气泡，不必切回终端就能批准/拒绝工具调用；Codex CLI 权限审核作为实验开关提供。
 
 ## 亮点
 
 - **联动 7 种 AI 编码工具** —— Claude Code、CodeBuddy、Codex CLI、Cursor、Gemini CLI、Copilot CLI 走 hook；Pi 走 extension。
-- **权限气泡** —— 不切走编辑器也能批准/拒绝 Claude Code / CodeBuddy / Codex CLI 的工具调用；Codex 只支持单次 Allow / Deny。
+- **权限气泡** —— 不切走编辑器也能批准/拒绝 Claude Code / CodeBuddy 的工具调用；Codex CLI 提供实验性的单次 Allow / Deny 审核开关。
 - **自研 Core Animation SVG 管线** —— 不走 WebView，手绘 50+ 状态基于 15×16 像素网格，按需加载并带 LRU 缓存。
 - **轻量原生实现** —— Swift 6 + AppKit/Core Animation，无 WebView、无内嵌 JS 运行时，CPU 和内存占用低。
 - **纯菜单栏应用**（`LSUIElement`），配靠边 Mini 模式、跟随鼠标的眼神追踪、勿扰开关。
@@ -41,9 +41,9 @@ xattr -dr com.apple.quarantine /Applications/hey-clawd.app
 
 然后再重新启动应用。
 
-首次启动会在 `127.0.0.1:23333` 开一个本地 HTTP 服务（端口冲突时回退到 23334–23337），并执行内置的 installer 脚本，把 hook / extension 注册到检测到的 AI 工具里。未安装的工具会被跳过。托盘菜单 → **Register Hooks** 可以随时重跑注册（比如 `cc-switch` 切换 profile 之后）。
+首次启动会在 `127.0.0.1:23333` 开一个本地 HTTP 服务（端口冲突时回退到 23334–23337），并执行内置的 installer 脚本，把 hook / extension 注册到检测到的 AI 工具里。未安装的工具会被跳过。托盘菜单 → **Hooks → 注册** 可以随时重跑注册（比如 `cc-switch` 切换 profile 之后）。
 
-Codex CLI 首次发现新注册的 command hooks 时，可能还需要在 Codex 内执行 `/hooks` 做一次 review/trust，之后这些 hooks 才会真正运行。
+Codex CLI 默认只注册状态同步 hooks，不注册权限审核 hook，因此原生终端审批不会被接管。如需启用，可打开 **Hooks → 实验 → Codex 权限审核**；关闭时只移除 Codex `PermissionRequest` hook，保留状态同步。Codex CLI 首次发现新注册的 command hooks 时，可能还需要在 Codex 内执行 `/hooks` 做一次 review/trust，之后这些 hooks 才会真正运行。
 
 ### 从源码构建
 
@@ -68,7 +68,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | 单向   | — | ✅ |
 | Cursor       | hook           | 单向   | — | ✅ |
 | Copilot CLI  | hook           | 单向   | — | ✅ |
-| Codex CLI    | hook           | 双向   | ✅ 单次 Allow/Deny | — |
+| Codex CLI    | hook           | 双向   | 实验开关，单次 Allow/Deny | — |
 | Pi           | extension      | 单向   | — | ✅ |
 
 完整的事件覆盖矩阵见 [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md)，各工具的接入细节在 [docs/integrations/](docs/integrations/)。
@@ -76,8 +76,8 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 ## 工作原理
 
 ```
-IDE/CLI hooks / Pi extension  →  HTTP POST /state       →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
-Permission hooks              →  HTTP POST /permission  →  HTTPServer  →  BubbleStack   →  allow/deny
+IDE/CLI hooks / Pi extension              →  HTTP POST /state       →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
+Permission hooks（Codex CLI 可选）        →  HTTP POST /permission  →  HTTPServer  →  BubbleStack   →  allow/deny
 ```
 
 - **StateMachine** —— 跨并发会话的优先级聚合器（0–8 级），高优先级状态覆盖低优先级；attention、error、notification 等一次性状态播完回落。

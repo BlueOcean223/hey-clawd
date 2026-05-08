@@ -10,12 +10,12 @@
   <img src="Resources/gif/clawd-dump.gif" width="120" alt="dump" />
 </p>
 
-A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI, CodeBuddy and Pi, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code, CodeBuddy and Codex CLI it can also surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow".
+A macOS menu-bar desktop pet — Clawd reacts in real time to what your AI coding assistant is doing. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, GitHub Copilot CLI, CodeBuddy and Pi, and plays different animations for idle / thinking / working / error / sleep states. For Claude Code and CodeBuddy it can surface tool-use permission prompts as floating bubbles so you never have to return to the terminal just to click "allow"; Codex CLI permission review is available as an experimental opt-in.
 
 ## Highlights
 
 - **Reacts to 7 AI coding tools** — Claude Code, CodeBuddy, Codex CLI, Cursor, Gemini CLI and Copilot CLI via hooks; Pi via extension.
-- **Permission bubbles** — approve or deny tool use for Claude Code / CodeBuddy / Codex CLI without leaving your editor; Codex supports single Allow / Deny decisions only.
+- **Permission bubbles** — approve or deny tool use for Claude Code / CodeBuddy without leaving your editor; Codex CLI supports experimental single Allow / Deny review behind an explicit toggle.
 - **Custom Core Animation SVG pipeline** — no WebView. 50+ hand-drawn states on a 15×16 pixel grid, cached via LRU.
 - **Lightweight & native** — Swift 6 + AppKit/Core Animation. No WebView, no embedded JS runtime. Low CPU and memory footprint.
 - **Menu-bar only** (`LSUIElement`) with mini edge-hugging mode, eye tracking that follows your cursor, and a Do-Not-Disturb toggle.
@@ -41,9 +41,9 @@ xattr -dr com.apple.quarantine /Applications/hey-clawd.app
 
 Then launch the app again.
 
-On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks/extensions into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Register Hooks**.
+On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks/extensions into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Hooks → Register**.
 
-Codex CLI may require an extra `/hooks` review inside Codex before newly registered command hooks are trusted and allowed to run.
+Codex CLI state hooks are registered by default, but Codex permission review is off by default so native terminal approval stays intact. To opt in, enable **Hooks → Experiments → Codex Permission Review**; turning it off removes only the Codex `PermissionRequest` hook and keeps state sync. Codex CLI may also require an extra `/hooks` review inside Codex before newly registered command hooks are trusted and allowed to run.
 
 ### Build from source
 
@@ -68,7 +68,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | one-way       | — | ✅ |
 | Cursor       | hook           | one-way       | — | ✅ |
 | Copilot CLI  | hook           | one-way       | — | ✅ |
-| Codex CLI    | hook           | bidirectional | ✅ single Allow/Deny | — |
+| Codex CLI    | hook           | bidirectional | experimental single Allow/Deny | — |
 | Pi           | extension      | one-way       | — | ✅ |
 
 See [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md) for the full event-coverage matrix and per-tool deep dives in [docs/integrations/](docs/integrations/).
@@ -76,8 +76,8 @@ See [docs/integrations/platform-comparison.md](docs/integrations/platform-compar
 ## How it works
 
 ```
-IDE/CLI hooks / Pi extension  →  HTTP POST /state  →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
-Permission hooks              →  HTTP POST /permission  →  HTTPServer  →  BubbleStack  →  allow/deny
+IDE/CLI hooks / Pi extension              →  HTTP POST /state       →  HTTPServer  →  StateMachine  →  PetView (Core Animation)
+Permission hooks (optional for Codex CLI) →  HTTP POST /permission  →  HTTPServer  →  BubbleStack   →  allow/deny
 ```
 
 - **StateMachine** — priority-based aggregator (priority 0–8) across concurrent sessions. Higher-priority states override lower ones; one-shot states (attention, error, notification) play once then revert.
