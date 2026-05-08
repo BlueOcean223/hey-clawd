@@ -3,6 +3,90 @@ import XCTest
 @testable import HeyClawdApp
 
 final class HookInstallerTests: XCTestCase {
+    func testHookTargetsIncludeCodexCLI() {
+        XCTAssertTrue(HookInstaller.HookTarget.allCases.contains(.codex))
+        XCTAssertEqual(HookInstaller.HookTarget.codex.rawValue, "codex-install.js")
+        XCTAssertEqual(HookInstaller.HookTarget.codex.displayName, "Codex CLI")
+    }
+
+    func testBundledHooksIncludeCodexInstaller() throws {
+        let hooksDir = try XCTUnwrap(HookInstaller.findHooksDir())
+        let codexInstallerPath = URL(fileURLWithPath: hooksDir)
+            .appendingPathComponent("codex-install.js", isDirectory: false)
+            .path
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: codexInstallerPath))
+    }
+
+    func testCodexLocalCleanupRemovesOnlyCodexHookEntries() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let hooksURL = root
+            .appendingPathComponent(".codex", isDirectory: true)
+            .appendingPathComponent("hooks.json", isDirectory: false)
+        try writeJSON([
+            "hooks": [
+                "PreToolUse": [
+                    [
+                        "matcher": "*",
+                        "hooks": [
+                            [
+                                "type": "command",
+                                "command": "\"/usr/bin/node\" \"/tmp/codex-hook.js\"",
+                                "timeout": 10,
+                            ],
+                            [
+                                "type": "command",
+                                "command": "\"/usr/bin/node\" \"/tmp/user-hook.js\"",
+                            ],
+                        ],
+                    ],
+                ],
+                "Stop": [
+                    "matcher": "*",
+                    "hooks": [
+                        [
+                            "type": "command",
+                            "command": "\"/usr/bin/node\" \"/tmp/codex-hook.js\"",
+                            "timeout": 10,
+                        ],
+                    ],
+                ],
+                "PermissionRequest": [
+                    [
+                        "matcher": "*",
+                        "hooks": [
+                            [
+                                "type": "http",
+                                "url": "https://example.com/permission",
+                                "timeout": 30,
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ], to: hooksURL)
+
+        let result = HookInstaller.cleanupLocalSettingsForTesting(
+            target: .codex,
+            settingsPath: hooksURL.path
+        )
+        let settings = try readJSONObject(from: hooksURL)
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        let preToolUse = try XCTUnwrap(hooks["PreToolUse"] as? [Any])
+        let preToolUseEntry = try XCTUnwrap(preToolUse.first as? [String: Any])
+        let remainingHooks = try XCTUnwrap(preToolUseEntry["hooks"] as? [[String: Any]])
+        let permissionRequest = try XCTUnwrap(hooks["PermissionRequest"] as? [Any])
+
+        XCTAssertTrue(result.success)
+        XCTAssertTrue(result.output.contains("Removed: 2 hooks"))
+        XCTAssertEqual(remainingHooks.count, 1)
+        XCTAssertEqual(remainingHooks.first?["command"] as? String, "\"/usr/bin/node\" \"/tmp/user-hook.js\"")
+        XCTAssertNil(hooks["Stop"])
+        XCTAssertEqual(permissionRequest.count, 1)
+    }
+
     func testFindHooksDir_returnsWorkspaceHooks_whenResourceURLInDerivedData() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -120,6 +204,17 @@ final class HookInstallerTests: XCTestCase {
     private func writeInstallScript(in hooksURL: URL) throws {
         try FileManager.default.createDirectory(at: hooksURL, withIntermediateDirectories: true)
         try Data().write(to: hooksURL.appendingPathComponent("install.js", isDirectory: false))
+    }
+
+    private func writeJSON(_ object: [String: Any], to url: URL) throws {
+        let data = try JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted])
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: url)
+    }
+
+    private func readJSONObject(from url: URL) throws -> [String: Any] {
+        let data = try Data(contentsOf: url)
+        return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
     private func executablePath(in root: URL) -> String {

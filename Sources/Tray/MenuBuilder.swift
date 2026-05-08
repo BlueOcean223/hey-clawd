@@ -371,6 +371,8 @@ enum MenuBuilder {
             return "cursor-agent"
         case .codeBuddy:
             return nil
+        case .codex:
+            return "codex"
         case .pi:
             return "pi"
         }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Registers Clawd hooks into Claude Code's ~/.claude/settings.json
-/// by running the bundled hooks/install.js with Node.js.
+/// Registers Clawd hooks into supported CLI settings
+/// by running the bundled installer scripts with Node.js.
 /// Idempotent — safe to call on every launch.
 enum HookInstaller {
     /// 默认 HTTP 服务端口；HTTPServer 实际可能落到 23333..23337 中的任一个。
@@ -40,6 +40,7 @@ enum HookInstaller {
         case gemini = "gemini-install.js"
         case cursor = "cursor-install.js"
         case codeBuddy = "codebuddy-install.js"
+        case codex = "codex-install.js"
         case pi = "pi-install.js"
 
         var displayName: String {
@@ -48,6 +49,7 @@ enum HookInstaller {
             case .gemini: return "Gemini CLI"
             case .cursor: return "Cursor"
             case .codeBuddy: return "CodeBuddy"
+            case .codex: return "Codex CLI"
             case .pi: return "Pi"
             }
         }
@@ -301,12 +303,16 @@ enum HookInstaller {
         return (allSuccess, body)
     }
 
-    private static func cleanupLocalSettings(for target: HookTarget) -> (success: Bool, output: String) {
+    static func cleanupLocalSettingsForTesting(target: HookTarget, settingsPath: String) -> (success: Bool, output: String) {
+        cleanupLocalSettings(for: target, settingsPathOverride: settingsPath)
+    }
+
+    private static func cleanupLocalSettings(for target: HookTarget, settingsPathOverride: String? = nil) -> (success: Bool, output: String) {
         if target == .pi {
             return cleanupLocalDirectory(for: localDirectoryCleanupSpec())
         }
 
-        let spec = localCleanupSpec(for: target)
+        let spec = localCleanupSpec(for: target, settingsPathOverride: settingsPathOverride)
         let settingsURL = URL(fileURLWithPath: spec.settingsPath)
 
         let data: Data
@@ -378,11 +384,11 @@ enum HookInstaller {
         return (true, "\(spec.cleanedMessage)\n  Removed: \(totalRemoved) hooks")
     }
 
-    private static func localCleanupSpec(for target: HookTarget) -> LocalCleanupSpec {
+    private static func localCleanupSpec(for target: HookTarget, settingsPathOverride: String? = nil) -> LocalCleanupSpec {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         switch target {
         case .claudeCode:
-            let settingsPath = "\(home)/.claude/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.claude/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd hooks cleaned from \(settingsPath)",
@@ -392,7 +398,7 @@ enum HookInstaller {
                 permissionURLs: clawdPermissionURLs
             )
         case .gemini:
-            let settingsPath = "\(home)/.gemini/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.gemini/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd Gemini hooks cleaned from \(settingsPath)",
@@ -402,7 +408,7 @@ enum HookInstaller {
                 permissionURLs: []
             )
         case .cursor:
-            let settingsPath = "\(home)/.cursor/hooks.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.cursor/hooks.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd Cursor hooks cleaned from \(settingsPath)",
@@ -412,7 +418,7 @@ enum HookInstaller {
                 permissionURLs: []
             )
         case .codeBuddy:
-            let settingsPath = "\(home)/.codebuddy/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.codebuddy/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd CodeBuddy hooks cleaned from \(settingsPath)",
@@ -420,6 +426,16 @@ enum HookInstaller {
                 emptyMessage: "No hooks in settings.json — nothing to clean.",
                 commandMarkers: ["codebuddy-hook.js"],
                 permissionURLs: clawdPermissionURLs
+            )
+        case .codex:
+            let settingsPath = settingsPathOverride ?? "\(home)/.codex/hooks.json"
+            return LocalCleanupSpec(
+                settingsPath: settingsPath,
+                cleanedMessage: "Clawd Codex hooks cleaned from \(settingsPath)",
+                missingMessage: "No ~/.codex/hooks.json found — nothing to clean.",
+                emptyMessage: "No hooks in hooks.json — nothing to clean.",
+                commandMarkers: ["codex-hook.js"],
+                permissionURLs: []
             )
         case .pi:
             fatalError("Pi uses localDirectoryCleanupSpec(), not localCleanupSpec(for:)")
