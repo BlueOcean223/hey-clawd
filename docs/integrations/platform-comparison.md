@@ -46,7 +46,7 @@
 |------|---------|-----------------------|
 | Claude Code | `~/.claude/settings.json` | 嵌套 `{ matcher, hooks: [{ type, command }] }` + HTTP hook |
 | CodeBuddy | `~/.codebuddy/settings.json` | 同 Claude Code（嵌套格式） |
-| Gemini CLI | `~/.gemini/settings.json` | 扁平 `{ type: "command", command, name }` |
+| Gemini CLI | `~/.gemini/settings.json` | 嵌套 `{ hooks: [{ type: "command", command, name }] }` |
 | Cursor | `~/.cursor/hooks.json` | 扁平 `{ command }` |
 | Copilot CLI | 手动配置 | 扁平（通过 argv 传事件名） |
 | Codex CLI | N/A | 无 hook，被动读取 `~/.codex/sessions/` JSONL |
@@ -117,3 +117,8 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应
 - **kqueue 事件驱动**：`DispatchSource.makeFileSystemObjectSource(.write)`，不轮询
 - **Debounce 1.5s**：避免碎片化读取
 - **Stale 文件清理**：5 分钟无活动的会话自动发送 SessionEnd
+
+### Gemini CLI 特有
+
+- **启动时加载 hooks**：`~/.gemini/settings.json` 注册嵌套 command hook；已运行的 Gemini CLI 不会热加载更新后的 settings，需要重启 Gemini 会话
+- **Node/shebang 进程识别**：Gemini CLI 可能以 Node 进程运行；hook 会检查父进程 command line，补齐 `agent_pid`，让 CLI 退出后菜单能及时清理

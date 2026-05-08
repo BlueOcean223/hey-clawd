@@ -51,6 +51,15 @@ let _detectedEditor = null;
 let _geminiPid = null;
 let _pidChain = [];
 
+function commandLooksLikeGeminiCLI(commandLine) {
+  const command = String(commandLine || "").toLowerCase();
+  if (!command || command.includes("gemini-hook.js")) return false;
+
+  return command.includes("@google/gemini-cli")
+    || /[\/\\]gemini-cli[\/\\]/.test(command)
+    || /(^|[\/\\\s])gemini(?:\.js)?(?:\s|$)/.test(command);
+}
+
 function getStablePid() {
   if (_stablePid) return _stablePid;
   const { execSync } = require("child_process");
@@ -93,7 +102,19 @@ function getStablePid() {
     } catch { break; }
     _pidChain.push(pid);
     if (!_detectedEditor && editorMap[name]) _detectedEditor = editorMap[name];
-    if (!_geminiPid && geminiNames.has(name)) _geminiPid = pid;
+    if (!_geminiPid) {
+      if (geminiNames.has(name)) {
+        _geminiPid = pid;
+      } else if (name === "node.exe" || name === "node") {
+        try {
+          const cmdOut = isWin
+            ? execSync(`wmic process where "ProcessId=${pid}" get CommandLine /format:csv`,
+                { encoding: "utf8", timeout: 500, windowsHide: true })
+            : execSync(`ps -o command= -p ${pid}`, { encoding: "utf8", timeout: 500 });
+          if (commandLooksLikeGeminiCLI(cmdOut)) _geminiPid = pid;
+        } catch {}
+      }
+    }
     if (systemBoundary.has(name)) break;
     if (terminalNames.has(name)) terminalPid = pid;
     lastGoodPid = pid;
@@ -155,22 +176,35 @@ function finishOnce(payload) {
 
   const outLine = stdoutForEvent(hookName);
   const data = JSON.stringify(body);
+  if (process.env.CLAWD_DRY_RUN === "1") {
+    process.stdout.write(data);
+    process.exit(0);
+  }
+
   postStateToRunningServer(data, { timeoutMs: 100 }, () => {
     process.stdout.write(outLine + "\n");
     process.exit(0);
   });
 }
 
-process.stdin.on("data", (c) => chunks.push(c));
-process.stdin.on("end", () => {
-  let payload = {};
-  try {
-    const raw = Buffer.concat(chunks).toString();
-    if (raw.trim()) payload = JSON.parse(raw);
-  } catch {
-    payload = {};
-  }
-  finishOnce(payload);
-});
+function main() {
+  process.stdin.on("data", (c) => chunks.push(c));
+  process.stdin.on("end", () => {
+    let payload = {};
+    try {
+      const raw = Buffer.concat(chunks).toString();
+      if (raw.trim()) payload = JSON.parse(raw);
+    } catch {
+      payload = {};
+    }
+    finishOnce(payload);
+  });
 
-_stdinTimer = setTimeout(() => finishOnce({}), 400);
+  _stdinTimer = setTimeout(() => finishOnce({}), 400);
+}
+
+if (require.main === module) {
+  main();
+} else {
+  module.exports = { commandLooksLikeGeminiCLI };
+}

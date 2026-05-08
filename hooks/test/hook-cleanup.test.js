@@ -7,7 +7,7 @@ const path = require("path");
 const { registerHooks, unregisterHooks, unregisterAutoStart } = require("../install");
 const { registerCodeBuddyHooks, unregisterCodeBuddyHooks } = require("../codebuddy-install");
 const { unregisterCursorHooks } = require("../cursor-install");
-const { unregisterGeminiHooks } = require("../gemini-install");
+const { registerGeminiHooks, unregisterGeminiHooks, GEMINI_HOOK_EVENTS } = require("../gemini-install");
 const { buildPermissionUrl, DEFAULT_SERVER_PORT } = require("../server-config");
 
 function makeTempSettingsPath(prefix) {
@@ -46,6 +46,136 @@ function collectHttpUrls(entries) {
     return urls;
   });
 }
+
+function desiredGeminiCommand(nodeBin = "/usr/bin/node") {
+  const hookPath = path.resolve(__dirname, "../gemini-hook.js").replace(/\\/g, "/");
+  return `"${nodeBin}" "${hookPath}"`;
+}
+
+function collectCommandHooks(entries) {
+  return entries.flatMap((entry) => {
+    if (!entry || typeof entry !== "object") return [];
+    const commands = [];
+    if (typeof entry.command === "string") commands.push(entry.command);
+    if (Array.isArray(entry.hooks)) {
+      for (const hook of entry.hooks) {
+        if (hook && typeof hook.command === "string") commands.push(hook.command);
+      }
+    }
+    return commands;
+  });
+}
+
+test("registerGeminiHooks writes modern nested hook definitions idempotently", () => {
+  const settingsPath = makeTempSettingsPath("gemini-register");
+  writeSettings(settingsPath, { hooks: {} });
+
+  const result = registerGeminiHooks({
+    settingsPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+  });
+  const settings = readSettings(settingsPath);
+
+  assert.equal(result.added, GEMINI_HOOK_EVENTS.length);
+  assert.equal(result.updated, 0);
+  assert.equal(result.skipped, 0);
+
+  for (const event of GEMINI_HOOK_EVENTS) {
+    assert.deepEqual(settings.hooks[event], [
+      {
+        hooks: [
+          { type: "command", command: desiredGeminiCommand(), name: "clawd" },
+        ],
+      },
+    ]);
+  }
+
+  const rerun = registerGeminiHooks({
+    settingsPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+  });
+  const afterRerun = readSettings(settingsPath);
+
+  assert.equal(rerun.added, 0);
+  assert.equal(rerun.updated, 0);
+  assert.equal(rerun.skipped, GEMINI_HOOK_EVENTS.length);
+  assert.deepEqual(afterRerun, settings);
+});
+
+test("registerGeminiHooks migrates legacy flat Gemini hooks and preserves siblings", () => {
+  const settingsPath = makeTempSettingsPath("gemini-migrate");
+  writeSettings(settingsPath, {
+    hooks: {
+      BeforeAgent: [
+        { type: "command", command: "\"/old/node\" \"/tmp/gemini-hook.js\"", name: "clawd" },
+        {
+          matcher: "keep",
+          hooks: [
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/keep.js\"", name: "keep" },
+          ],
+        },
+      ],
+    },
+  });
+
+  const result = registerGeminiHooks({
+    settingsPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+  });
+  const settings = readSettings(settingsPath);
+  const commands = collectCommandHooks(settings.hooks.BeforeAgent);
+
+  assert.equal(result.added, GEMINI_HOOK_EVENTS.length - 1);
+  assert.equal(result.updated, 1);
+  assert.equal(commands.includes("\"/usr/bin/node\" \"/tmp/keep.js\""), true);
+  assert.equal(commands.includes(desiredGeminiCommand()), true);
+  assert.equal(commands.some((command) => command.includes("/old/node")), false);
+  assert.equal(settings.hooks.BeforeAgent.some((entry) => entry.command), false);
+});
+
+test("registerGeminiHooks rebuilds Clawd hooks inherited from a matcher", () => {
+  const settingsPath = makeTempSettingsPath("gemini-matcher");
+  const desiredCommand = desiredGeminiCommand();
+  writeSettings(settingsPath, {
+    hooks: {
+      BeforeTool: [
+        {
+          matcher: "Bash",
+          hooks: [
+            { type: "command", command: desiredCommand, name: "clawd" },
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/bash-only.js\"", name: "keep" },
+          ],
+        },
+      ],
+    },
+  });
+
+  const result = registerGeminiHooks({
+    settingsPath,
+    silent: true,
+    nodeBin: "/usr/bin/node",
+  });
+  const settings = readSettings(settingsPath);
+
+  assert.equal(result.added, GEMINI_HOOK_EVENTS.length - 1);
+  assert.equal(result.updated, 1);
+  assert.deepEqual(settings.hooks.BeforeTool, [
+    {
+      matcher: "Bash",
+      hooks: [
+        { type: "command", command: "\"/usr/bin/node\" \"/tmp/bash-only.js\"", name: "keep" },
+      ],
+    },
+    {
+      hooks: [
+        { type: "command", command: desiredCommand, name: "clawd" },
+      ],
+    },
+  ]);
+});
 
 test("unregisterCodeBuddyHooks preserves sibling hooks in shared entries", () => {
   const settingsPath = makeTempSettingsPath("codebuddy-clean");
@@ -293,6 +423,41 @@ test("registerCodeBuddyHooks does not rewrite unrelated permission hooks", () =>
   assert.deepEqual(permissionUrls, [
     "https://example.com/permission",
     buildPermissionUrl(DEFAULT_SERVER_PORT + 2),
+  ]);
+});
+
+test("unregisterGeminiHooks removes nested and legacy flat hooks while preserving siblings", () => {
+  const settingsPath = makeTempSettingsPath("gemini-clean");
+  writeSettings(settingsPath, {
+    hooks: {
+      BeforeAgent: [
+        {
+          hooks: [
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/gemini-hook.js\"", name: "clawd" },
+            { type: "command", command: "\"/usr/bin/node\" \"/tmp/keep.js\"", name: "keep" },
+          ],
+        },
+      ],
+      AfterAgent: [
+        { type: "command", command: "\"/usr/bin/node\" \"/tmp/gemini-hook.js\"", name: "clawd" },
+        { type: "command", command: "\"/usr/bin/node\" \"/tmp/keep-flat.js\"", name: "keep-flat" },
+      ],
+    },
+  });
+
+  const result = unregisterGeminiHooks({ settingsPath, silent: true });
+  const settings = readSettings(settingsPath);
+
+  assert.equal(result.removed, 2);
+  assert.deepEqual(settings.hooks.BeforeAgent, [
+    {
+      hooks: [
+        { type: "command", command: "\"/usr/bin/node\" \"/tmp/keep.js\"", name: "keep" },
+      ],
+    },
+  ]);
+  assert.deepEqual(settings.hooks.AfterAgent, [
+    { type: "command", command: "\"/usr/bin/node\" \"/tmp/keep-flat.js\"", name: "keep-flat" },
   ]);
 });
 
