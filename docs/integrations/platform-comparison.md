@@ -114,6 +114,7 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应 / 
 ### Codex CLI 特有
 
 - **native hooks**：`codex-install.js` 只写用户级 `~/.codex/hooks.json`，不创建 `~/.codex/`，不修改 `~/.codex/config.toml`
+- **hook review 门槛**：Codex 首次发现新的 command hooks 时可能要求用户在 `/hooks` 中 review/trust；完成前 hooks 已注册但不会执行
 - **fail-open**：状态上报 100ms 超时；权限路径在 app 不可达、超时、undecided、DND、hide bubbles 时返回 `{}`，Codex 原生审批流继续
 - **权限边界**：只支持单次 Allow / Deny；不支持 Always allow、`updatedPermissions`、`updatedInput` 或 `interrupt`
 - **bypass 模式**：`permission_mode` 为 `bypassPermissions` 或 `dontAsk` 时不弹权限气泡，普通状态事件仍会上报

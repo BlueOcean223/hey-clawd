@@ -43,6 +43,8 @@ Then launch the app again.
 
 On first launch it starts a local HTTP server on `127.0.0.1:23333` (falls back to 23334–23337) and runs the bundled installers to register hooks/extensions into any detected AI tools. Tools that aren't installed are skipped. You can re-run registration anytime from the tray menu → **Register Hooks**.
 
+Codex CLI may require an extra `/hooks` review inside Codex before newly registered command hooks are trusted and allowed to run.
+
 ### Build from source
 
 ```bash

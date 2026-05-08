@@ -70,7 +70,7 @@ Permission hooks → HTTP POST /permission → HTTPServer → BubbleStack → al
 
 `server-config.js` handles port discovery: tries `~/.clawd/runtime.json` first, then scans ports 23333–23337.
 
-**Auto-registration:** On launch, `HookInstaller` waits for `HTTPServer` to bind a port, then runs the installer scripts (`install.js`, `gemini-install.js`, `cursor-install.js`, `codebuddy-install.js`, `codex-install.js`, `pi-install.js`) via Node.js. HTTP hook installers use `--port` so PermissionRequest URLs match the actual server port; Codex writes user-level `~/.codex/hooks.json` command hooks. Scripts skip tools that aren't installed. A manual "Register Hooks" menu item is also available for re-registration (e.g. after `cc-switch` profile changes).
+**Auto-registration:** On launch, `HookInstaller` waits for `HTTPServer` to bind a port, then runs the installer scripts (`install.js`, `gemini-install.js`, `cursor-install.js`, `codebuddy-install.js`, `codex-install.js`, `pi-install.js`) via Node.js. HTTP hook installers use `--port` so PermissionRequest URLs match the actual server port; Codex writes user-level `~/.codex/hooks.json` command hooks. Scripts skip tools that aren't installed. A manual "Register Hooks" menu item is also available for re-registration (e.g. after `cc-switch` profile changes). Codex may still require a user-side `/hooks` review/trust step before newly registered command hooks execute.
 
 `agents/` holds per-integration metadata (`claude-code.js`, `codex.js`, `codebuddy.js`, `gemini-cli.js`, `cursor-agent.js`, `copilot-cli.js`, `pi.js`, plus `gemini-log-monitor.js` and a `registry.js` index). Keep event mappings in sync whenever a hook script, agent descriptor, installer allowlist, or `docs/integrations/` page encodes the same behavior.
 

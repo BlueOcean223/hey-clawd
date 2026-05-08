@@ -39,6 +39,8 @@ Codex CLI
 
 如果用户在 Codex 配置中禁用了 `features.hooks`，Codex hook engine 不会执行这些 hooks。此时 hey-clawd 的 Codex 集成静默失效，Codex 自身行为不受影响。
 
+Codex 首次发现新的 command hooks 时，可能会提示 `hooks need review before they can run`。用户需要在 Codex 内执行 `/hooks`，检查并 trust/enable hey-clawd 写入的 `codex-hook.js` 命令；完成 review 之前，`~/.codex/hooks.json` 中的条目会保留但不会执行。这是 Codex 自身的 hook 信任门槛，hey-clawd installer 不能也不应该绕过。
+
 注册事件：
 
 | Codex hook event | hey-clawd state | 说明 |

@@ -43,6 +43,8 @@ xattr -dr com.apple.quarantine /Applications/hey-clawd.app
 
 首次启动会在 `127.0.0.1:23333` 开一个本地 HTTP 服务（端口冲突时回退到 23334–23337），并执行内置的 installer 脚本，把 hook / extension 注册到检测到的 AI 工具里。未安装的工具会被跳过。托盘菜单 → **Register Hooks** 可以随时重跑注册（比如 `cc-switch` 切换 profile 之后）。
 
+Codex CLI 首次发现新注册的 command hooks 时，可能还需要在 Codex 内执行 `/hooks` 做一次 review/trust，之后这些 hooks 才会真正运行。
+
 ### 从源码构建
 
 ```bash
