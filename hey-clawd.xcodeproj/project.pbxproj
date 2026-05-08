@@ -34,7 +34,6 @@
 		D100000000000000000000A0 /* hooks in Resources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B0 /* hooks */; };
 		D100000000000000000000A1 /* HookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = D100000000000000000000B1 /* HookInstaller.swift */; };
 		E100000000000000000000A0 /* PetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B0 /* PetView.swift */; };
-		E100000000000000000000A1 /* CodexMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B1 /* CodexMonitor.swift */; };
 		E100000000000000000000A2 /* ColorParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B2 /* ColorParser.swift */; };
 		E100000000000000000000A3 /* PathParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B3 /* PathParser.swift */; };
 		E100000000000000000000A4 /* TransformParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E100000000000000000000B4 /* TransformParser.swift */; };
@@ -75,7 +74,6 @@
 		D100000000000000000000B0 /* hooks */ = {isa = PBXFileReference; lastKnownFileType = folder; path = hooks; sourceTree = "<group>"; };
 		D100000000000000000000B1 /* HookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HookInstaller.swift; sourceTree = "<group>"; };
 		E100000000000000000000B0 /* PetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PetView.swift; sourceTree = "<group>"; };
-		E100000000000000000000B1 /* CodexMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexMonitor.swift; sourceTree = "<group>"; };
 		E100000000000000000000B2 /* ColorParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorParser.swift; sourceTree = "<group>"; };
 		E100000000000000000000B3 /* PathParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PathParser.swift; sourceTree = "<group>"; };
 		E100000000000000000000B4 /* TransformParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransformParser.swift; sourceTree = "<group>"; };
@@ -149,7 +147,6 @@
 			isa = PBXGroup;
 			children = (
 				E10000000000000000000C00 /* SVG */,
-				E100000000000000000000B1 /* CodexMonitor.swift */,
 				B100000000000000000000B0 /* HTTPParser.swift */,
 				B100000000000000000000B1 /* HTTPServer.swift */,
 				B100000000000000000000B2 /* HotKeyManager.swift */,
@@ -324,7 +321,6 @@
 				B10000000000000000000AA5 /* MenuBuilder.swift in Sources */,
 				D100000000000000000000A1 /* HookInstaller.swift in Sources */,
 				E100000000000000000000A0 /* PetView.swift in Sources */,
-				E100000000000000000000A1 /* CodexMonitor.swift in Sources */,
 				E100000000000000000000A2 /* ColorParser.swift in Sources */,
 				E100000000000000000000A3 /* PathParser.swift in Sources */,
 				E100000000000000000000A4 /* TransformParser.swift in Sources */,
