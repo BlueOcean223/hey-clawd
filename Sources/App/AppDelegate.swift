@@ -3,8 +3,8 @@ import Foundation
 
 /// 应用主控：装配各个子系统并把它们之间的回调连起来。
 ///
-/// `assembleCoreLoop()` 是核心入口；其他 `setup*` 方法分别负责状态栏、CodexMonitor、
-/// MiniMode、Sparkle、信号处理、热键等。所有子系统都通过 closure 注入回调到本类，
+/// `assembleCoreLoop()` 是核心入口；其他 `setup*` 方法分别负责状态栏、MiniMode、
+/// Sparkle、信号处理、热键等。所有子系统都通过 closure 注入回调到本类，
 /// 然后由本类按需访问 `petWindow` / `stateMachine` 等长生命周期对象。
 ///
 /// 设计原则：本类对每个子系统**单向持有**，子系统不感知 AppDelegate 的存在；
@@ -31,7 +31,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
-    private var codexMonitor: CodexMonitor?
     private let hotKeyManager = HotKeyManager()
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private let preferences: Preferences
@@ -112,7 +111,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
-        setupCodexMonitor()
         setupMiniModeController()
         setupUpdater()
         setupStatusBarController()
@@ -194,31 +192,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Sparkle 只给安装版用，源码运行不显示应用更新入口。
         sparkleUpdater = SparkleUpdater()
-    }
-
-    private func setupCodexMonitor() {
-        guard let stateMachine else {
-            return
-        }
-
-        let monitor = CodexMonitor()
-        codexMonitor = monitor
-        Task { [stateMachine] in
-            await monitor.setOnStateUpdate { [stateMachine] update in
-                // emit 已经切回主线程，这里只把会话状态和 cwd 接回主状态机。
-                stateMachine.setState(
-                    update.state,
-                    sessionId: update.sessionId,
-                    event: update.event,
-                    sourcePid: nil,
-                    cwd: update.cwd,
-                    editor: nil,
-                    agentId: update.agentId,
-                    headless: false
-                )
-            }
-            await monitor.start()
-        }
     }
 
     private func setupStatusBarController() {
@@ -332,11 +305,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleStack.dismissAll(respondingWith: .undecided)
         httpServerTask?.cancel()
         httpServer?.stop()
-        if let codexMonitor {
-            Task {
-                await codexMonitor.stop()
-            }
-        }
         stateMachine?.cleanup()
         petView?.teardown()
     }
