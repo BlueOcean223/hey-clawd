@@ -208,8 +208,9 @@ function isCodexProcess(name, command, platform = process.platform) {
   const fullLower = String(command || "").toLowerCase();
   return fullLower.includes("@openai/codex") ||
     fullLower.includes("/codex-darwin-") ||
-    fullLower.includes("\\codex-") ||
-    /\bcodex(\.exe)?\b/.test(fullLower);
+    /\\codex-(darwin|linux|win32|x86|aarch64|aarch)/.test(fullLower) ||
+    /(^|[\s"'])codex(\.exe|\.js)?([\s"']|$)/.test(fullLower) ||
+    /[\\/]codex(\.exe|\.js)?([\s"']|$)/.test(fullLower);
 }
 
 function isCodexAppProcess(command) {
@@ -421,12 +422,18 @@ function postPermissionToRunningServer(body, options, callback) {
     }
 
     const port = direct[directIndex++];
-    post(port, payload, timeoutMs, (posted, confirmedPort, responseBody) => {
-      if (posted) {
-        callback(true, confirmedPort, responseBody);
+    probe(port, STATE_TIMEOUT_MS, (ok) => {
+      if (!ok) {
+        tryDirect();
         return;
       }
-      tryDirect();
+      post(port, payload, timeoutMs, (posted, confirmedPort, responseBody) => {
+        if (posted) {
+          callback(true, confirmedPort, responseBody);
+          return;
+        }
+        tryDirect();
+      }, options);
     }, options);
   };
 

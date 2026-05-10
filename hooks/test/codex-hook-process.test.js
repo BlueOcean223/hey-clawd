@@ -12,6 +12,7 @@ const {
   codexSessionId,
   getCodexProcessMetadata,
   parsePayload,
+  postPermissionToRunningServer,
   runPayload,
   shouldSkipPermissionRequest,
 } = require("../codex-hook");
@@ -89,6 +90,35 @@ test("Codex hook preserves process metadata for focus and lifecycle", () => {
   assert.deepEqual(body.pid_chain, [456, 200, 123]);
   assert.equal(body.editor, "cursor");
   assert.equal(body.headless, true);
+});
+
+test("Codex hook skips transient hook shell when resolving Codex agent pid", () => {
+  const metadata = getCodexProcessMetadata({
+    platform: "darwin",
+    startPid: 9,
+    execSync: fakePs({
+      9: {
+        ppid: 10,
+        comm: "/bin/sh",
+        command: "/bin/sh -c \"/usr/bin/node\" \"/repo/hooks/codex-hook.js\"",
+      },
+      10: {
+        ppid: 11,
+        comm: "/Users/me/.nvm/versions/node/vendor/codex/codex",
+        command: "/Users/me/.nvm/versions/node/vendor/codex/codex",
+      },
+      11: { ppid: 12, comm: "/bin/zsh", command: "-/bin/zsh" },
+      12: {
+        ppid: 1,
+        comm: "/Applications/iTerm.app/Contents/MacOS/iTerm2",
+        command: "/Applications/iTerm.app/Contents/MacOS/iTerm2",
+      },
+    }),
+  });
+
+  assert.equal(metadata.codexPid, 10);
+  assert.equal(metadata.sourcePid, 12);
+  assert.deepEqual(metadata.pidChain, [9, 10, 11, 12]);
 });
 
 test("Codex hook resolves CLI focus to the terminal ancestor", () => {
@@ -381,6 +411,42 @@ test("Codex PermissionRequest undecided and unavailable paths fail open", () => 
 
     assert.equal(stdout, "{}\n");
   }
+});
+
+test("Codex PermissionRequest probes direct ports before long permission POSTs", () => {
+  const calls = [];
+  let result = null;
+
+  postPermissionToRunningServer(
+    JSON.stringify({ event: "PermissionRequest" }),
+    {
+      preferredPort: 23333,
+      runtimePort: null,
+      timeoutMs: PERMISSION_TIMEOUT_MS,
+      probePort: (port, timeoutMs, callback) => {
+        calls.push(["probe", port, timeoutMs]);
+        callback(port === 23334);
+      },
+      postPermissionToPort: (port, _payload, timeoutMs, callback) => {
+        calls.push(["post", port, timeoutMs]);
+        callback(true, port, "{\"decision\":\"ok\"}");
+      },
+    },
+    (ok, port, responseBody) => {
+      result = { ok, port, responseBody };
+    }
+  );
+
+  assert.deepEqual(calls, [
+    ["probe", 23333, 100],
+    ["probe", 23334, 100],
+    ["post", 23334, PERMISSION_TIMEOUT_MS],
+  ]);
+  assert.deepEqual(result, {
+    ok: true,
+    port: 23334,
+    responseBody: "{\"decision\":\"ok\"}",
+  });
 });
 
 test("Codex PermissionRequest bypass modes do not call /permission", () => {
