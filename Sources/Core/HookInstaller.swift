@@ -237,7 +237,7 @@ enum HookInstaller {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.path
         let nvmNode = findNvmNode(home: home, fileManager: fm)
-        var candidates = [
+        let candidates = [
             "\(home)/.volta/bin/node",
             "\(home)/.nvm/current/bin/node",
             nvmNode,

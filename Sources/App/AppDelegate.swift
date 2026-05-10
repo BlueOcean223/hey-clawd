@@ -807,21 +807,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let result = HookInstaller.setCodexPermissionHookEnabled(enabled)
-            await MainActor.run {
-                guard let self else { return }
-                if result.success {
-                    self.isCodexPermissionReviewEnabled = enabled
-                    self.preferences.codexPermissionReviewEnabled = enabled
-                    return
-                }
-
-                let alert = self.makeAlert(style: .warning)
-                alert.messageText = enabled ? "Codex Permission Review Failed" : "Codex Permission Cleanup Failed"
-                alert.informativeText = result.output
-                alert.runModal()
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                HookInstaller.setCodexPermissionHookEnabled(enabled)
+            }.value
+            guard let self else { return }
+            if result.success {
+                self.isCodexPermissionReviewEnabled = enabled
+                self.preferences.codexPermissionReviewEnabled = enabled
+                return
             }
+
+            let alert = self.makeAlert(style: .warning)
+            alert.messageText = enabled ? "Codex Permission Review Failed" : "Codex Permission Cleanup Failed"
+            alert.informativeText = result.output
+            alert.runModal()
         }
     }
 
