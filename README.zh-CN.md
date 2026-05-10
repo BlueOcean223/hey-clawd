@@ -68,7 +68,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | 单向   | — | ✅ |
 | Cursor       | hook           | 单向   | — | ✅ |
 | Copilot CLI  | hook           | 单向   | — | ✅ |
-| Codex CLI    | hook           | 双向   | 实验开关，单次 Allow/Deny | — |
+| Codex CLI    | hook           | 双向   | 实验开关，单次 Allow/Deny | ✅ |
 | Pi           | extension      | 单向   | — | ✅ |
 
 完整的事件覆盖矩阵见 [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md)，各工具的接入细节在 [docs/integrations/](docs/integrations/)。

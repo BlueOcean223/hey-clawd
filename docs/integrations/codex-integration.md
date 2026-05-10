@@ -145,7 +145,7 @@ Codex undecided / fail-open：
 
 ### 终端跳转
 
-当前 Codex hook payload 不提供稳定的宿主终端 PID，hey-clawd 也不会从日志或系统文件句柄反查进程。因此 Codex 会话用于状态展示和权限辅助，不提供菜单里的终端跳转。
+Codex native hook 运行在 Codex 进程树内，`codex-hook.js` 会向上遍历父进程，跳过瞬时 hook shell，记录真实 Codex agent PID 与宿主终端 PID。因此菜单中的 Codex 会话可以回切到对应终端；远程模式下仍会跳过本地 PID 采集。
 
 ### 权限能力少于 Claude Code
 

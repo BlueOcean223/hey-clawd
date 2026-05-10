@@ -68,7 +68,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 | Gemini CLI   | hook           | one-way       | — | ✅ |
 | Cursor       | hook           | one-way       | — | ✅ |
 | Copilot CLI  | hook           | one-way       | — | ✅ |
-| Codex CLI    | hook           | bidirectional | experimental single Allow/Deny | — |
+| Codex CLI    | hook           | bidirectional | experimental single Allow/Deny | ✅ |
 | Pi           | extension      | one-way       | — | ✅ |
 
 See [docs/integrations/platform-comparison.md](docs/integrations/platform-comparison.md) for the full event-coverage matrix and per-tool deep dives in [docs/integrations/](docs/integrations/).

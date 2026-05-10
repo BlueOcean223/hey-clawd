@@ -11,8 +11,8 @@
 | **集成方式** | hook | hook | hook | hook | hook | native hook | extension |
 | **数据方向** | 双向 | 双向 | 单向 | 单向 | 单向 | 双向 | 单向 |
 | **权限气泡** | ✅ | ✅ | ❌ | ❌ | ❌ | 实验开关 | ❌ |
-| **终端跳转** | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
-| **编辑器检测** | ✅ | ✅ | ✅ | ✅ (默认 cursor) | ✅ | ❌ | ✅ |
+| **终端跳转** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **编辑器检测** | ✅ | ✅ | ✅ | ✅ (默认 cursor) | ✅ | ✅ | ✅ |
 | **远程模式** | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
 | **自动注册** | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
 | **headless 检测** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
@@ -92,7 +92,7 @@ POST /permission → HTTPServer → BubbleStack → 气泡 UI → HTTP 响应 / 
 
 ### 全平台共通
 
-- **进程树遍历**：多数 CLI hook 脚本实现了 `getStablePid()`，向上遍历 8 层找到宿主终端 PID，覆盖 macOS / Linux / Windows 的主流终端；Codex 当前 hook payload 不提供稳定终端 PID，暂不支持终端跳转
+- **进程树遍历**：多数 CLI hook 脚本会向上遍历 8 层找到宿主终端 PID，覆盖 macOS / Linux / Windows 的主流终端；Codex native hook 也会跳过瞬时 hook shell，记录真实 Codex agent PID 与终端 PID
 - **stdin 超时**：400ms 内 stdin 未结束则以默认值发送，防止 hook 进程挂死
 - **端口发现**：`server-config.js` 先查 `~/.clawd/runtime.json`，再扫描 23333–23337 端口范围
 - **安装检测**：每个安装器检测对应工具目录（`~/.claude/`、`~/.gemini/`、`~/.codex/`、`~/.pi/agent/` 等），未安装时静默跳过
