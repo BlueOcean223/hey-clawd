@@ -185,6 +185,66 @@ final class HTTPServerTests: XCTestCase {
         XCTAssertNil(decision["message"])
     }
 
+    func testCodexPermissionAllowResponseOmitsUpdatedPermissions() async throws {
+        let updatedPermission = Data("""
+        {
+          "behavior": "allow",
+          "destination": "session",
+          "rules": [
+            {"ruleContent": "npm test", "toolName": "Bash"}
+          ],
+          "type": "addRules"
+        }
+        """.utf8)
+
+        let body = try XCTUnwrap(
+            HTTPServer.testPermissionResponseBody(
+                for: PermissionDecisionResult(
+                    behavior: .allow,
+                    suggestionPayloads: [updatedPermission]
+                ),
+                agentId: "codex"
+            )
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let output = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        XCTAssertEqual(output["hookEventName"] as? String, "PermissionRequest")
+        let decision = try XCTUnwrap(output["decision"] as? [String: Any])
+
+        XCTAssertEqual(decision["behavior"] as? String, "allow")
+        XCTAssertNil(decision["updatedPermissions"])
+    }
+
+    func testCodexPermissionDenyResponseIncludesMessage() async throws {
+        let body = try XCTUnwrap(
+            HTTPServer.testPermissionResponseBody(
+                for: PermissionDecisionResult(
+                    behavior: .deny,
+                    suggestionPayloads: []
+                ),
+                agentId: "codex"
+            )
+        )
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let output = try XCTUnwrap(json["hookSpecificOutput"] as? [String: Any])
+        let decision = try XCTUnwrap(output["decision"] as? [String: Any])
+
+        XCTAssertEqual(decision["behavior"] as? String, "deny")
+        XCTAssertEqual(decision["message"] as? String, "Denied by user.")
+    }
+
+    func testCodexPermissionUndecidedResponseIsEmptyObject() async throws {
+        let response = HTTPServer.testPermissionResponse(
+            for: .simple(.undecided),
+            agentId: "codex"
+        )
+        let body = try XCTUnwrap(response.body)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        XCTAssertEqual(response.statusCode, 200)
+        XCTAssertTrue(json.isEmpty)
+    }
+
     private func makeSocket(port: Int) throws -> Int32 {
         let socketFD = socket(AF_INET, SOCK_STREAM, 0)
         guard socketFD >= 0 else {

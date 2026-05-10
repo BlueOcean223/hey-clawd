@@ -532,7 +532,7 @@ final class HTTPServer: @unchecked Sendable {
 
             // 挂起当前连接，直到上层通过 PendingPermissionRequest.respond() 返回结果
             let result = await resolvePermission(body: request.body, permissionTracker: permissionTracker)
-            return permissionResponse(result)
+            return permissionResponse(result, requestBody: request.body)
 
         case ("POST", "/debug/svg"):
             guard request.body.count <= Self.statePayloadLimit else {
@@ -587,9 +587,13 @@ final class HTTPServer: @unchecked Sendable {
         jsonResponse(["error": message], statusCode: statusCode)
     }
 
-    /// Claude Code HTTP hook 要求 PermissionRequest 的响应遵循 JSON output schema：
-    /// `{ hookSpecificOutput: { hookEventName, decision: { behavior, updatedPermissions? } } }`
-    private func permissionResponse(_ result: PermissionDecisionResult) -> HTTPResponse {
+    /// Claude Code 和 Codex 的 PermissionRequest response schema 不完全相同：
+    /// Claude Code 支持 `updatedPermissions`，Codex 当前只接受单次 allow/deny。
+    private func permissionResponse(_ result: PermissionDecisionResult, requestBody: Data) -> HTTPResponse {
+        if isCodexPermissionRequest(requestBody) {
+            return codexPermissionResponse(result)
+        }
+
         if result.behavior == .undecided {
             return errorResponse(statusCode: 503, message: "permission not handled")
         }
@@ -611,6 +615,43 @@ final class HTTPServer: @unchecked Sendable {
                 "decision": decision,
             ] as [String: Any],
         ])
+    }
+
+    private func codexPermissionResponse(_ result: PermissionDecisionResult) -> HTTPResponse {
+        switch result.behavior {
+        case .undecided:
+            return jsonResponse([:])
+        case .allow:
+            return jsonResponse([
+                "hookSpecificOutput": [
+                    "hookEventName": "PermissionRequest",
+                    "decision": [
+                        "behavior": "allow",
+                    ],
+                ] as [String: Any],
+            ])
+        case .deny:
+            return jsonResponse([
+                "hookSpecificOutput": [
+                    "hookEventName": "PermissionRequest",
+                    "decision": [
+                        "behavior": "deny",
+                        "message": "Denied by user.",
+                    ],
+                ] as [String: Any],
+            ])
+        }
+    }
+
+    private func isCodexPermissionRequest(_ body: Data) -> Bool {
+        guard
+            let payload = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+            let agentId = payload["agent_id"] as? String
+        else {
+            return false
+        }
+
+        return agentId == "codex"
     }
 
     private func defaultHeaders(contentType: String) -> [String: String] {
@@ -750,8 +791,25 @@ final class HTTPServer: @unchecked Sendable {
 
 #if DEBUG
 extension HTTPServer {
-    static func testPermissionResponseBody(for result: PermissionDecisionResult) -> Data? {
-        HTTPServer().permissionResponse(result).body
+    static func testPermissionResponse(
+        for result: PermissionDecisionResult,
+        agentId: String? = nil
+    ) -> HTTPResponse {
+        let requestBody: Data
+        if let agentId {
+            requestBody = (try? JSONSerialization.data(withJSONObject: ["agent_id": agentId], options: []))
+                ?? Data("{}".utf8)
+        } else {
+            requestBody = Data("{}".utf8)
+        }
+        return HTTPServer().permissionResponse(result, requestBody: requestBody)
+    }
+
+    static func testPermissionResponseBody(
+        for result: PermissionDecisionResult,
+        agentId: String? = nil
+    ) -> Data? {
+        testPermissionResponse(for: result, agentId: agentId).body
     }
 }
 

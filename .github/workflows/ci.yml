@@ -98,4 +98,4 @@ jobs:
           node-version: "22"
 
       - name: Run hook tests
-        run: cd hooks && node test/codex-remote-monitor.test.js && node test/hook-cleanup.test.js
+        run: cd hooks && node test/index.js

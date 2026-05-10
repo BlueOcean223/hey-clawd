@@ -3,8 +3,8 @@ import Foundation
 
 /// 应用主控：装配各个子系统并把它们之间的回调连起来。
 ///
-/// `assembleCoreLoop()` 是核心入口；其他 `setup*` 方法分别负责状态栏、CodexMonitor、
-/// MiniMode、Sparkle、信号处理、热键等。所有子系统都通过 closure 注入回调到本类，
+/// `assembleCoreLoop()` 是核心入口；其他 `setup*` 方法分别负责状态栏、MiniMode、
+/// Sparkle、信号处理、热键等。所有子系统都通过 closure 注入回调到本类，
 /// 然后由本类按需访问 `petWindow` / `stateMachine` 等长生命周期对象。
 ///
 /// 设计原则：本类对每个子系统**单向持有**，子系统不感知 AppDelegate 的存在；
@@ -21,13 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         "PostToolUseFailure",
         "PostToolBatch",
     ]
+    private static let terminalApprovalAgentIds: Set<String> = [
+        "claude-code",
+        "codex",
+    ]
     private(set) var statusItem: NSStatusItem!
     private(set) var petWindow: PetWindow?
     private var statusBarController: StatusBarController?
     private var httpServer: HTTPServer?
     private var httpServerTask: Task<Void, Never>?
     private var stateMachine: StateMachine?
-    private var codexMonitor: CodexMonitor?
     private let hotKeyManager = HotKeyManager()
     private var terminationSignalSources: [DispatchSourceSignal] = []
     private let preferences: Preferences
@@ -38,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isHideBubblesEnabled: Bool
     private var isSoundEffectsEnabled: Bool
     private var isAutoFocusEnabled: Bool
+    private var isCodexPermissionReviewEnabled: Bool
     private var miniModeController: MiniMode?
     private var sparkleUpdater: SparkleUpdater?
     private lazy var bubbleStack = BubbleStack(
@@ -54,6 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         isHideBubblesEnabled = preferences.hideBubbles
         isSoundEffectsEnabled = !preferences.soundMuted
         isAutoFocusEnabled = preferences.autoFocusSession
+        isCodexPermissionReviewEnabled = preferences.codexPermissionReviewEnabled
         super.init()
     }
 
@@ -108,7 +113,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         assembleCoreLoop()
         stateMachine?.setDoNotDisturbEnabled(preferences.doNotDisturbEnabled)
-        setupCodexMonitor()
         setupMiniModeController()
         setupUpdater()
         setupStatusBarController()
@@ -192,31 +196,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sparkleUpdater = SparkleUpdater()
     }
 
-    private func setupCodexMonitor() {
-        guard let stateMachine else {
-            return
-        }
-
-        let monitor = CodexMonitor()
-        codexMonitor = monitor
-        Task { [stateMachine] in
-            await monitor.setOnStateUpdate { [stateMachine] update in
-                // emit 已经切回主线程，这里只把会话状态和 cwd 接回主状态机。
-                stateMachine.setState(
-                    update.state,
-                    sessionId: update.sessionId,
-                    event: update.event,
-                    sourcePid: nil,
-                    cwd: update.cwd,
-                    editor: nil,
-                    agentId: update.agentId,
-                    headless: false
-                )
-            }
-            await monitor.start()
-        }
-    }
-
     private func setupStatusBarController() {
         let controller = StatusBarController { [weak self] in
             self?.currentMenuState ?? AppMenuState(
@@ -229,6 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 isHideBubblesEnabled: false,
                 isSoundEffectsEnabled: true,
                 isAutoFocusEnabled: false,
+                isCodexPermissionReviewEnabled: false,
                 isPetVisible: true,
                 sessions: []
             )
@@ -300,6 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onUnregisterHooks = { [weak self] target in
             self?.unregisterHooksManually(target: target)
         }
+        controller.onToggleCodexPermissionReview = { [weak self] enabled in
+            self?.toggleCodexPermissionReview(enabled)
+        }
         controller.onQuit = {
             NSApp.terminate(nil)
         }
@@ -328,11 +311,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         bubbleStack.dismissAll(respondingWith: .undecided)
         httpServerTask?.cancel()
         httpServer?.stop()
-        if let codexMonitor {
-            Task {
-                await codexMonitor.stop()
-            }
-        }
         stateMachine?.cleanup()
         petView?.teardown()
     }
@@ -367,6 +345,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             isHideBubblesEnabled: isHideBubblesEnabled,
             isSoundEffectsEnabled: isSoundEffectsEnabled,
             isAutoFocusEnabled: isAutoFocusEnabled,
+            isCodexPermissionReviewEnabled: isCodexPermissionReviewEnabled,
             isPetVisible: petWindow?.isVisible ?? false,
             sessions: stateMachine?.activeSessionSnapshots ?? []
         )
@@ -688,11 +667,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionId: String,
         agentId: String?
     ) {
-        guard
-            let event,
-            Self.terminalApprovalEvents.contains(event),
-            agentId == "claude-code"
-        else {
+        guard Self.isTerminalApprovalEvent(event, agentId: agentId) else {
             return
         }
 
@@ -705,6 +680,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         dismissBubbleMatchingToolPayload(payload, sessionId: sessionId)
+    }
+
+    static func isTerminalApprovalEvent(_ event: String?, agentId: String?) -> Bool {
+        guard
+            let event,
+            Self.terminalApprovalEvents.contains(event),
+            let agentId
+        else {
+            return false
+        }
+
+        return Self.terminalApprovalAgentIds.contains(agentId)
     }
 
     private func dismissBubbleMatchingToolPayload(_ payload: [String: Any], sessionId: String) {
@@ -739,6 +726,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 payload["cursor_pid"] ??
                 payload["codebuddy_pid"] ??
                 payload["gemini_pid"] ??
+                payload["codex_pid"] ??
                 payload["copilot_pid"]
         )
     }
@@ -783,19 +771,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// 启动时静默注册一次 hooks，不弹窗。
     private func registerHooksOnLaunch(serverPort: Int) {
+        let codexPermissionHookEnabled = isCodexPermissionReviewEnabled
         Task.detached(priority: .utility) {
-            _ = HookInstaller.register(serverPort: serverPort)
+            _ = HookInstaller.register(
+                serverPort: serverPort,
+                codexPermissionHookEnabled: codexPermissionHookEnabled
+            )
         }
     }
 
     /// 菜单栏手动注册，完成后弹窗显示结果。
     private func registerHooksManually(target: HookInstaller.HookTarget?) {
+        let codexPermissionHookEnabled = isCodexPermissionReviewEnabled
         Task.detached(priority: .userInitiated) {
             let result: (success: Bool, output: String)
             if let target {
-                result = HookInstaller.register(target: target)
+                result = HookInstaller.register(
+                    target: target,
+                    codexPermissionHookEnabled: codexPermissionHookEnabled
+                )
             } else {
-                result = HookInstaller.register()
+                result = HookInstaller.register(codexPermissionHookEnabled: codexPermissionHookEnabled)
             }
             await MainActor.run {
                 let alert = self.makeAlert(style: result.success ? .informational : .warning)
@@ -804,6 +800,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.runModal()
             }
         }
+    }
+
+    private func toggleCodexPermissionReview(_ enabled: Bool) {
+        if enabled && !confirmEnableCodexPermissionReview() {
+            return
+        }
+
+        Task { [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                HookInstaller.setCodexPermissionHookEnabled(enabled)
+            }.value
+            guard let self else { return }
+            if result.success {
+                self.isCodexPermissionReviewEnabled = enabled
+                self.preferences.codexPermissionReviewEnabled = enabled
+                return
+            }
+
+            let alert = self.makeAlert(style: .warning)
+            alert.messageText = enabled ? "Codex Permission Review Failed" : "Codex Permission Cleanup Failed"
+            alert.informativeText = result.output
+            alert.runModal()
+        }
+    }
+
+    private func confirmEnableCodexPermissionReview() -> Bool {
+        let alert = makeAlert(style: .warning)
+        if appLanguage == .zh {
+            alert.messageText = "启用 Codex 权限审核？"
+            alert.informativeText = "启用后 Clawd 会接管 Codex 的单次权限审批，Codex 终端会等待气泡 Allow/Deny。关闭后会恢复 Codex 原生终端审批。"
+            alert.addButton(withTitle: "启用")
+            alert.addButton(withTitle: "取消")
+        } else {
+            alert.messageText = "Enable Codex Permission Review?"
+            alert.informativeText = "When enabled, Clawd handles Codex single-use permission approvals and the Codex terminal waits for the bubble decision. Turning it off restores Codex's native terminal approval flow."
+            alert.addButton(withTitle: "Enable")
+            alert.addButton(withTitle: "Cancel")
+        }
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     /// 菜单栏手动清理钩子，完成后弹窗显示结果。

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Registers Clawd hooks into Claude Code's ~/.claude/settings.json
-/// by running the bundled hooks/install.js with Node.js.
+/// Registers Clawd hooks into supported CLI settings
+/// by running the bundled installer scripts with Node.js.
 /// Idempotent — safe to call on every launch.
 enum HookInstaller {
     /// 默认 HTTP 服务端口；HTTPServer 实际可能落到 23333..23337 中的任一个。
@@ -37,10 +37,11 @@ enum HookInstaller {
     /// rawValue 必须与 `hooks/` 目录下的安装脚本文件名严格一致。
     enum HookTarget: String, CaseIterable {
         case claudeCode = "install.js"
+        case codex = "codex-install.js"
         case gemini = "gemini-install.js"
         case cursor = "cursor-install.js"
-        case codeBuddy = "codebuddy-install.js"
         case pi = "pi-install.js"
+        case codeBuddy = "codebuddy-install.js"
 
         var displayName: String {
             switch self {
@@ -48,6 +49,7 @@ enum HookInstaller {
             case .gemini: return "Gemini CLI"
             case .cursor: return "Cursor"
             case .codeBuddy: return "CodeBuddy"
+            case .codex: return "Codex CLI"
             case .pi: return "Pi"
             }
         }
@@ -58,7 +60,11 @@ enum HookInstaller {
     private static let installScripts = HookTarget.allCases.map(\.rawValue)
 
     /// Register a single target's hooks.
-    static func register(target: HookTarget, serverPort: Int? = nil) -> (success: Bool, output: String) {
+    static func register(
+        target: HookTarget,
+        serverPort: Int? = nil,
+        codexPermissionHookEnabled: Bool = false
+    ) -> (success: Bool, output: String) {
         guard let nodeBin = resolveNodeBin() else {
             return (false, "Node.js not found.\nInstall Node.js first.")
         }
@@ -71,11 +77,19 @@ enum HookInstaller {
             return (false, "\(target.rawValue) not found.")
         }
 
-        return runNode(nodeBin, script: scriptPath, serverPort: serverPort)
+        return runNode(
+            nodeBin,
+            script: scriptPath,
+            serverPort: serverPort,
+            extraArgs: codexRegisterArgs(for: target, codexPermissionHookEnabled: codexPermissionHookEnabled)
+        )
     }
 
     /// Register all hooks. Synchronous — call from a detached Task, not the main thread.
-    static func register(serverPort: Int? = nil) -> (success: Bool, output: String) {
+    static func register(
+        serverPort: Int? = nil,
+        codexPermissionHookEnabled: Bool = false
+    ) -> (success: Bool, output: String) {
         guard let nodeBin = resolveNodeBin() else {
             return (false, "Node.js not found.\nInstall Node.js first.")
         }
@@ -90,13 +104,52 @@ enum HookInstaller {
             let scriptPath = (hooksDir as NSString).appendingPathComponent(script)
             guard FileManager.default.fileExists(atPath: scriptPath) else { continue }
 
-            let (success, output) = runNode(nodeBin, script: scriptPath, serverPort: serverPort)
+            let target = HookTarget(rawValue: script)
+            let (success, output) = runNode(
+                nodeBin,
+                script: scriptPath,
+                serverPort: serverPort,
+                extraArgs: target.map {
+                    codexRegisterArgs(for: $0, codexPermissionHookEnabled: codexPermissionHookEnabled)
+                } ?? []
+            )
             if !output.isEmpty { allOutput.append(output) }
             if !success { allSuccess = false }
         }
 
         let combined = allOutput.joined(separator: "\n\n")
         return (allSuccess, combined.isEmpty ? "No hooks installed." : combined)
+    }
+
+    /// Toggle Codex's experimental PermissionRequest hook only.
+    static func setCodexPermissionHookEnabled(_ enabled: Bool) -> (success: Bool, output: String) {
+        if let nodeBin = resolveNodeBin() {
+            guard let hooksDir = findHooksDir() else {
+                return (false, "hooks/ not found in app bundle.")
+            }
+
+            let scriptPath = (hooksDir as NSString).appendingPathComponent(HookTarget.codex.rawValue)
+            guard FileManager.default.fileExists(atPath: scriptPath) else {
+                return (false, "\(HookTarget.codex.rawValue) not found.")
+            }
+
+            return runNode(
+                nodeBin,
+                script: scriptPath,
+                serverPort: nil,
+                extraArgs: enabled ? ["--permission-only"] : ["--uninstall-permission"]
+            )
+        }
+
+        guard !enabled else {
+            return (false, "Node.js not found.\nInstall Node.js first.")
+        }
+
+        let result = cleanupLocalCodexPermissionHook()
+        return (
+            result.success,
+            "Node.js not found.\nCleaning local Codex permission hook directly.\n\n\(result.output)"
+        )
     }
 
     /// Unregister a single target's hooks.
@@ -171,13 +224,20 @@ enum HookInstaller {
         return (process.terminationStatus == 0, output)
     }
 
+    private static func codexRegisterArgs(
+        for target: HookTarget,
+        codexPermissionHookEnabled: Bool
+    ) -> [String] {
+        target == .codex && codexPermissionHookEnabled ? ["--with-permission"] : []
+    }
+
     // MARK: - Node resolution (mirrors hooks/server-config.js resolveNodeBin)
 
     private static func resolveNodeBin() -> String? {
         let fm = FileManager.default
         let home = fm.homeDirectoryForCurrentUser.path
         let nvmNode = findNvmNode(home: home, fileManager: fm)
-        var candidates = [
+        let candidates = [
             "\(home)/.volta/bin/node",
             "\(home)/.nvm/current/bin/node",
             nvmNode,
@@ -301,12 +361,20 @@ enum HookInstaller {
         return (allSuccess, body)
     }
 
-    private static func cleanupLocalSettings(for target: HookTarget) -> (success: Bool, output: String) {
+    static func cleanupLocalSettingsForTesting(target: HookTarget, settingsPath: String) -> (success: Bool, output: String) {
+        cleanupLocalSettings(for: target, settingsPathOverride: settingsPath)
+    }
+
+    static func cleanupLocalCodexPermissionHookForTesting(settingsPath: String) -> (success: Bool, output: String) {
+        cleanupLocalCodexPermissionHook(settingsPathOverride: settingsPath)
+    }
+
+    private static func cleanupLocalSettings(for target: HookTarget, settingsPathOverride: String? = nil) -> (success: Bool, output: String) {
         if target == .pi {
             return cleanupLocalDirectory(for: localDirectoryCleanupSpec())
         }
 
-        let spec = localCleanupSpec(for: target)
+        let spec = localCleanupSpec(for: target, settingsPathOverride: settingsPathOverride)
         let settingsURL = URL(fileURLWithPath: spec.settingsPath)
 
         let data: Data
@@ -378,11 +446,68 @@ enum HookInstaller {
         return (true, "\(spec.cleanedMessage)\n  Removed: \(totalRemoved) hooks")
     }
 
-    private static func localCleanupSpec(for target: HookTarget) -> LocalCleanupSpec {
+    private static func cleanupLocalCodexPermissionHook(settingsPathOverride: String? = nil) -> (success: Bool, output: String) {
+        let spec = localCleanupSpec(for: .codex, settingsPathOverride: settingsPathOverride)
+        let settingsURL = URL(fileURLWithPath: spec.settingsPath)
+        let cleanedMessage = "Clawd Codex permission hook cleaned from \(spec.settingsPath)"
+
+        let data: Data
+        do {
+            data = try Data(contentsOf: settingsURL)
+        } catch {
+            if isMissingFileError(error) {
+                return (true, spec.missingMessage)
+            }
+            return (false, "Failed to read \(settingsURL.lastPathComponent): \(error.localizedDescription)")
+        }
+
+        let object: Any
+        do {
+            object = try JSONSerialization.jsonObject(with: data)
+        } catch {
+            return (false, "Failed to parse \(settingsURL.lastPathComponent): \(error.localizedDescription)")
+        }
+
+        guard var settings = object as? [String: Any] else {
+            return (false, "Failed to parse \(settingsURL.lastPathComponent): root object is not a JSON object.")
+        }
+
+        guard var hooks = settings["hooks"] as? [String: Any] else {
+            return (true, spec.emptyMessage)
+        }
+
+        let event = "PermissionRequest"
+        let normalized = normalizeHookEntries(hooks[event])
+        guard let entries = normalized.entries else {
+            return (true, "\(cleanedMessage)\n  Removed: 0 hooks")
+        }
+
+        let commandResult = removeMatchingCommandHooks(entries, markers: spec.commandMarkers)
+        guard commandResult.changed else {
+            return (true, "\(cleanedMessage)\n  Removed: 0 hooks")
+        }
+
+        if commandResult.entries.isEmpty {
+            hooks.removeValue(forKey: event)
+        } else {
+            hooks[event] = commandResult.entries
+        }
+        settings["hooks"] = hooks
+
+        do {
+            try writeJSONAtomic(settings, to: settingsURL)
+        } catch {
+            return (false, "Failed to write \(settingsURL.lastPathComponent): \(error.localizedDescription)")
+        }
+
+        return (true, "\(cleanedMessage)\n  Removed: \(commandResult.removed) hooks")
+    }
+
+    private static func localCleanupSpec(for target: HookTarget, settingsPathOverride: String? = nil) -> LocalCleanupSpec {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         switch target {
         case .claudeCode:
-            let settingsPath = "\(home)/.claude/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.claude/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd hooks cleaned from \(settingsPath)",
@@ -392,7 +517,7 @@ enum HookInstaller {
                 permissionURLs: clawdPermissionURLs
             )
         case .gemini:
-            let settingsPath = "\(home)/.gemini/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.gemini/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd Gemini hooks cleaned from \(settingsPath)",
@@ -402,7 +527,7 @@ enum HookInstaller {
                 permissionURLs: []
             )
         case .cursor:
-            let settingsPath = "\(home)/.cursor/hooks.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.cursor/hooks.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd Cursor hooks cleaned from \(settingsPath)",
@@ -412,7 +537,7 @@ enum HookInstaller {
                 permissionURLs: []
             )
         case .codeBuddy:
-            let settingsPath = "\(home)/.codebuddy/settings.json"
+            let settingsPath = settingsPathOverride ?? "\(home)/.codebuddy/settings.json"
             return LocalCleanupSpec(
                 settingsPath: settingsPath,
                 cleanedMessage: "Clawd CodeBuddy hooks cleaned from \(settingsPath)",
@@ -420,6 +545,16 @@ enum HookInstaller {
                 emptyMessage: "No hooks in settings.json — nothing to clean.",
                 commandMarkers: ["codebuddy-hook.js"],
                 permissionURLs: clawdPermissionURLs
+            )
+        case .codex:
+            let settingsPath = settingsPathOverride ?? "\(home)/.codex/hooks.json"
+            return LocalCleanupSpec(
+                settingsPath: settingsPath,
+                cleanedMessage: "Clawd Codex hooks cleaned from \(settingsPath)",
+                missingMessage: "No ~/.codex/hooks.json found — nothing to clean.",
+                emptyMessage: "No hooks in hooks.json — nothing to clean.",
+                commandMarkers: ["codex-hook.js"],
+                permissionURLs: []
             )
         case .pi:
             fatalError("Pi uses localDirectoryCleanupSpec(), not localCleanupSpec(for:)")

@@ -23,6 +23,7 @@ final class StatusBarController: NSObject {
     var onCheckForUpdates: @MainActor () -> Void = {}
     var onRegisterHooks: @MainActor (HookInstaller.HookTarget?) -> Void = { _ in }
     var onUnregisterHooks: @MainActor (HookInstaller.HookTarget?) -> Void = { _ in }
+    var onToggleCodexPermissionReview: @MainActor (Bool) -> Void = { _ in }
     var onQuit: @MainActor () -> Void = {}
     var onFocusSession: @MainActor (SessionMenuSnapshot) -> Void = { _ in }
     /// Sparkle 菜单项需要把 target/action 直接绑到 SPUStandardUpdaterController 上，
@@ -177,6 +178,10 @@ final class StatusBarController: NSObject {
 
     @objc func unregisterHooks(_ sender: NSMenuItem) {
         onUnregisterHooks(sender.representedObject as? HookInstaller.HookTarget)
+    }
+
+    @objc func toggleCodexPermissionReview(_ sender: NSMenuItem) {
+        onToggleCodexPermissionReview(sender.state != .on)
     }
 
     @objc func togglePetVisibility(_ sender: NSMenuItem) {

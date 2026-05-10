@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What is hey-clawd
 
-A macOS desktop pet (crab character) that reacts to AI coding sessions in real time. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, Copilot CLI, and CodeBuddy via hooks and file monitoring, showing animated states (idle, thinking, working, error, etc.) based on tool activity. It also handles permission approvals for Claude Code and CodeBuddy tool use via floating bubbles.
+A macOS desktop pet (crab character) that reacts to AI coding sessions in real time. It integrates with Claude Code, Codex CLI, Cursor, Gemini CLI, Copilot CLI, CodeBuddy, and Pi via hooks/extensions, showing animated states (idle, thinking, working, error, etc.) based on tool activity. It also handles permission approvals for Claude Code, CodeBuddy, and Codex CLI tool use via floating bubbles.
 
 ## Build & Run
 
@@ -19,7 +19,7 @@ xcodebuild -project hey-clawd.xcodeproj -scheme hey-clawd -configuration Release
 # Run the built executable
 .build/debug/hey-clawd
 
-# Swift tests (SVG pipeline, HTTP server, Codex monitor, state-machine animation)
+# Swift tests (SVG pipeline, HTTP server, hook installer, state-machine animation)
 swift test
 
 # Permission bubble integration tests
@@ -37,7 +37,7 @@ swift test
 cd hooks && node test/index.js
 ```
 
-`Tests/HeyClawdAppTests/` covers SVG parsing/rendering (`SVGParserTests`, `CALayerRendererTests`, `CAAnimationBuilderTests`, `SVGBaselineScreenshotTests`), the HTTP server, Codex monitor, state-machine animation, and the full `PetView` pipeline. Permission-bubble and end-to-end UX paths are still validated via `test-bubble.sh` plus manual verification.
+`Tests/HeyClawdAppTests/` covers SVG parsing/rendering (`SVGParserTests`, `CALayerRendererTests`, `CAAnimationBuilderTests`, `SVGBaselineScreenshotTests`), the HTTP server, hook installation, permission response schemas, state-machine animation, and the full `PetView` pipeline. Permission-bubble and end-to-end UX paths are still validated via `test-bubble.sh` plus manual verification.
 
 ## Architecture
 
@@ -48,7 +48,7 @@ The app is a **menu-bar-only macOS app** (`LSUIElement=true`) built with Swift 6
 **Module layout:**
 
 - **App/** — `HeyClawdApp` (@main SwiftUI entry) → `AppDelegate` (orchestrator). `AppDelegate.assembleCoreLoop()` wires all subsystems together.
-- **Core/** — `StateMachine` (priority-based state aggregation across sessions), `HTTPServer` + `HTTPParser` (localhost:23333, endpoints: `/state`, `/permission`, `/status`, `/quit`, and `/debug/svg` + `/debug/reset`), `CodexMonitor` (kqueue-based JSONL log watcher for Codex CLI), `HookInstaller` (runs bundled JS install scripts via Node.js to register hooks on launch), `HotKeyManager`, `Preferences` (UserDefaults wrapper), `Session`, `SoundPlayer`.
+- **Core/** — `StateMachine` (priority-based state aggregation across sessions), `HTTPServer` + `HTTPParser` (localhost:23333, endpoints: `/state`, `/permission`, `/status`, `/quit`, and `/debug/svg` + `/debug/reset`), `HookInstaller` (runs bundled JS install scripts via Node.js to register hooks on launch), `HotKeyManager`, `Preferences` (UserDefaults wrapper), `Session`, `SoundPlayer`.
 - **Core/SVG/** — rendering pipeline: `SVGParser`, `SVGDocument` (+ LRU `SVGDocumentCache`), `CSSParser`, `ColorParser`, `PathParser`, `TransformParser`, `CALayerRenderer` (vector → CALayer tree), `CAAnimationBuilder` (CSS keyframes → Core Animation).
 - **Window/** — `PetWindow` (transparent floating NSWindow), `PetView` (Core Animation host view that drives the SVG pipeline), `EyeTracker` (mouse-following eyes at 10 Hz, paused when the window is occluded or hidden).
 - **Bubble/** — `BubbleStack` (async permission request queue with `CheckedContinuation`), `BubbleView`/`BubbleWindow` (SwiftUI overlay). Passthrough tools (TaskCreate, TaskUpdate, etc.) auto-allow without UI.
@@ -60,19 +60,19 @@ The app is a **menu-bar-only macOS app** (`LSUIElement=true`) built with Swift 6
 **Key data flow:**
 
 ```
-IDE hooks / CodexMonitor → HTTP POST /state → HTTPServer → StateMachine → PetView (Core Animation)
-IDE hooks → HTTP POST /permission → HTTPServer → BubbleStack → allow/deny response
+IDE/CLI hooks / Pi extension → HTTP POST /state → HTTPServer → StateMachine → PetView (Core Animation)
+Permission hooks → HTTP POST /permission → HTTPServer → BubbleStack → allow/deny response
 ```
 
 ### Hooks (`hooks/`) and Agents (`agents/`)
 
-`hooks/` ships the Node/CommonJS handlers that get installed into IDE/CLI config dirs: `clawd-hook.js` (Claude Code), `gemini-hook.js`, `cursor-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`, plus `codex-remote-monitor.js` for Codex. Each hook maps lifecycle events (PreToolUse, PostToolUse, SubagentStart, etc.) to pet states and posts them to the local HTTP server.
+`hooks/` ships the Node/CommonJS handlers that get installed into IDE/CLI config dirs: `clawd-hook.js` (Claude Code), `gemini-hook.js`, `cursor-hook.js`, `codebuddy-hook.js`, `copilot-hook.js`, and `codex-hook.js`. Each hook maps lifecycle events (PreToolUse, PostToolUse, SubagentStart, etc.) to pet states and posts them to the local HTTP server.
 
 `server-config.js` handles port discovery: tries `~/.clawd/runtime.json` first, then scans ports 23333–23337.
 
-**Auto-registration:** On launch, `HookInstaller` waits for `HTTPServer` to bind a port, then runs the installer scripts (`install.js`, `gemini-install.js`, `cursor-install.js`, `codebuddy-install.js`) via Node.js with `--port` to ensure the PermissionRequest HTTP hook URL matches the actual server port. Scripts skip tools that aren't installed. A manual "Register Hooks" menu item is also available for re-registration (e.g. after `cc-switch` profile changes).
+**Auto-registration:** On launch, `HookInstaller` waits for `HTTPServer` to bind a port, then runs the installer scripts (`install.js`, `gemini-install.js`, `cursor-install.js`, `codebuddy-install.js`, `codex-install.js`, `pi-install.js`) via Node.js. HTTP hook installers use `--port` so PermissionRequest URLs match the actual server port; Codex writes user-level `~/.codex/hooks.json` command hooks. Scripts skip tools that aren't installed. A manual "Register Hooks" menu item is also available for re-registration (e.g. after `cc-switch` profile changes). Codex may still require a user-side `/hooks` review/trust step before newly registered command hooks execute.
 
-`agents/` holds per-integration metadata and log-monitor helpers (`claude-code.js`, `codex.js`, `codebuddy.js`, `gemini-cli.js`, `cursor-agent.js`, `copilot-cli.js`, plus `codex-log-monitor.js` / `gemini-log-monitor.js` and a `registry.js` index). Keep event mappings in sync whenever a hook script, agent descriptor, installer allowlist, or `docs/integrations/` page encodes the same behavior.
+`agents/` holds per-integration metadata (`claude-code.js`, `codex.js`, `codebuddy.js`, `gemini-cli.js`, `cursor-agent.js`, `copilot-cli.js`, `pi.js`, plus `gemini-log-monitor.js` and a `registry.js` index). Keep event mappings in sync whenever a hook script, agent descriptor, installer allowlist, or `docs/integrations/` page encodes the same behavior.
 
 ### Pet States
 
@@ -88,7 +88,7 @@ Tag with `v*` (e.g., `git tag v1.2.3`) and push. GitHub Actions (`.github/workfl
 
 ## Conventions
 
-- All UI code is `@MainActor`. `StateMachine` and `CodexMonitor` are Swift actors.
+- All UI code is `@MainActor`; long-lived coordination should stay in actors or focused monitor/helper types.
 - Async permission handling uses `CheckedContinuation` — never block the main thread.
 - The app uses `@preconcurrency import Network` for strict concurrency compliance.
 - SVGs use a 15×16 pixel character grid; body color `#DE886D`, effects cyan/gold/red.

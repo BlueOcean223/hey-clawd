@@ -5,6 +5,16 @@ import XCTest
 
 @MainActor
 final class BubbleStackAutoDismissTests: XCTestCase {
+    func testTerminalApprovalAgentWhitelistIncludesCodex() {
+        XCTAssertTrue(AppDelegate.isTerminalApprovalEvent("PostToolUse", agentId: "claude-code"))
+        XCTAssertTrue(AppDelegate.isTerminalApprovalEvent("PostToolUse", agentId: "codex"))
+        XCTAssertTrue(AppDelegate.isTerminalApprovalEvent("PostToolBatch", agentId: "codex"))
+
+        XCTAssertFalse(AppDelegate.isTerminalApprovalEvent("PreToolUse", agentId: "codex"))
+        XCTAssertFalse(AppDelegate.isTerminalApprovalEvent("PostToolUse", agentId: "gemini-cli"))
+        XCTAssertFalse(AppDelegate.isTerminalApprovalEvent(nil, agentId: "codex"))
+    }
+
     func testUniqueMatchDismissesOneBubble() async throws {
         let stack = makeStack()
         let fixture = try makeFixture(sessionId: "session-1", toolName: "Bash", command: "ls")

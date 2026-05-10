@@ -438,7 +438,7 @@ final class StateMachine {
         }
     }
 
-    /// 由所有外部事件（HTTP、CodexMonitor、菜单）共同调用的写入入口。
+    /// 由所有外部事件（HTTP、hook、菜单）共同调用的写入入口。
     /// 大体流程：
     /// 1. DND/唤醒动画期间直接吞掉事件；
     /// 2. 非 DND 时打断本地睡眠链路；

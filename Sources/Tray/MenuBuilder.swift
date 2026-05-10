@@ -19,6 +19,7 @@ struct AppMenuState {
     var isHideBubblesEnabled: Bool
     var isSoundEffectsEnabled: Bool
     var isAutoFocusEnabled: Bool
+    var isCodexPermissionReviewEnabled: Bool
     var isPetVisible: Bool
     var sessions: [SessionMenuSnapshot]
 }
@@ -50,6 +51,8 @@ enum MenuBuilder {
             "registerAll": "Register All",
             "unregister": "Clean",
             "unregisterAll": "Clean All",
+            "experiments": "Experiments",
+            "codexPermissionReview": "Codex Permission Review",
             "showPet": "Show Clawd",
             "hidePet": "Hide Clawd",
             "quit": "Quit",
@@ -76,6 +79,8 @@ enum MenuBuilder {
             "registerAll": "全部注册",
             "unregister": "清理",
             "unregisterAll": "全部清理",
+            "experiments": "实验",
+            "codexPermissionReview": "Codex 权限审核",
             "showPet": "显示 Clawd",
             "hidePet": "隐藏 Clawd",
             "quit": "退出",
@@ -89,6 +94,7 @@ enum MenuBuilder {
     /// 找不到匹配时回退到 `defaultAgentIconName`。
     private static let agentIconNames: Set<String> = [
         "claude-code",
+        "codebuddy",
         "codex",
         "copilot-cli",
         "cursor-agent",
@@ -323,6 +329,22 @@ enum MenuBuilder {
         unregisterItem.submenu = unregisterSubmenu
         submenu.addItem(unregisterItem)
 
+        let experimentsItem = NSMenuItem(title: text("experiments", lang: state.language), action: nil, keyEquivalent: "")
+        let experimentsSubmenu = NSMenu()
+        experimentsSubmenu.autoenablesItems = false
+
+        let codexPermissionReviewItem = toggleItem(
+            title: text("codexPermissionReview", lang: state.language),
+            selector: #selector(StatusBarController.toggleCodexPermissionReview(_:)),
+            isOn: state.isCodexPermissionReviewEnabled,
+            target: target
+        )
+        codexPermissionReviewItem.image = hookTargetIconName(.codex).flatMap(loadAgentIcon(named:))
+        experimentsSubmenu.addItem(codexPermissionReviewItem)
+
+        experimentsItem.submenu = experimentsSubmenu
+        submenu.addItem(experimentsItem)
+
         item.submenu = submenu
         return item
     }
@@ -370,7 +392,9 @@ enum MenuBuilder {
         case .cursor:
             return "cursor-agent"
         case .codeBuddy:
-            return nil
+            return "codebuddy"
+        case .codex:
+            return "codex"
         case .pi:
             return "pi"
         }

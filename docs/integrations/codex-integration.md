@@ -1,120 +1,158 @@
 # Codex CLI 集成原理
 
-> Clawd 桌宠如何感知 OpenAI Codex CLI 的会话状态。
+> Clawd 桌宠如何通过 Codex native hooks 感知会话状态，并在实验开关打开时接管单次权限审批。
 
 ---
 
 ## 架构总览
 
 ```
-Codex CLI 进程
-  └─ 写入 ~/.codex/sessions/YYYY/MM/DD/rollout-<uuid>.jsonl
-                        │
-                        ▼  (kqueue / DispatchSource .write)
-               CodexMonitor (actor)
-                        │
-                        ▼  onStateUpdate callback
-               AppDelegate → StateMachine → 桌宠动画切换
+Codex CLI
+  └─ native command hook (~/.codex/hooks.json)
+       └─ hooks/codex-hook.js
+            ├─ 状态事件 → POST /state → HTTPServer → StateMachine → 桌宠动画切换
+            └─ PermissionRequest（实验开关）→ POST /permission → BubbleStack → 气泡 UI
+                                                             ↓
+                                                      Allow / Deny
+                                                             ↓
+                                         Codex-safe hook stdout response
 ```
 
 **核心文件**：
-- `Sources/Core/CodexMonitor.swift` — 会话发现 + JSONL 解析 + 事件映射
-- `Sources/App/AppDelegate.swift:153` — 启动监控并桥接到状态机
+- `hooks/codex-install.js` — 安装/卸载用户级 Codex hooks
+- `hooks/codex-hook.js` — 读取 Codex stdin JSON，映射状态并处理 `PermissionRequest`
+- `Sources/Core/HookInstaller.swift` — 将 Codex 纳入自动注册/手动注册/卸载
+- `Sources/Core/HTTPServer.swift` — 根据 `agent_id: "codex"` 返回 Codex-safe 权限响应
+- `Sources/App/AppDelegate.swift` — 权限气泡入口和终端侧审批后的残留气泡清理
 
 ---
 
-## 数据源：rollout JSONL
+## 安装与配置边界
 
-Codex CLI 每次会话在 `~/.codex/sessions/YYYY/MM/DD/` 下创建 `rollout-<uuid>.jsonl`，每行一个 JSON 对象：
+`codex-install.js` 只维护用户级 `~/.codex/hooks.json`：
 
-```jsonl
-{"type":"session_meta","payload":{"cwd":"/path/to/project",...}}
-{"type":"event_msg","payload":{"type":"task_started",...}}
-{"type":"response_item","payload":{"type":"function_call",...}}
-{"type":"event_msg","payload":{"type":"task_complete",...}}
+- `~/.codex/` 不存在时直接跳过，不主动创建 Codex 配置目录
+- 不读取、不修改 `~/.codex/config.toml`
+- append-only / idempotent merge，不覆盖用户已有 hooks
+- 默认只注册状态同步 hook，并清理旧版本遗留的 Clawd `PermissionRequest` hook
+- 只有 `Hooks → 实验 → Codex 权限审核` 打开时，才额外注册 `PermissionRequest` hook
+- 以 command 中包含 `codex-hook.js` 作为 hey-clawd 条目标记
+- `--uninstall` 只移除 hey-clawd 写入的 `codex-hook.js` 条目，保留用户其他 hooks
+
+如果用户在 Codex 配置中禁用了 `features.hooks`，Codex hook engine 不会执行这些 hooks。此时 hey-clawd 的 Codex 集成静默失效，Codex 自身行为不受影响。
+
+Codex 首次发现新的 command hooks 时，可能会提示 `hooks need review before they can run`。用户需要在 Codex 内执行 `/hooks`，检查并 trust/enable hey-clawd 写入的 `codex-hook.js` 命令；完成 review 之前，`~/.codex/hooks.json` 中的条目会保留但不会执行。这是 Codex 自身的 hook 信任门槛，hey-clawd installer 不能也不应该绕过。
+
+注册事件：
+
+| Codex hook event | hey-clawd state | 说明 |
+|---|---|---|
+| `SessionStart` | `idle` | 会话开始 |
+| `UserPromptSubmit` | `thinking` | 用户提交 prompt |
+| `PreToolUse` | `working` | 工具调用前 |
+| `PermissionRequest` | `notification` / 权限气泡 | 实验开关打开时才注册；仅非 bypass / dontAsk 时转发 `/permission` |
+| `PostToolUse` | `working` | 工具调用后；同时用于唯一匹配关闭残留气泡 |
+| `Stop` | `attention` | 回合结束 |
+| `PreCompact` | `sweeping` | 上下文压缩开始 |
+| `PostCompact` | `idle` | 上下文压缩完成 |
+
+---
+
+## 状态上报
+
+`codex-hook.js` 从 stdin 读取 Codex hook JSON，只依赖 `hook_event_name`，不从 argv 推断事件。所有状态事件都会：
+
+- 将 `session_id` 规范化为 `codex:<session_id>`
+- 固定上报 `agent_id: "codex"`
+- 保留 `cwd`、`turn_id`、`tool_name`、`tool_use_id`
+- 使用 `hooks/lib/match-key.js` 为 `tool_input` 计算 `tool_input_hash`
+- 以 100ms 超时 POST `/state`
+- app 不可达、超时、未知事件、malformed stdin 时输出 `{}` 并 fail-open
+
+状态 body 示例：
+
+```json
+{
+  "state": "working",
+  "session_id": "codex:session-123",
+  "event": "PreToolUse",
+  "agent_id": "codex",
+  "cwd": "/repo",
+  "turn_id": "turn-1",
+  "tool_name": "shell",
+  "tool_use_id": "call-1",
+  "tool_input_hash": "..."
+}
 ```
 
-关键字段：
-- `type` — 顶层事件类型（`session_meta` / `event_msg` / `response_item`）
-- `payload.type` — 子类型，拼接为 `type:payload.type` 作为查找键
-- `payload.cwd` — 仅 `session_meta` 携带，记录工作目录
-
 ---
 
-## 事件映射
+## 权限气泡（实验开关）
 
-`CodexMonitor.eventMap` 将 JSONL 事件映射到桌宠状态：
+Codex `PermissionRequest` 走 command hook stdout 决策，而不是 Claude Code 的 HTTP hook 直连。因此 hey-clawd 先由 `codex-hook.js` POST `/permission`，再把 HTTPServer 返回的 Codex-safe JSON 原样写回 stdout。
 
-| JSONL key | PetState | 说明 |
-|-----------|----------|------|
-| `session_meta` | `.idle` | 会话初始化 |
-| `event_msg:task_started` | `.thinking` | 开始处理任务 |
-| `event_msg:user_message` | `.thinking` | 收到用户输入 |
-| `event_msg:agent_message` | *(ignored)* | 纯文本回复，不改状态 |
-| `response_item:function_call` | `.working` | 执行工具调用 |
-| `response_item:custom_tool_call` | `.working` | 自定义工具 |
-| `response_item:web_search_call` | `.working` | 网络搜索 |
-| `event_msg:task_complete` | `.attention` 或 `.idle` | 任务结束（有过工具调用→attention，否则→idle） |
-| `event_msg:context_compacted` | `.sweeping` | 上下文压缩 |
-| `event_msg:turn_aborted` | `.idle` | 对话轮中断 |
+这个功能默认关闭。开启路径：
 
-`task_complete` 的状态取决于 `hadToolUse` 标记：本轮发起过 `function_call` / `custom_tool_call` / `web_search_call` 则落到 `.attention`，否则 `.idle`。
+```text
+Hooks → 实验 → Codex 权限审核
+```
 
----
+开启前会弹窗提醒用户：启用后 Clawd 会接管 Codex 的单次权限审批，Codex 终端会等待气泡 Allow/Deny。关闭该开关时，只清理 Codex `PermissionRequest` hook，保留其它状态同步 hooks。
 
-## 监控机制
+行为边界：
 
-### 文件发现
-- 每 1.5 秒扫描最近 3 天的日期目录，寻找新的 `rollout-*.jsonl`
-- 仅追踪最近 120 秒内有修改的文件，避免追踪历史会话
-- 上限 50 个追踪文件，超过时清理 5 分钟无活动的 stale 文件
+- `permission_mode` 为 `bypassPermissions` 或 `dontAsk` 时不弹气泡，直接输出 `{}`
+- 只支持单次 **Allow** / **Deny**
+- 不支持 **Always allow**、`updatedPermissions`、`updatedInput` 或 `interrupt`
+- DND / hide bubbles / 手动关闭 / 超时 / app 不可达 / undecided 都返回 `{}`，让 Codex 原生审批流继续
+- `/permission` 等待约 305s；Codex hook 注册 timeout 为 600s
+- 终端侧完成审批后，后续 `PostToolUse` 会用 `(session, tool_name, tool_input_hash)` 唯一匹配并关闭残留气泡；多匹配或缺字段时跳过
 
-### 增量读取
-- 使用 `DispatchSource.makeFileSystemObjectSource(.write)` 监听文件写入（macOS kqueue，事件驱动，非轮询）
-- 每次触发后 debounce 1.5 秒再读取，避免碎片化读取
-- 维护 `offset` 做增量 seek + read，只处理新增内容
-- 按换行分割，处理不完整行（`partial` 缓冲，上限 64KB）
+Codex allow：
 
-### 会话生命周期
-- 文件首次被追踪时补读当前全部内容
-- 5 分钟无活动 → 标记 stale → 发送 `SessionEnd` → 停止追踪并关闭文件句柄
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": { "behavior": "allow" }
+  }
+}
+```
+
+Codex deny：
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PermissionRequest",
+    "decision": {
+      "behavior": "deny",
+      "message": "Denied by user."
+    }
+  }
+}
+```
+
+Codex undecided / fail-open：
+
+```json
+{}
+```
 
 ---
 
 ## 已知局限
 
-### 会话菜单不可点击
-Codex 会话在菜单中始终灰显（不可跳转到终端窗口）。
+### 终端跳转
 
-**原因**：菜单项启用条件为 `session.sourcePid != nil || session.editor != nil`（`MenuBuilder.swift:187`），而 Codex 监控回调固定传入 `sourcePid: nil, editor: nil`（`AppDelegate.swift:167-169`），因为 JSONL 日志中不包含终端进程 PID。
+Codex native hook 运行在 Codex 进程树内，`codex-hook.js` 会向上遍历父进程，跳过瞬时 hook shell，记录真实 Codex agent PID 与宿主终端 PID。因此菜单中的 Codex 会话可以回切到对应终端；远程模式下仍会跳过本地 PID 采集。
 
-**对比 Claude Code**：Claude Code 的 hook（`clawd-hook.js`）运行在终端进程内部，可通过 `getStablePid()` 获取宿主终端 PID。Codex 是外部文件监控，无此能力。
+### 权限能力少于 Claude Code
 
-**决策**：接受此局限。反查写文件进程（`lsof` / `proc_pidinfo` + 父进程链遍历）复杂度高、涉及系统权限、与桌宠轻量定位不符。Codex 会话作为**状态展示**使用，不提供跳转。
-
-### 权限审核无气泡提示
-
-Codex 等待用户审批工具执行时（终端内显示 "Would you like to run the following command?"），桌宠不会弹出权限气泡。
-
-**原因**：气泡系统依赖**双向 HTTP 协议**。Claude Code 通过 `POST /permission`（`HTTPServer.swift:376`）发送权限请求，HTTP 连接用 `CheckedContinuation` 挂起等待，`BubbleStack` 展示气泡后用户点击 allow/deny，决策通过 HTTP 响应返回给 Claude Code。这是完整的请求-响应闭环。
-
-Codex 的 JSONL 集成是**单向只读**的：
-1. JSONL 中没有 "waiting_for_approval" 类型的事件——权限审核完全在终端 UI 内处理，不写入日志
-2. 即使能检测到审核状态，也没有回路把用户决策发回给 Codex
-
-**理论替代**：Codex 的 `PreToolUse` hook（`~/.codex/hooks.json`）可以拦截工具调用并返回 approve/deny，理论上可搭建一条"hook → HTTP 通知桌宠 → 用户点击 → hook 返回决策"的通路。但这等于为 Codex 重建一整套权限代理，复杂度与桌宠轻量定位严重不符。
-
-**决策**：接受此局限。Codex 的权限审核由终端 UI 自行处理。
+Codex 当前 schema 不接受 `updatedPermissions`，所以 hey-clawd 不能提供 “Always allow in this session”。需要长期放行某些工具时，应在 Codex 自身配置中处理。
 
 ---
 
-## 备选方案调研（2025-04）
+## 历史说明
 
-| 方案 | 描述 | 结论 |
-|------|------|------|
-| **JSONL DispatchSource**（当前） | kqueue 监听 rollout 文件写入 | ✅ 最优解：稳定、粒度细、零耦合、原生高效 |
-| `codex app-server` WebSocket | JSON-RPC 2.0 协议，VS Code 扩展同款 | ❌ 标记为 experimental，需启动额外进程 |
-| `~/.codex/hooks.json` | SessionStart / Stop 等离散事件 | ❌ 粒度不够，无中间状态 |
-| lsof 反查 PID | 从文件句柄反推终端进程 | ❌ 复杂、慢、涉及系统权限 |
-
-社区已知的第三方监控项目均采用读 JSONL 方案。
+hey-clawd 曾通过 `~/.codex/sessions/**/*.jsonl` 被动 monitor Codex 状态；该方案在 Codex native hooks stable 后废弃并从代码中移除。该历史说明仅用于解释旧版本行为，不代表当前支持路径。

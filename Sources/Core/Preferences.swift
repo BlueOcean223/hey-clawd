@@ -17,6 +17,7 @@ enum PrefKey: String {
     case hideBubbles
     case showSessionId
     case autoFocusSession
+    case codexPermissionReview
 }
 
 /// 围绕 `UserDefaults` 的强类型偏好封装。
@@ -45,6 +46,7 @@ final class Preferences {
             PrefKey.hideBubbles.rawValue: false,
             PrefKey.showSessionId.rawValue: false,
             PrefKey.autoFocusSession.rawValue: false,
+            PrefKey.codexPermissionReview.rawValue: false,
         ])
     }
 
@@ -167,6 +169,11 @@ final class Preferences {
     var autoFocusSession: Bool {
         get { defaults.bool(forKey: PrefKey.autoFocusSession.rawValue) }
         set { defaults.set(newValue, forKey: PrefKey.autoFocusSession.rawValue) }
+    }
+
+    var codexPermissionReviewEnabled: Bool {
+        get { defaults.bool(forKey: PrefKey.codexPermissionReview.rawValue) }
+        set { defaults.set(newValue, forKey: PrefKey.codexPermissionReview.rawValue) }
     }
 
     /// 常规恢复时只强制压回 Y 轴，避免顶部菜单栏或 Dock 挤掉桌宠。
